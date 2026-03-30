@@ -1,6 +1,15 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/create-auth.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { Request as ExpressRequest } from 'express';
+
+interface RequestWithUser extends ExpressRequest {
+  user: {
+    userId: number;
+    username: string;
+  };
+}
 
 @Controller('auth') // http://localhost:3000/auth
 export class AuthController {
@@ -14,5 +23,14 @@ export class AuthController {
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('profile')
+  getProfile(@Request() req: RequestWithUser) {
+    return {
+      message: 'Guard OK',
+      user: req.user,
+    };
   }
 }
