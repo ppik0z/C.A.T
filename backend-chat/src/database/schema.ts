@@ -29,6 +29,7 @@ export const friendships = mysqlTable(
     id: int('id').autoincrement().primaryKey(),
     userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
     friendId: int('friendId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    senderId: int('senderId').notNull(),
     status: varchar('status', { length: 50 }).notNull().default('pending'),
     createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
@@ -96,7 +97,7 @@ export const messageReactions = mysqlTable(
   (t) => [uniqueIndex('uq_msg_reaction').on(t.messageId, t.userId, t.emoji)],
 );
 
-// ─── Relations (Drizzle Magic) ────────────────────────────────────────────────
+// ─── Relations ────────────────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   sentMessages: many(messages),
   memberships: many(conversationMembers),
