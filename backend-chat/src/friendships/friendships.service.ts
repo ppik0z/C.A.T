@@ -47,7 +47,7 @@ export class FriendshipsService {
 
     //----sendRequest-----
     async sendRequest(senderId: number, receiverId: number) {
-        if (senderId === receiverId) throw new BadRequestException('Tự kết bạn với chính mình ?');
+        if (senderId === receiverId) throw new BadRequestException('Tự kết bạn với chính mình ??!!');
         const existing = await this.drizzle.db
             .select()
             .from(friendships)
@@ -134,7 +134,7 @@ export class FriendshipsService {
                 );
         });
 
-        return { message: 'Đã xóa mối quan hệ thành công. Đường ai nấy đi bồ nhé!' };
+        return { message: 'Đã xóa mối quan hệ thành công!' };
     }
 
     //----getPendingRequests----    
