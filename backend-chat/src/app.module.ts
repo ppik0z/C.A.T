@@ -4,9 +4,10 @@ import { AppService } from './app.service';
 import { DrizzleModule } from './database/drizzle.module';
 import { AuthModule } from './auth/auth.module';
 import { FriendshipsModule } from './friendships/friendships.module';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
-  imports: [DrizzleModule, AuthModule, FriendshipsModule],
+  imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule],
   controllers: [AppController],
   providers: [AppService],
 })
