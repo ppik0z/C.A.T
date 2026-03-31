@@ -6,6 +6,13 @@ import * as bcrypt from 'bcrypt';
 import { RegisterDto, LoginDto } from './dto/create-auth.dto';
 import { JwtService } from '@nestjs/jwt';
 
+interface JwtPayload {
+  sub: number;
+  username: string;
+  iat?: number;
+  exp?: number;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -52,28 +59,95 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { username, password } = loginDto;
 
-    // 1. Tìm user 
     const [user] = await this.drizzle.db
       .select()
       .from(users)
       .where(eq(users.username, username))
       .limit(1);
 
-    // 2. Nếu không thấy user hoặc mật khẩu không khớp
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác!');
     }
 
-    // 3. Ký Token
-    const payload = { sub: user.id, username: user.username };
+    const tokens = await this.getTokens(user.id, user.username);
 
-    // 4. Trả về token và thông tin cơ bản
-    const { password: _, refreshToken, ...userFull } = user;
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
       message: 'Đăng nhập thành công!',
-      access_token: await this.jwtService.signAsync(payload),
-      user: userFull,
+      ...tokens,
+      user: { id: user.id, username: user.username },
     };
+  }
+
+  // --- HÀM LOGOUT ---
+  async logout(userId: number) {
+    await this.drizzle.db
+      .update(users)
+      .set({ refreshToken: null })
+      .where(eq(users.id, userId));
+    return { message: 'Đăng xuất thành công!' };
+  }
+
+  // --- HÀM GET TOKENS ---
+  async getTokens(userId: number, username: string) {
+    const [accessToken, refreshToken] = await Promise.all([
+      // Access Token
+      this.jwtService.signAsync(
+        { sub: userId, username },
+        { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+      ),
+      // Refresh Token
+      this.jwtService.signAsync(
+        { sub: userId, username },
+        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d' },
+      ),
+    ]);
+
+    return { accessToken, refreshToken };
+  }
+
+  // --- HÀM UPDATE REFRESH TOKEN ---
+  async updateRefreshToken(userId: number, refreshToken: string) {
+    const hashedToken = await bcrypt.hash(refreshToken, 10);
+    await this.drizzle.db
+      .update(users)
+      .set({ refreshToken: hashedToken })
+      .where(eq(users.id, userId));
+  }
+
+  // --- HÀM REFRESH TOKEN ---
+  async refreshTokens(refreshToken: string) {
+    let payload: JwtPayload;
+
+    // xác thực TOKEN
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+    } catch (e) {
+      throw new UnauthorizedException('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    }
+
+    // logic database
+    const [user] = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1);
+
+    if (!user || !user.refreshToken) {
+      throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã đăng xuất.');
+    }
+
+    const isMatch = await bcrypt.compare(refreshToken, user.refreshToken);
+    if (!isMatch) {
+      throw new UnauthorizedException('Token không hợp lệ hoặc đã được sử dụng.');
+    }
+
+    const tokens = await this.getTokens(user.id, user.username);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return tokens;
   }
 }
