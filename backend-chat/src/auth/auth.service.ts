@@ -89,12 +89,12 @@ export class AuthService {
       // Access Token
       this.jwtService.signAsync(
         { sub: userId, username },
-        { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+        { secret: process.env.JWT_SECRET, expiresIn: '7d' },
       ),
       // Refresh Token
       this.jwtService.signAsync(
         { sub: userId, username },
-        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d' },
+        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       ),
     ]);
 
