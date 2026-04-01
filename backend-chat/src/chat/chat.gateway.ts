@@ -8,7 +8,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { MessagesService } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { WsJwtGuard } from 'src/common/index';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -16,7 +16,7 @@ interface AuthenticatedSocket extends Socket {
         username: string;
     };
 }
-
+@UseGuards(WsJwtGuard)
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway {
     @WebSocketServer() server: Server;
@@ -30,7 +30,6 @@ export class ChatGateway {
     }
 
     // 2. Logic "Bắn" tin nhắn
-    @UseGuards(AuthGuard('jwt')) // Chỉ cho phép user đã login gửi tin
     @SubscribeMessage('send_message')
     async handleMessage(
         @MessageBody() data: { conversationId: number; content: string },
