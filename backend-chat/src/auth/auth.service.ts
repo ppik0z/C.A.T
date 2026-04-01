@@ -5,13 +5,7 @@ import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto, LoginDto } from './dto/create-auth.dto';
 import { JwtService } from '@nestjs/jwt';
-
-interface JwtPayload {
-  sub: number;
-  username: string;
-  iat?: number;
-  exp?: number;
-}
+import { JwtPayload } from '../common/index';
 
 @Injectable()
 export class AuthService {
@@ -133,7 +127,7 @@ export class AuthService {
     const [user] = await this.drizzle.db
       .select()
       .from(users)
-      .where(eq(users.id, payload.sub))
+      .where(eq(users.id, payload.userId))
       .limit(1);
 
     if (!user || !user.refreshToken) {
