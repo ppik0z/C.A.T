@@ -9,6 +9,8 @@ export class MessagesService {
 
     //----sendMessage----
     async sendMessage(senderId: number, conversationId: number, content: string) {
+        console.log(`--- [START] sendMessage ---`);
+        console.log(`1. Input check: senderId=${senderId}, convId=${conversationId}`);
         const isMember = await this.drizzle.db
             .select()
             .from(conversationMembers)
@@ -18,10 +20,13 @@ export class MessagesService {
             ))
             .limit(1);
 
+
+        console.log(`2. Member check result: ${isMember.length > 0 ? 'Hợp lệ' : 'KHÔNG CÓ QUYỀN'}`);
         if (isMember.length === 0) {
             throw new ForbiddenException('Bạn không có quyền gửi tin nhắn trong phòng này!');
         }
 
+        console.log(`3. Bắt đầu Transaction...`);
         return await this.drizzle.db.transaction(async (tx) => {
             const [newMessage] = await tx.insert(messages).values({
                 content,
@@ -30,6 +35,7 @@ export class MessagesService {
                 type: 'text',
             });
 
+            console.log(`4. Insert Message thành công. Result:`, newMessage);
             await tx
                 .update(conversations)
                 .set({ updatedAt: new Date() })
