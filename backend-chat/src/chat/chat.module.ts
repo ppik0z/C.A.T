@@ -6,7 +6,10 @@ import { JwtModule } from '@nestjs/jwt';
 @Module({
     imports: [
         MessagesModule,
-        JwtModule,
+        JwtModule.register({
+            secret: process.env.JWT_SECRET,
+            signOptions: { expiresIn: '7d' },
+        }),
     ],
     providers: [ChatGateway],
     exports: [ChatGateway],

@@ -23,29 +23,28 @@ export class ChatGateway {
 
     constructor(private readonly messagesService: MessagesService) { }
 
-    // 1. Khi user vào một phòng chat cụ thể
     @SubscribeMessage('join_room')
     async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket) {
+        console.log("User joined room: ", data.conversationId);
         await client.join(`conv_${data.conversationId}`);
     }
 
-    // 2. Logic "Bắn" tin nhắn
     @SubscribeMessage('send_message')
     async handleMessage(
         @MessageBody() data: { conversationId: number; content: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
+
+        console.log("Socket User Data:", client.user);
         const senderId = client.user.userId;
 
-        // BƯỚC 1: Lưu vào MySQL trước (Để có ID và thời gian chuẩn)
         const savedMsg = await this.messagesService.sendMessage(
             senderId,
             data.conversationId,
             data.content,
         );
 
-        // BƯỚC 2: Bắn (Emit) tới tất cả mọi người trong phòng đó
-        // Lưu ý: savedMsg lúc này đã có id từ insertId của Drizzle rồi
+        //emit tới tất cả mọi người trong phòng
         this.server.to(`conv_${data.conversationId}`).emit('new_message', {
             ...savedMsg,
             sender: {
