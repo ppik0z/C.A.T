@@ -55,4 +55,39 @@ export class ChatGateway {
 
         return savedMsg;
     }
+
+    // chat.gateway.ts
+
+    @SubscribeMessage('load_messages')
+    async handleLoadMessages(
+        @MessageBody() data: { conversationId: number, limit?: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        try {
+            const history = await this.messagesService.getMessages(
+                client.user.userId,
+                data.conversationId,
+                data.limit || 20
+            );
+
+            return {
+                event: 'load_messages_success',
+                data: history,
+            };
+        } catch (error: unknown) {
+            let errorMessage = 'Không thể tải tin nhắn';
+
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            }
+
+            return {
+                event: 'error',
+                message: errorMessage,
+            };
+        }
+    }
+
+
+
 }

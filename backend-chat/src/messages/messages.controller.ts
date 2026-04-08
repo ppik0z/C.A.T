@@ -14,7 +14,10 @@ export class MessagesController {
     }
 
     @Get(':conversationId')
-    async getHistory(@Param('conversationId', ParseIntPipe) convId: number) {
-        return this.messagesService.getMessages(convId);
+    async getHistory(
+        @Param('conversationId', ParseIntPipe) convId: number,
+        @Request() req: RequestWithUser
+    ) {
+        return this.messagesService.getMessages(req.user.userId, convId);
     }
 }
