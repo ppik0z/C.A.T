@@ -8,6 +8,7 @@ export class ConversationsService {
     constructor(private drizzle: DrizzleService) { }
 
     //----getConversation(tự tạo phòng nếu chưa có)----
+    // Hàm để lấy conversation cụ thể sử dụng 2 userId
     async getConversation(user1Id: number, user2Id: number) {
         const existing = await this.drizzle.db
             .select({ id: conversations.id })
@@ -42,6 +43,7 @@ export class ConversationsService {
     }
 
     //----getMyConversations----
+    // Hàm để lấy danh sách các conversations của một userId
     async getMyConversations(currentUserId: number) {
         const userConvs = await this.drizzle.db
             .select({ conversationId: conversationMembers.conversationId })

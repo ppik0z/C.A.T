@@ -5,13 +5,7 @@ import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { RegisterDto, LoginDto } from './dto/create-auth.dto';
 import { JwtService } from '@nestjs/jwt';
-
-interface JwtPayload {
-  sub: number;
-  username: string;
-  iat?: number;
-  exp?: number;
-}
+import { JwtPayload } from '../common/index';
 
 @Injectable()
 export class AuthService {
@@ -94,13 +88,13 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       // Access Token
       this.jwtService.signAsync(
-        { sub: userId, username },
-        { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+        { userId, username },
+        { secret: process.env.JWT_SECRET, expiresIn: '7d' },
       ),
       // Refresh Token
       this.jwtService.signAsync(
-        { sub: userId, username },
-        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d' },
+        { userId, username },
+        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       ),
     ]);
 
@@ -133,7 +127,7 @@ export class AuthService {
     const [user] = await this.drizzle.db
       .select()
       .from(users)
-      .where(eq(users.id, payload.sub))
+      .where(eq(users.id, payload.userId))
       .limit(1);
 
     if (!user || !user.refreshToken) {
