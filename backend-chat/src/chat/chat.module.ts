@@ -2,10 +2,12 @@ import { Module } from '@nestjs/common';
 import { ChatGateway } from './chat.gateway';
 import { MessagesModule } from '../messages/messages.module';
 import { JwtModule } from '@nestjs/jwt';
+import { PresenceModule } from 'src/presence/presence.module';
 
 @Module({
     imports: [
         MessagesModule,
+        PresenceModule,
         JwtModule.register({
             secret: process.env.JWT_SECRET,
             signOptions: { expiresIn: '7d' },
