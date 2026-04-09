@@ -2,10 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { conversationMembers, conversations, users } from 'src/database/schema';
 import { and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
+import { PresenceService } from '../presence/presence.service';
 
 @Injectable()
 export class ConversationsService {
-    constructor(private drizzle: DrizzleService) { }
+    constructor(
+        private drizzle: DrizzleService,
+        private presenceService: PresenceService
+    ) { }
 
     //----getConversation(tự tạo phòng nếu chưa có)----
     // Hàm để lấy conversation cụ thể sử dụng 2 userId
@@ -53,7 +57,7 @@ export class ConversationsService {
         const convIds = userConvs.map(c => c.conversationId);
         if (convIds.length === 0) return [];
 
-        return await this.drizzle.db
+        const rawConvs = await this.drizzle.db
             .select({
                 id: conversations.id,
                 name: conversations.name,
@@ -68,12 +72,24 @@ export class ConversationsService {
             .from(conversations)
             .leftJoin(conversationMembers, and(
                 eq(conversations.id, conversationMembers.conversationId),
-                ne(conversationMembers.userId, currentUserId)
+                ne(conversationMembers.userId, currentUserId),
+                eq(conversations.isGroup, false)
             ))
             .leftJoin(users, eq(conversationMembers.userId, users.id))
             .where(inArray(conversations.id, convIds))
             .orderBy(desc(conversations.updatedAt));
+
+        // MAP QUA REDIS ĐỂ CHECK ONLINE
+        return await Promise.all(rawConvs.map(async (conv) => {
+            let isOnline = false;
+            // Nếu là chat 1-1 và có thông tin bạn bè
+            if (!conv.isGroup && conv.friend) {
+                isOnline = await this.presenceService.isUserOnline(conv.friend.id);
+            }
+            return {
+                ...conv,
+                isOnline,
+            };
+        }));
     }
-
-
 }

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { useChatStore } from '../../stores/chat';
-import { nextTick, ref, watch } from 'vue';
+import { nextTick, ref, watch, computed } from 'vue';
 
 const chatStore = useChatStore();
 const scrollRef = ref<HTMLElement | null>(null);
 
-// Tự động cuộn xuống khi có tin nhắn mới
+const sortedMessages = computed(() => {
+  return [...chatStore.messages].sort((a, b) => a.id - b.id);
+});
+
 watch(() => chatStore.messages.length, async () => {
   await nextTick();
   if (scrollRef.value) {
@@ -15,8 +18,9 @@ watch(() => chatStore.messages.length, async () => {
 </script>
 
 <template>
-  <section class="flex-1 p-6 overflow-y-auto space-y-6 bg-bg-light dark:bg-bg-dark transition-colors duration-300">
-    <div v-for="msg in chatStore.messages" :key="msg.id" 
+  <section ref="scrollRef" class="flex-1 p-6 overflow-y-auto space-y-6 bg-bg-light dark:bg-bg-dark transition-colors duration-300">
+    
+    <div v-for="msg in sortedMessages" :key="msg.id" 
          :class="['flex w-full animate-slide-in', msg.senderId === chatStore.myId ? 'justify-end' : 'justify-start']">
       
       <div :class="[
