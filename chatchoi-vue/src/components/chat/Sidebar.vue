@@ -5,6 +5,11 @@ import { useChatStore } from '../../stores/chat';
 const chatStore = useChatStore();
 const isDark = ref(false);
 
+const handleLogout = () => {
+  localStorage.removeItem('accessToken'); 
+  window.location.reload(); 
+};
+
 const toggleTheme = () => {
   isDark.value = !isDark.value;
   if (isDark.value) {
@@ -37,6 +42,11 @@ const toggleTheme = () => {
               class="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 hover:opacity-80 transition-all">
         <span class="text-xs font-medium">{{ isDark ? 'Dark Mode' : 'Light Mode' }}</span>
         <span>{{ isDark ? '🌙' : '☀️' }}</span>
+      </button>
+
+      <button @click="handleLogout" 
+              class="w-full mt-2 py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all">
+        Đăng Xuất
       </button>
     </div>
   </aside>

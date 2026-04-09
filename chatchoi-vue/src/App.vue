@@ -1,29 +1,35 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
+import LoginView from './views/LoginView.vue';
 import Sidebar from './components/chat/Sidebar.vue';
 import MessageList from './components/chat/MessageList.vue';
 import ChatInput from './components/chat/ChatInput.vue';
+import { useChatStore } from './stores/chat';
 import { initSocketService } from './services/socket.service';
 
+const chatStore = useChatStore();
+const isLoggedIn = ref(false);
+
 onMounted(() => {
-  const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjI5LCJ1c2VybmFtZSI6Im1lb19iZW8iLCJpYXQiOjE3NzU0NjM1MjAsImV4cCI6MTc3NjA2ODMyMH0.zdYhfBZAj_vGqZjHw_DYuT6wwsTi8eAciyTpFPJx1k0"; 
+  const token = localStorage.getItem('accessToken');
   if (token) {
+    chatStore.setIdentity(token);
     initSocketService(token);
+    isLoggedIn.value = true;
   }
+});
+
+chatStore.$subscribe((mutation, state) => {
+  if (state.myId) isLoggedIn.value = true;
 });
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden font-sans transition-colors duration-300">
+  <LoginView v-if="!isLoggedIn" />
+  
+  <div v-else class="flex h-screen w-screen overflow-hidden font-sans bg-bg-light dark:bg-bg-dark transition-colors duration-300">
     <Sidebar />
-    
     <main class="flex-1 flex flex-col overflow-hidden">
-      <header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark flex items-center px-6 transition-colors duration-300">
-        <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-[0.3em]">
-          Phòng Chat Số 1
-        </p>
-      </header>
-      
       <MessageList />
       <ChatInput />
     </main>
