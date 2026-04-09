@@ -9,9 +9,9 @@ export const initSocketService = (token: string) => {
 
     socket.on("connect", () => {
         chatStore.isConnected = true;
-        console.log("✅ Đã kết nối Tế Đàn!");
+        console.log("Đã kết nối!");
 
-        // Join room và load tin nhắn cũ luôn
+        // Join room và load tin nhắn cũ 
         socket.emit("join_room", { conversationId: chatStore.currentConversationId });
         socket.emit("load_messages", { conversationId: chatStore.currentConversationId });
     });
