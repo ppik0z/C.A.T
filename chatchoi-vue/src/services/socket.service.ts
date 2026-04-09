@@ -3,6 +3,7 @@ import { useChatStore } from "../stores/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
+    let heartbeatInterval: any;
 
     socket.auth = { token };
     socket.connect();
@@ -10,6 +11,13 @@ export const initSocketService = (token: string) => {
     socket.on("connect", () => {
         chatStore.isConnected = true;
         console.log("Đã kết nối!");
+
+        // Heartbeat, interval 15s
+        heartbeatInterval = setInterval(() => {
+            if (socket.connected) {
+                socket.emit("heartbeat");
+            }
+        }, 15000);
 
         // Join room và load tin nhắn cũ 
         socket.emit("join_room", { conversationId: chatStore.currentConversationId });
@@ -26,5 +34,6 @@ export const initSocketService = (token: string) => {
 
     socket.on("disconnect", () => {
         chatStore.isConnected = false;
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
     });
 };
