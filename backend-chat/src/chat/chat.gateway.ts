@@ -9,6 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { MessagesService } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
+import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -16,7 +17,9 @@ interface AuthenticatedSocket extends Socket {
         username: string;
     };
 }
-@UseGuards(WsJwtGuard)
+
+
+@UseGuards(WsJwtGuard, HybridThrottlerGuard)
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway {
     @WebSocketServer() server: Server;

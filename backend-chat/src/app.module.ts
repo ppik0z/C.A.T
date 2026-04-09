@@ -8,9 +8,34 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { MessagesModule } from './messages/messages.module';
 import { ChatModule } from './chat/chat.module';
 
+import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
+import { Redis } from 'ioredis';
+import { APP_GUARD } from '@nestjs/core';
+import { HybridThrottlerGuard } from './common/guards/hybrid-throttler.guard';
+
 @Module({
-  imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule],
+  imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule,
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'short',
+          ttl: 10000, // 10 giây
+          limit: 5,   // Tối đa 5 requests 
+        },
+      ],
+      storage: new ThrottlerStorageRedisService(
+        new Redis(process.env.REDIS_URL || 'redis://localhost:6379')
+      ),
+    })
+  ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: HybridThrottlerGuard,
+    },
+  ],
 })
 export class AppModule { }
