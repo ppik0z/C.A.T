@@ -19,9 +19,6 @@ export const initSocketService = (token: string) => {
             }
         }, 15000);
 
-        // Join room và load tin nhắn cũ 
-        socket.emit("join_room", { conversationId: chatStore.currentConversationId });
-        socket.emit("load_messages", { conversationId: chatStore.currentConversationId });
     });
 
     socket.on("load_messages_success", (msgs) => {
