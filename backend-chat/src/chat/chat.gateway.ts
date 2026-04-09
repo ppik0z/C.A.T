@@ -10,6 +10,7 @@ import { MessagesService } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
 import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
+import { PresenceService } from 'src/presence/presence.service';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -24,7 +25,10 @@ interface AuthenticatedSocket extends Socket {
 export class ChatGateway {
     @WebSocketServer() server: Server;
 
-    constructor(private readonly messagesService: MessagesService) { }
+    constructor(
+        private readonly messagesService: MessagesService,
+        private readonly presenceService: PresenceService,
+    ) { }
 
     @SubscribeMessage('join_room')
     async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket) {
@@ -91,6 +95,13 @@ export class ChatGateway {
         }
     }
 
-
+    // Trong ChatGateway
+    @SubscribeMessage('heartbeat')
+    async handleHeartbeat(@ConnectedSocket() client: any) {
+        console.log('--- ĐÃ NHẬN HEARTBEAT TỪ USER:', client.user);
+        const userId = client.user.userId;
+        await this.presenceService.updateStatus(userId);
+        return { status: 'ack' };
+    }
 
 }

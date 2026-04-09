@@ -13,6 +13,8 @@ import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 import { Redis } from 'ioredis';
 import { APP_GUARD } from '@nestjs/core';
 import { HybridThrottlerGuard } from './common/guards/hybrid-throttler.guard';
+import { PresenceModule } from './presence/presence.module';
+import { RedisModule } from '@liaoliaots/nestjs-redis';
 
 @Module({
   imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule,
@@ -27,7 +29,13 @@ import { HybridThrottlerGuard } from './common/guards/hybrid-throttler.guard';
       storage: new ThrottlerStorageRedisService(
         new Redis(process.env.REDIS_URL || 'redis://localhost:6379')
       ),
-    })
+    }),
+    RedisModule.forRoot({
+      config: {
+        url: process.env.REDIS_URL || 'redis://localhost:6379',
+      },
+    }),
+    PresenceModule,
   ],
   controllers: [AppController],
   providers: [
