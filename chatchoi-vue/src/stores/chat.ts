@@ -53,7 +53,7 @@ export const useChatStore = defineStore('chat', {
             this.conversations = convs;
         },
 
-        // Sáng đèn hàng loạt khi vừa connect
+        // Set online khi vừa connect
         setUsersOnline(userIds: number[]) {
             this.conversations.forEach(conv => {
                 if (!conv.isGroup && conv.friend && userIds.includes(conv.friend.id)) {
@@ -62,7 +62,7 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
-        // Cập nhật từng người khi nhận loa thông báo
+        // Cập nhật từng người khi nhận thông báo
         updateUserStatus(userId: number, status: string) {
             const conv = this.conversations.find(c => !c.isGroup && c.friend?.id === userId);
             if (conv) {
