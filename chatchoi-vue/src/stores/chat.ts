@@ -8,6 +8,7 @@ export const useChatStore = defineStore('chat', {
         currentConversationId: null as number | null,
         myId: null as number | null,
         isConnected: false,
+        conversations: [] as any[],
     }),
 
     actions: {
@@ -46,6 +47,27 @@ export const useChatStore = defineStore('chat', {
                     this.pushMessage(response);
                 }
             });
+        },
+
+        setConversations(convs: any[]) {
+            this.conversations = convs;
+        },
+
+        // Set online khi vừa connect
+        setUsersOnline(userIds: number[]) {
+            this.conversations.forEach(conv => {
+                if (!conv.isGroup && conv.friend && userIds.includes(conv.friend.id)) {
+                    conv.isOnline = true;
+                }
+            });
+        },
+
+        // Cập nhật từng người khi nhận thông báo
+        updateUserStatus(userId: number, status: string) {
+            const conv = this.conversations.find(c => !c.isGroup && c.friend?.id === userId);
+            if (conv) {
+                conv.isOnline = (status === 'online');
+            }
         }
     }
 });

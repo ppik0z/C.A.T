@@ -3,7 +3,9 @@ import {
     SubscribeMessage,
     MessageBody,
     ConnectedSocket,
-    WebSocketServer
+    WebSocketServer,
+    OnGatewayConnection,
+    OnGatewayDisconnect
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { MessagesService } from '../messages/messages.service';
@@ -11,6 +13,8 @@ import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
 import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { PresenceService } from 'src/presence/presence.service';
+import { FriendshipsService } from 'src/friendships/friendships.service';
+import { SkipThrottle } from '@nestjs/throttler';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -22,13 +26,59 @@ interface AuthenticatedSocket extends Socket {
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
 @WebSocketGateway({ cors: { origin: '*' } })
-export class ChatGateway {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
+    private offlineTimers = new Map<number, NodeJS.Timeout>();
 
     constructor(
         private readonly messagesService: MessagesService,
         private readonly presenceService: PresenceService,
+        private readonly friendshipsService: FriendshipsService,
     ) { }
+
+    async handleConnection(client: any) {
+        const userId = client.user?.userId;
+        if (!userId) return;
+
+        if (this.offlineTimers.has(userId)) {
+            clearTimeout(this.offlineTimers.get(userId));
+            this.offlineTimers.delete(userId);
+            console.log(`User ${userId} đã quay lại!`);
+        } else {
+            this.server.emit('user_status_changed', { userId, status: 'online' });
+        }
+
+        const friends = await this.friendshipsService.getMyFriends(userId);
+        const onlineIds = await this.presenceService.getOnlineUsers(friends.map(f => f.friendInfo.id));
+        client.emit('initial_presence_sync', { onlineUserIds: onlineIds });
+    }
+
+    handleDisconnect(client: any) {
+        const userId = client.user?.userId;
+        console.log(`User ${userId} đã rời đi!`);
+        if (!userId) return;
+
+        //chờ 10 giây trước khi thực sự báo Offline
+        const timer = setTimeout(() => {
+            (async () => {
+                await this.presenceService.removeStatus(userId);
+                this.server.emit('user_status_changed', { userId, status: 'offline' });
+                this.offlineTimers.delete(userId);
+            })();
+        }, 10000);
+
+        this.offlineTimers.set(userId, timer);
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('heartbeat')
+    async handleHeartbeat(@ConnectedSocket() client: any) {
+        const userId = client.user.userId;
+        await this.presenceService.updateStatus(userId);
+        return { status: 'ack' };
+    }
+
+
 
     @SubscribeMessage('join_room')
     async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket) {
@@ -64,8 +114,6 @@ export class ChatGateway {
         return savedMsg;
     }
 
-    // chat.gateway.ts
-
     @SubscribeMessage('load_messages')
     async handleLoadMessages(
         @MessageBody() data: { conversationId: number, limit?: number },
@@ -96,13 +144,5 @@ export class ChatGateway {
         }
     }
 
-    // Trong ChatGateway
-    @SubscribeMessage('heartbeat')
-    async handleHeartbeat(@ConnectedSocket() client: any) {
-        console.log('--- ĐÃ NHẬN HEARTBEAT TỪ USER:', client.user);
-        const userId = client.user.userId;
-        await this.presenceService.updateStatus(userId);
-        return { status: 'ack' };
-    }
 
 }
