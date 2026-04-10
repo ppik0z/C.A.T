@@ -42,6 +42,7 @@ export const conversations = mysqlTable('conversations', {
   name: varchar('name', { length: 255 }),
   isGroup: boolean('isGroup').notNull().default(false),
   avatarGroup: varchar('avatarGroup', { length: 255 }),
+  lastMessageId: int('lastMessageId'),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
@@ -55,6 +56,7 @@ export const conversationMembers = mysqlTable(
     conversationId: int('conversationId').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
     nickname: varchar('nickname', { length: 255 }),
     isAdmin: boolean('isAdmin').notNull().default(false),
+    lastSeenMessageId: int('lastSeenMessageId'),
     joinedAt: datetime('joinedAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [uniqueIndex('uq_conv_member').on(t.userId, t.conversationId)],
@@ -68,6 +70,7 @@ export const messages = mysqlTable('messages', {
   fileUrl: varchar('fileUrl', { length: 255 }),
   senderId: int('senderId').notNull().references(() => users.id),
   conversationId: int('conversationId').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  conversationIndex: int('conversationIndex').notNull().default(1),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

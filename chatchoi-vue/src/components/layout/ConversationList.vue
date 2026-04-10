@@ -60,7 +60,9 @@ const handleSelectConv = (convId: number) => {
           <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
             {{ conv.isGroup ? conv.name : conv.friend?.username }}
           </p>
-          <p class="text-xs text-slate-400 truncate">Bấm để chat...</p>
+          <p class="text-xs text-slate-400 truncate">
+            {{ conv.lastMessage ? conv.lastMessage : 'Chưa có tin nhắn nào...' }}
+          </p>
         </div>
       </div>
 

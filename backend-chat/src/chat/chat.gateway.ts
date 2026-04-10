@@ -15,6 +15,9 @@ import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { PresenceService } from 'src/presence/presence.service';
 import { FriendshipsService } from 'src/friendships/friendships.service';
 import { SkipThrottle } from '@nestjs/throttler';
+import { conversationMembers } from '../database/schema';
+import { eq } from 'drizzle-orm';
+import { DrizzleService } from '../database/drizzle.service';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -34,11 +37,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         private readonly messagesService: MessagesService,
         private readonly presenceService: PresenceService,
         private readonly friendshipsService: FriendshipsService,
+        private drizzle: DrizzleService
     ) { }
 
     async handleConnection(client: any) {
         const userId = client.user?.userId;
         if (!userId) return;
+
+        // noti_channel
+        await client.join(`user_${userId}`);
 
         if (this.offlineTimers.has(userId)) {
             clearTimeout(this.offlineTimers.get(userId));
@@ -92,23 +99,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
 
-        console.log("Socket User Data:", client.user);
         const senderId = client.user.userId;
 
-        const savedMsg = await this.messagesService.sendMessage(
-            senderId,
-            data.conversationId,
-            data.content,
-        );
+        // 1. Lưu tin nhắn
+        const savedMsg = await this.messagesService.sendMessage(senderId, data.conversationId, data.content);
 
-        //emit tới tất cả mọi người trong phòng
+        // 2. Phát cho những người ĐANG MỞ PHÒNG
         this.server.to(`conv_${data.conversationId}`).emit('new_message', {
             ...savedMsg,
             senderId: senderId,
-            sender: {
-                id: senderId,
-                username: client.user.username,
-            },
+            sender: { id: senderId, username: client.user.username },
+        });
+
+        // 3. Tìm những người trong cuộc trò chuyện
+        const members = await this.drizzle.db
+            .select({ userId: conversationMembers.userId })
+            .from(conversationMembers)
+            .where(eq(conversationMembers.conversationId, data.conversationId));
+
+        // Bắn thông báo 'update_conversation_list' thẳng vào kênh cá nhân của từng người
+        members.forEach((m) => {
+            this.server.to(`user_${m.userId}`).emit('update_conversation_list', {
+                conversationId: data.conversationId,
+                lastMessage: data.content,
+                senderName: client.user.username,
+            });
         });
 
         return savedMsg;

@@ -9,6 +9,7 @@ export const useChatStore = defineStore('chat', {
         myId: null as number | null,
         isConnected: false,
         conversations: [] as any[],
+        myUserName: null as string | null,
     }),
 
     actions: {
@@ -16,6 +17,7 @@ export const useChatStore = defineStore('chat', {
             try {
                 const decoded: any = jwtDecode(token);
                 this.myId = decoded.userId; // Lấy userId từ Token
+                this.myUserName = decoded.username;
                 console.log("Định danh thành công, ID: ", this.myId);
             } catch (error) {
                 console.error("Token lỏ!");
@@ -67,6 +69,22 @@ export const useChatStore = defineStore('chat', {
             const conv = this.conversations.find(c => !c.isGroup && c.friend?.id === userId);
             if (conv) {
                 conv.isOnline = (status === 'online');
+            }
+        },
+
+        // Cập nhật ConversationList
+        updateConversationList(data: { conversationId: number, lastMessage: string, senderName: string }) {
+            const index = this.conversations.findIndex(c => c.id === data.conversationId);
+
+            if (index !== -1) {
+                // Cập nhật tin nhắn mới nhất
+                // Nếu người gửi là mình thì hiện "Bạn: ...", không thì hiện "Tên: ..."
+                const prefix = data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `;
+                this.conversations[index].lastMessage = prefix + data.lastMessage;
+
+                // Đẩy lên Top
+                const [conv] = this.conversations.splice(index, 1);
+                this.conversations.unshift(conv);
             }
         }
     }
