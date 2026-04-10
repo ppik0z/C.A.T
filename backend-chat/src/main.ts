@@ -2,14 +2,13 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { RedisIoAdapter } from './chat/redis-io.adapter';
+import { AuthIoAdapter } from './chat/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const redisIoAdapter = new RedisIoAdapter(app);
-  await redisIoAdapter.connectToRedis();
-  app.useWebSocketAdapter(redisIoAdapter);
+  const authIoAdapter = new AuthIoAdapter(app);
+  app.useWebSocketAdapter(authIoAdapter);
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
