@@ -42,4 +42,12 @@ export const initSocketService = (token: string) => {
         console.log(`User ${data.userId} đang ${data.status}`);
         chatStore.updateUserStatus(data.userId, data.status);
     });
+
+    socket.on("update_conversation_list", (data) => {
+        // Check xem có phải mình vừa gửi không để đổi tên thành "Bạn" cho thân thiện
+        if (data.senderName === chatStore.myUserName) {
+            data.senderName = 'Bạn';
+        }
+        chatStore.updateConversationList(data);
+    });
 };
