@@ -5,7 +5,7 @@ import { jwtDecode } from 'jwt-decode';
 export const useChatStore = defineStore('chat', {
     state: () => ({
         messages: [] as any[],
-        currentConversationId: 1, // Tạm thời mặc định phòng 1
+        currentConversationId: null as number | null,
         myId: null as number | null,
         isConnected: false,
     }),

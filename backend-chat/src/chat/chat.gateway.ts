@@ -54,6 +54,7 @@ export class ChatGateway {
         //emit tới tất cả mọi người trong phòng
         this.server.to(`conv_${data.conversationId}`).emit('new_message', {
             ...savedMsg,
+            senderId: senderId,
             sender: {
                 id: senderId,
                 username: client.user.username,

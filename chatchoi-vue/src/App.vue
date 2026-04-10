@@ -34,12 +34,24 @@ chatStore.$subscribe((_, state) => {
     <ConversationList />
 
     <main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-bg-dark">
-      <div class="h-16 border-b border-slate-100 dark:border-slate-800 flex items-center px-6">
-          <h3 class="font-bold text-slate-700 dark:text-slate-200"># Phòng Số 1</h3>
-      </div>
       
-      <MessageList />
-      <ChatInput />
+      <template v-if="chatStore.currentConversationId">
+        <div class="h-16 border-b border-slate-100 dark:border-slate-800 flex items-center px-6 shadow-sm z-10">
+          <h3 class="font-bold text-slate-700 dark:text-slate-200">
+            Phòng Chat #{{ chatStore.currentConversationId }}
+          </h3>
+        </div>
+        
+        <MessageList />
+        <ChatInput />
+      </template>
+
+      <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-400">
+        <div class="text-6xl mb-4 opacity-50">💬</div>
+        <h2 class="text-xl font-semibold mb-2 text-slate-500">Chào mừng</h2>
+        <p class="text-sm">Hãy chọn một đoạn chat để bắt đầu gửi tin nhắn</p>
+      </div>
+
     </main>
   </div>
 </template>
