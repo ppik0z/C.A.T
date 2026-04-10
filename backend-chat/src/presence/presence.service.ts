@@ -31,4 +31,10 @@ export class PresenceService {
 
         return userIds.filter((_, index) => results[index]);
     }
+
+    // Xóa status của user
+    async removeStatus(userId: number) {
+        const key = `presence:user:${userId}`;
+        await this.redis?.del(key);
+    }
 }

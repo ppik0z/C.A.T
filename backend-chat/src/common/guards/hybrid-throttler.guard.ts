@@ -37,7 +37,7 @@ export class HybridThrottlerGuard extends ThrottlerGuard {
 
             const key = this.generateKey(context, userIdentifier, throttlerName);
 
-            const { totalHits } = await this.storageService.increment(
+            const { totalHits, timeToBlockExpire } = await this.storageService.increment(
                 key,
                 resolvedTtl,
                 resolvedLimit,
@@ -46,7 +46,7 @@ export class HybridThrottlerGuard extends ThrottlerGuard {
             );
 
             if (totalHits > resolvedLimit) {
-                console.log(`${userIdentifier} đang spam!`);
+                console.warn(`[SPAM DETECTED] ${userIdentifier} hit ${totalHits}/${resolvedLimit} lần!`);
                 throw new WsException('Chat nhanh quá, chậm lại tí!');
             }
             return true;

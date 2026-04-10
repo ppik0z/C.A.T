@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useChatStore } from '../../stores/chat';
 import { socket } from '../../socket';
 
 const chatStore = useChatStore();
-const conversations = ref<any[]>([]);
+const conversations = computed(() => chatStore.conversations);
 
 onMounted(async () => {
   const token = localStorage.getItem('accessToken');
@@ -14,7 +14,9 @@ onMounted(async () => {
     const res = await fetch('http://localhost:3000/conversations', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    conversations.value = await res.json();
+    const data = await res.json();
+    
+    chatStore.setConversations(data);
   } catch (error) {
     console.error('Lỗi lấy danh sách phòng:', error);
   }

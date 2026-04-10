@@ -33,4 +33,13 @@ export const initSocketService = (token: string) => {
         chatStore.isConnected = false;
         if (heartbeatInterval) clearInterval(heartbeatInterval);
     });
+
+    socket.on("initial_presence_sync", (data: { onlineUserIds: number[] }) => {
+        chatStore.setUsersOnline(data.onlineUserIds);
+    });
+
+    socket.on("user_status_changed", (data: { userId: number, status: string }) => {
+        console.log(`User ${data.userId} đang ${data.status}`);
+        chatStore.updateUserStatus(data.userId, data.status);
+    });
 };
