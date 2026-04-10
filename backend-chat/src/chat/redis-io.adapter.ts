@@ -2,26 +2,33 @@ import { IoAdapter } from '@nestjs/platform-socket.io';
 import { Server, ServerOptions } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
+import { JwtService } from '@nestjs/jwt';
 
-export class RedisIoAdapter extends IoAdapter {
-    private adapterConstructor: ReturnType<typeof createAdapter>;
-
-    async connectToRedis(): Promise<void> {
-        const pubClient = createClient({
-            url: process.env.REDIS_URL || 'redis://localhost:6379'
-        });
-        const subClient = pubClient.duplicate();
-
-        await Promise.all([pubClient.connect(), subClient.connect()]);
-
-        this.adapterConstructor = createAdapter(pubClient, subClient);
-        console.log('Redis Adapter: Connected successfully!');
+export class AuthIoAdapter extends IoAdapter {
+    constructor(private app: any) {
+        super(app);
     }
 
-    createIOServer(port: number, options?: ServerOptions): Server {
-        const server = super.createIOServer(port, options) as Server;
+    private adapterConstructor: ReturnType<typeof createAdapter>;
 
-        server.adapter(this.adapterConstructor);
+    createIOServer(port: number, options?: any): any {
+        const server = super.createIOServer(port, options);
+        const jwtService = this.app.get(JwtService);
+
+        server.use(async (socket, next) => {
+            const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
+
+            if (!token) return next(new Error('Unauthorized'));
+
+            try {
+                const payload = await jwtService.verifyAsync(token);
+                socket.user = { userId: payload.userId, username: payload.username };
+                next();
+            } catch {
+                next(new Error('Token lỏ!'));
+            }
+        });
+
         return server;
     }
 }
