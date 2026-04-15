@@ -20,10 +20,10 @@ async function bootstrap() {
   app.enableCors();
 
   const config = new DocumentBuilder()
-    .setTitle('CHATCHOI API (Sở thú)')
-    .setDescription('Tài liệu API cho ứng dụng CHATCHOI')
+    .setTitle('CHATCHOI API')
+    .setDescription('Tài liệu API')
     .setVersion('1.0')
-    .addBearerAuth() // Cực kỳ quan trọng để test API có bảo mật bằng JWT
+    .addBearerAuth()
     .build();
 
   const documentFactory = () => SwaggerModule.createDocument(app, config);
