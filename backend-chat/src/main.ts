@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { AuthIoAdapter } from './chat/redis-io.adapter';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,6 +18,17 @@ async function bootstrap() {
   }));
 
   app.enableCors();
+
+  const config = new DocumentBuilder()
+    .setTitle('CHATCHOI API (Sở thú)')
+    .setDescription('Tài liệu API cho ứng dụng CHATCHOI')
+    .setVersion('1.0')
+    .addBearerAuth() // Cực kỳ quan trọng để test API có bảo mật bằng JWT
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, documentFactory);
+
   await app.listen(3000);
   console.log(`Application is running on: ${await app.getUrl()}`)
 }
