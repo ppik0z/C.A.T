@@ -60,7 +60,7 @@ export class ReadStateService {
             await this.drizzle.db.transaction(async (tx) => {
                 for (const [convIdStr, indexStr] of Object.entries(states)) {
                     await tx.update(conversationMembers)
-                        .set({ lastSeenMessageId: parseInt(indexStr, 10) })
+                        .set({ lastSeenMessageIndex: parseInt(indexStr, 10) })
                         .where(and(
                             eq(conversationMembers.userId, userId),
                             eq(conversationMembers.conversationId, parseInt(convIdStr, 10))

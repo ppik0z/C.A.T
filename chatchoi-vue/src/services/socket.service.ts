@@ -27,6 +27,10 @@ export const initSocketService = (token: string) => {
 
     socket.on("new_message", (msg) => {
         chatStore.pushMessage(msg);
+
+        if (chatStore.currentConversationId === msg.conversationId) {
+            chatStore.markAsRead(msg.conversationId, msg.conversationIndex);
+        }
     });
 
     socket.on("disconnect", () => {
@@ -44,10 +48,17 @@ export const initSocketService = (token: string) => {
     });
 
     socket.on("update_conversation_list", (data) => {
-        // Check xem có phải mình vừa gửi không để đổi tên thành "Bạn" cho thân thiện
         if (data.senderName === chatStore.myUserName) {
             data.senderName = 'Bạn';
         }
         chatStore.updateConversationList(data);
+    });
+
+    socket.on("sync_read_state", (data: { conversationId: number, lastMessageIndex: number }) => {
+        const conv = chatStore.conversations.find(c => c.id === data.conversationId);
+        if (conv) {
+            conv.unreadCount = 0;
+            conv.lastSeenMessageIndex = data.lastMessageIndex;
+        }
     });
 };

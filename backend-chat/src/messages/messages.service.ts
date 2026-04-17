@@ -10,7 +10,9 @@ export class MessagesService {
     //check quyền
     private async validateMember(userId: number, conversationId: number) {
         const member = await this.drizzle.db
-            .select()
+            .select({
+                isAdmin: conversationMembers.isAdmin,
+            })
             .from(conversationMembers)
             .where(and(
                 eq(conversationMembers.conversationId, conversationId),
@@ -28,29 +30,46 @@ export class MessagesService {
 
 
     //----sendMessage----
-    async sendMessage(senderId: number, conversationId: number, content: string) {
+    async sendMessage(senderId: number, conversationId: number, content: string, senderName: string) {
 
         // 1. Kiểm tra quyền
-        await this.validateMember(senderId, conversationId);
+        const sender = await this.validateMember(senderId, conversationId);
 
         // 2. Gửi tin nhắn
         return await this.drizzle.db.transaction(async (tx) => {
+
+            const [conv] = await tx.select({ currentIdx: conversations.lastMessageIndex })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .for('update');
+
+            const nextIndex = (conv?.currentIdx || 0) + 1;
+
             const [newMessage] = await tx.insert(messages).values({
                 content,
                 senderId,
                 conversationId,
                 type: 'text',
+                conversationIndex: nextIndex,
             });
 
             await tx
                 .update(conversations)
                 .set({
+                    lastMessageId: newMessage.insertId,
+                    lastMessageIndex: nextIndex,
+                    lastMessageContent: content,
+                    lastMessageSenderName: senderName,
                     updatedAt: new Date(),
-                    lastMessageId: newMessage.insertId
                 })
                 .where(eq(conversations.id, conversationId));
 
-            return { id: newMessage.insertId, content, createdAt: new Date() };
+            return {
+                id: newMessage.insertId,
+                content,
+                conversationIndex: nextIndex,
+                createdAt: new Date()
+            };
         });
     }
 

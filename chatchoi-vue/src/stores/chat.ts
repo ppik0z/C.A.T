@@ -29,6 +29,28 @@ export const useChatStore = defineStore('chat', {
             this.messages = msgs;
         },
 
+        // Xóa số lượng tin nhắn chưa đọc của một phòng
+        clearUnread(conversationId: number) {
+            const conv = this.conversations.find(c => c.id === conversationId);
+            if (conv) {
+                conv.unreadCount = 0;
+            }
+        },
+
+        // Thêm action này để bắn Socket báo đã đọc
+        markAsRead(conversationId: number, lastMessageIndex: number) {
+            socket.emit('mark_as_read', {
+                conversationId: conversationId,
+                lastMessageIndex: lastMessageIndex
+            });
+
+            const conv = this.conversations.find(c => c.id === conversationId);
+            if (conv) {
+                conv.unreadCount = 0;
+                conv.lastSeenMessageIndex = lastMessageIndex;
+            }
+        },
+
         // Thêm 1 tin nhắn mới 
         pushMessage(msg: any) {
             // Tránh trùng lặp nếu đã nhận từ callback gửi tin
@@ -42,6 +64,7 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
+                senderName: this.myUserName,
                 content: content
             }, (response: any) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
@@ -73,17 +96,21 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Cập nhật ConversationList
-        updateConversationList(data: { conversationId: number, lastMessage: string, senderName: string }) {
+        updateConversationList(data: any) {
             const index = this.conversations.findIndex(c => c.id === data.conversationId);
-
             if (index !== -1) {
-                // Cập nhật tin nhắn mới nhất
-                // Nếu người gửi là mình thì hiện "Bạn: ...", không thì hiện "Tên: ..."
-                const prefix = data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `;
-                this.conversations[index].lastMessage = prefix + data.lastMessage;
+                const conv = this.conversations[index];
+                conv.lastMessageContent = (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
+                conv.lastMessageIndex = data.lastMessageIndex;
+
+                if (this.currentConversationId !== data.conversationId) {
+                    conv.unreadCount = (conv.unreadCount || 0) + 1;
+                } else {
+                    this.markAsRead(data.conversationId, data.lastMessageIndex);
+                }
 
                 // Đẩy lên Top
-                const [conv] = this.conversations.splice(index, 1);
+                this.conversations.splice(index, 1);
                 this.conversations.unshift(conv);
             }
         }

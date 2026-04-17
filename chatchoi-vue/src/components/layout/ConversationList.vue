@@ -12,9 +12,12 @@ onMounted(async () => {
 
   try {
     const res = await fetch('http://localhost:3000/conversations', {
+      method: 'GET',
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
+
+    console.log(data);
     
     chatStore.setConversations(data);
   } catch (error) {
@@ -24,6 +27,25 @@ onMounted(async () => {
 
 const handleSelectConv = (convId: number) => {
     chatStore.currentConversationId = convId;
+
+    // Tìm đoạn chat đó để lấy thông tin
+    const currentConv = chatStore.conversations.find(c => c.id === convId);
+    
+    // Chỗ này bồ cần một cái ID hoặc Index của tin nhắn mới nhất.
+    // Nếu Backend chưa trả về trường lastMessageId trong API getMyConversations,
+    // thì bồ có thể mượn tạm hàm này báo cáo sau khi load_messages xong cũng được,
+    // nhưng tạm thời ta lấy từ currentConv nếu có:
+    const latestIndex = currentConv?.lastMessageId || 0; 
+    
+    // Bắn sự kiện!
+    if (latestIndex > 0) {
+        chatStore.markAsRead(convId, latestIndex);
+    } else {
+        chatStore.clearUnread(convId); // Ít nhất cũng xóa UI nếu phòng chưa có tin nào
+    }
+
+
+
     socket.emit("join_room", { conversationId: convId });
     socket.emit("load_messages", { conversationId: convId });
 };
@@ -61,7 +83,10 @@ const handleSelectConv = (convId: number) => {
             {{ conv.isGroup ? conv.name : conv.friend?.username }}
           </p>
           <p class="text-xs text-slate-400 truncate">
-            {{ conv.lastMessage ? conv.lastMessage : 'Chưa có tin nhắn nào...' }}
+            <span v-if="conv.lastMessage?.content">
+              {{ conv.lastMessage.senderName === chatStore.myUserName ? 'Bạn' : conv.lastMessage.senderName }}: {{ conv.lastMessage.content }}
+            </span>
+            <span v-else>Chưa có tin nhắn nào...</span>
           </p>
         </div>
       </div>

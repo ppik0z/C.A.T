@@ -1,8 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { conversationMembers, conversations, users } from 'src/database/schema';
+import { conversationMembers, conversations, messages, users } from 'src/database/schema';
 import { and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
 import { PresenceService } from '../presence/presence.service';
+import { aliasedTable } from 'drizzle-orm';
+
+type RawConvType = {
+    id: number;
+    name: string | null;
+    isGroup: boolean;
+    avatarGroup: string | null;
+    lastMessageId: number | null;
+    lastMessageIndex: number;
+    lastMessageContent: string | null;
+    lastMessageSenderName: string | null;
+    unreadCount: number;
+    friendId: number | null;
+    friendUsername: string | null;
+    friendAvatar: string | null;
+};
 
 @Injectable()
 export class ConversationsService {
@@ -57,6 +73,10 @@ export class ConversationsService {
         const convIds = userConvs.map(c => c.conversationId);
         if (convIds.length === 0) return [];
 
+        const myMember = aliasedTable(conversationMembers, 'myMember');
+        const friendMember = aliasedTable(conversationMembers, 'friendMember');
+
+        // 1. SELECT
         const rawConvs = await this.drizzle.db
             .select({
                 id: conversations.id,
@@ -64,32 +84,52 @@ export class ConversationsService {
                 isGroup: conversations.isGroup,
                 avatarGroup: conversations.avatarGroup,
                 lastMessageId: conversations.lastMessageId,
-                friend: {
-                    id: users.id,
-                    username: users.username,
-                    avatar: users.avatar,
-                },
+                lastMessageIndex: conversations.lastMessageIndex,
+                lastMessageContent: conversations.lastMessageContent,
+                lastMessageSenderName: conversations.lastMessageSenderName,
+                unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
+                friendId: users.id,
+                friendUsername: users.username,
+                friendAvatar: users.avatar,
             })
             .from(conversations)
-            .leftJoin(conversationMembers, and(
-                eq(conversations.id, conversationMembers.conversationId),
-                ne(conversationMembers.userId, currentUserId),
+            .innerJoin(myMember, and(
+                eq(conversations.id, myMember.conversationId),
+                eq(myMember.userId, currentUserId)
+            ))
+            .leftJoin(friendMember, and(
+                eq(conversations.id, friendMember.conversationId),
+                ne(friendMember.userId, currentUserId),
                 eq(conversations.isGroup, false)
             ))
-            .leftJoin(users, eq(conversationMembers.userId, users.id))
+            .leftJoin(users, eq(friendMember.userId, users.id))
             .where(inArray(conversations.id, convIds))
-            .orderBy(desc(conversations.updatedAt));
+            .orderBy(desc(conversations.updatedAt)) as RawConvType[];
 
-        // MAP QUA REDIS ĐỂ CHECK ONLINE
+        // 2. GỘP OBJECT
         return await Promise.all(rawConvs.map(async (conv) => {
             let isOnline = false;
-            // Nếu là chat 1-1 và có thông tin bạn bè
-            if (!conv.isGroup && conv.friend) {
-                isOnline = await this.presenceService.isUserOnline(conv.friend.id);
+            if (!conv.isGroup && conv.friendId) {
+                isOnline = await this.presenceService.isUserOnline(conv.friendId);
             }
+
             return {
-                ...conv,
+                id: conv.id,
+                name: conv.name,
+                isGroup: conv.isGroup,
+                avatarGroup: conv.avatarGroup,
+                unreadCount: conv.unreadCount,
                 isOnline,
+                friend: conv.friendId ? {
+                    id: conv.friendId,
+                    username: conv.friendUsername,
+                    avatar: conv.friendAvatar,
+                } : null,
+                lastMessage: {
+                    id: conv.lastMessageId,
+                    content: conv.lastMessageContent,
+                    senderName: conv.lastMessageSenderName,
+                }
             };
         }));
     }

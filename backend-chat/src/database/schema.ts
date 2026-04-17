@@ -43,6 +43,9 @@ export const conversations = mysqlTable('conversations', {
   isGroup: boolean('isGroup').notNull().default(false),
   avatarGroup: varchar('avatarGroup', { length: 255 }),
   lastMessageId: int('lastMessageId'),
+  lastMessageIndex: int('lastMessageIndex').notNull().default(0),
+  lastMessageContent: text('lastMessageContent'),
+  lastMessageSenderName: varchar('lastMessageSenderName', { length: 191 }),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
@@ -53,10 +56,12 @@ export const conversationMembers = mysqlTable(
   {
     id: int('id').autoincrement().primaryKey(),
     userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    username: varchar('username', { length: 191 }),
     conversationId: int('conversationId').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
     nickname: varchar('nickname', { length: 255 }),
     isAdmin: boolean('isAdmin').notNull().default(false),
     lastSeenMessageId: int('lastSeenMessageId'),
+    lastSeenMessageIndex: int('lastSeenMessageIndex').notNull().default(0),
     joinedAt: datetime('joinedAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (t) => [uniqueIndex('uq_conv_member').on(t.userId, t.conversationId)],

@@ -97,20 +97,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content: string },
+        @MessageBody() data: { conversationId: number; content: string, senderName: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
 
         const senderId = client.user.userId;
 
         // 1. Lưu tin nhắn
-        const savedMsg = await this.messagesService.sendMessage(senderId, data.conversationId, data.content);
+        const savedMsg = await this.messagesService.sendMessage(senderId, data.conversationId, data.content, data.senderName);
 
         // 2. Phát cho những người ĐANG MỞ PHÒNG
         this.server.to(`conv_${data.conversationId}`).emit('new_message', {
             ...savedMsg,
             senderId: senderId,
-            sender: { id: senderId, username: client.user.username },
+            sender: { id: senderId, username: data.senderName },
         });
 
         // 3. Tìm những người trong cuộc trò chuyện
@@ -123,9 +123,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         members.forEach((m) => {
             this.server.to(`user_${m.userId}`).emit('update_conversation_list', {
                 conversationId: data.conversationId,
-                lastMessage: data.content,
-                senderName: client.user.username,
+                lastMessageContent: data.content,
+                senderName: data.senderName,
                 lastMessageId: savedMsg.id,
+                lastMessageIndex: savedMsg.conversationIndex,
             });
         });
 
