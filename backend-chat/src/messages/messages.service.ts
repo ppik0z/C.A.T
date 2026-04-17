@@ -44,7 +44,10 @@ export class MessagesService {
 
             await tx
                 .update(conversations)
-                .set({ updatedAt: new Date() })
+                .set({
+                    updatedAt: new Date(),
+                    lastMessageId: newMessage.insertId
+                })
                 .where(eq(conversations.id, conversationId));
 
             return { id: newMessage.insertId, content, createdAt: new Date() };

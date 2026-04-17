@@ -63,6 +63,7 @@ export class ConversationsService {
                 name: conversations.name,
                 isGroup: conversations.isGroup,
                 avatarGroup: conversations.avatarGroup,
+                lastMessageId: conversations.lastMessageId,
                 friend: {
                     id: users.id,
                     username: users.username,

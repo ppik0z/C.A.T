@@ -18,6 +18,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { conversationMembers } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
+import { ReadStateService } from '../read-state/read-state.service';
 
 interface AuthenticatedSocket extends Socket {
     user: {
@@ -37,7 +38,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         private readonly messagesService: MessagesService,
         private readonly presenceService: PresenceService,
         private readonly friendshipsService: FriendshipsService,
-        private drizzle: DrizzleService
+        private drizzle: DrizzleService,
+        private readonly readStateService: ReadStateService,
     ) { }
 
     async handleConnection(client: any) {
@@ -123,6 +125,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 conversationId: data.conversationId,
                 lastMessage: data.content,
                 senderName: client.user.username,
+                lastMessageId: savedMsg.id,
             });
         });
 
@@ -157,6 +160,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 message: errorMessage,
             };
         }
+    }
+
+    @SubscribeMessage('mark_as_read')
+    async handleMarkAsRead(
+        @MessageBody() data: { conversationId: number; lastMessageIndex: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        const userId = client.user.userId;
+
+        // 1. Quăng vào Redis
+        await this.readStateService.markAsRead(userId, data.conversationId, data.lastMessageIndex);
+
+        // 2. Bắn loa về Kênh Cá Nhân để TẤT CẢ các tab của user này đều tắt chấm đỏ
+        this.server.to(`user_${userId}`).emit('sync_read_state', {
+            conversationId: data.conversationId,
+            lastMessageIndex: data.lastMessageIndex
+        });
+
+        return { status: 'ack' };
     }
 
 

@@ -9,6 +9,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const authIoAdapter = new AuthIoAdapter(app);
+  await authIoAdapter.connectToRedis();
+
   app.useWebSocketAdapter(authIoAdapter);
 
   app.useGlobalPipes(new ValidationPipe({
