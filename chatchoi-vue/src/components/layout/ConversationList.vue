@@ -16,9 +16,6 @@ onMounted(async () => {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
-
-    console.log(data);
-    
     chatStore.setConversations(data);
   } catch (error) {
     console.error('Lỗi lấy danh sách phòng:', error);
@@ -27,24 +24,16 @@ onMounted(async () => {
 
 const handleSelectConv = (convId: number) => {
     chatStore.currentConversationId = convId;
-
-    // Tìm đoạn chat đó để lấy thông tin
     const currentConv = chatStore.conversations.find(c => c.id === convId);
     
-    // Chỗ này bồ cần một cái ID hoặc Index của tin nhắn mới nhất.
-    // Nếu Backend chưa trả về trường lastMessageId trong API getMyConversations,
-    // thì bồ có thể mượn tạm hàm này báo cáo sau khi load_messages xong cũng được,
-    // nhưng tạm thời ta lấy từ currentConv nếu có:
-    const latestIndex = currentConv?.lastMessageId || 0; 
+    // Sử dụng lastMessageIndex để markAsRead (chuẩn theo logic Backend bồ đã viết)
+    const latestIndex = currentConv?.lastMessageIndex || 0; 
     
-    // Bắn sự kiện!
     if (latestIndex > 0) {
         chatStore.markAsRead(convId, latestIndex);
     } else {
-        chatStore.clearUnread(convId); // Ít nhất cũng xóa UI nếu phòng chưa có tin nào
+        chatStore.clearUnread(convId);
     }
-
-
 
     socket.emit("join_room", { conversationId: convId });
     socket.emit("load_messages", { conversationId: convId });
@@ -62,35 +51,55 @@ const handleSelectConv = (convId: number) => {
       
       <div v-for="conv in conversations" :key="conv.id"
            @click="handleSelectConv(conv.id)"
-           :class="['p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3', 
+           :class="['p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3 relative group', 
                     chatStore.currentConversationId === conv.id 
                     ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-100 dark:ring-blue-800' 
                     : 'hover:bg-slate-50 dark:hover:bg-slate-800/50']">
         
         <div class="relative shrink-0">
-          <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
-            <span class="text-sm font-bold text-slate-500 uppercase">
+          <div class="w-12 h-12 rounded-full bg-linear-to-tr from-slate-200 to-slate-100 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center overflow-hidden shadow-sm">
+            <span class="text-sm font-bold text-slate-500 dark:text-slate-300 uppercase">
               {{ conv.isGroup ? conv.name?.[0] : conv.friend?.username?.[0] }}
             </span>
           </div>
           <span v-if="conv.isOnline" 
-                class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-surface-dark rounded-full">
+                class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-bg-dark rounded-full">
           </span>
         </div>
 
-        <div class="min-w-0">
-          <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
-            {{ conv.isGroup ? conv.name : conv.friend?.username }}
-          </p>
-          <p class="text-xs text-slate-400 truncate">
-            <span v-if="conv.lastMessage?.content">
-              {{ conv.lastMessage.senderName === chatStore.myUserName ? 'Bạn' : conv.lastMessage.senderName }}: {{ conv.lastMessage.content }}
-            </span>
-            <span v-else>Chưa có tin nhắn nào...</span>
-          </p>
-        </div>
-      </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex justify-between items-baseline mb-0.5">
+            <p :class="['text-sm truncate mr-2', 
+                        conv.unreadCount > 0 ? 'font-bold text-slate-900 dark:text-white' : 'font-semibold text-slate-700 dark:text-slate-200']">
+              {{ conv.isGroup ? conv.name : conv.friend?.username }}
+            </p>
+          </div>
+          
+          <div class="flex items-center justify-between">
+            <p :class="['text-xs truncate flex-1', 
+                        conv.unreadCount > 0 ? 'text-slate-900 dark:text-slate-100 font-medium' : 'text-slate-400']">
+              <span v-if="conv.lastMessage?.content">
+                {{ conv.lastMessage.senderName === chatStore.myUserName ? 'Bạn' : conv.lastMessage.senderName }}: {{ conv.lastMessage.content }}
+              </span>
+              <span v-else class="italic">Chưa có tin nhắn nào...</span>
+            </p>
 
+            <div v-if="conv.unreadCount > 0" 
+                 class="ml-2 px-1.5 py-0.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] flex justify-center items-center shadow-sm">
+              {{ conv.unreadCount > 99 ? '99+' : conv.unreadCount }}
+            </div>
+            
+            <div v-if="conv.unreadCount > 0" class="w-2 h-2 bg-primary rounded-full ml-1"></div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </aside>
 </template>
+
+<style scoped>
+.group:hover .shadow-sm {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+</style>
