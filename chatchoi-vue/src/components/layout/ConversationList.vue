@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { onMounted, computed } from 'vue';
 import { useChatStore } from '../../stores/chat';
 import { socket } from '../../socket';
+import { apiService } from '../../services/api.service';
 
 const chatStore = useChatStore();
 const conversations = computed(() => chatStore.conversations);
@@ -11,14 +12,10 @@ onMounted(async () => {
   if (!token) return;
 
   try {
-    const res = await fetch('http://localhost:3000/conversations', {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
+    const data = await apiService.getConversations();
     chatStore.setConversations(data);
-  } catch (error) {
-    console.error('Lỗi lấy danh sách phòng:', error);
+  } catch (error: any) {
+    console.error('Lỗi lấy danh sách phòng:', error.message || error);
   }
 });
 
@@ -26,7 +23,7 @@ const handleSelectConv = (convId: number) => {
     chatStore.currentConversationId = convId;
     const currentConv = chatStore.conversations.find(c => c.id === convId);
     
-    // Sử dụng lastMessageIndex để markAsRead (chuẩn theo logic Backend bồ đã viết)
+    // Sử dụng lastMessageIndex để markAsRead
     const latestIndex = currentConv?.lastMessageIndex || 0; 
     
     if (latestIndex > 0) {

@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useChatStore } from '../stores/chat';
 import { initSocketService } from '../services/socket.service';
+import { apiService } from '../services/api.service';
 
 const chatStore = useChatStore();
 const username = ref('');
@@ -11,31 +12,24 @@ const isLoading = ref(false);
 const handleLogin = async () => {
   isLoading.value = true;
   try {
-    const response = await fetch('http://localhost:3000/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value, password: password.value })
+    const data = await apiService.login({ 
+      username: username.value, 
+      password: password.value 
     });
 
-    const data = await response.json();
-
     if (data.accessToken) {
-      // 1. Lưu cả hai token vào máy
       localStorage.setItem('accessToken', data.accessToken);
       if (data.refreshToken) {
         localStorage.setItem('refreshToken', data.refreshToken);
       }
       
-      // 2. Định danh và kết nối Socket
       chatStore.setIdentity(data.accessToken);
       initSocketService(data.accessToken);
       
       alert("Đăng nhập thành công!");
-    } else {
-      alert("Sai tài khoản hoặc mật khẩu!");
     }
-  } catch (error) {
-    console.error("Lỗi kết nối:", error);
+  } catch (error: any) {
+    alert(error.message || "Lỗi kết nối!");
   } finally {
     isLoading.value = false;
   }

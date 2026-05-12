@@ -1,22 +1,23 @@
 import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
+import type { Message } from '../types/message.interface';
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
-        messages: [] as any[],
-        currentConversationId: null as number | null,
         myId: null as number | null,
-        isConnected: false,
+        myUserName: '' as string,
+        currentConversationId: null as number | null,
+        messages: [] as Message[], 
         conversations: [] as any[],
-        myUserName: null as string | null,
     }),
 
     actions: {
         setIdentity(token: string) {
             try {
-                const decoded: any = jwtDecode(token);
-                this.myId = decoded.userId; // Lấy userId từ Token
+                // Tạm thời ép kiểu cho jwtDecode để không báo lỗi
+                const decoded = jwtDecode<{userId: number, username: string}>(token);
+                this.myId = decoded.userId;
                 this.myUserName = decoded.username;
                 console.log("Định danh thành công, ID: ", this.myId);
             } catch (error) {
@@ -24,8 +25,8 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        // Đổ dữ liệu lịch sử vào
-        setMessages(msgs: any[]) {
+        // Đổ dữ liệu lịch sử vào 
+        setMessages(msgs: Message[]) {
             this.messages = msgs;
         },
 
@@ -37,7 +38,7 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        // Thêm action này để bắn Socket báo đã đọc
+        // Bắn Socket báo đã đọc
         markAsRead(conversationId: number, lastMessageIndex: number) {
             socket.emit('mark_as_read', {
                 conversationId: conversationId,
@@ -52,7 +53,7 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Thêm 1 tin nhắn mới 
-        pushMessage(msg: any) {
+        pushMessage(msg: Message) {
             // Tránh trùng lặp nếu đã nhận từ callback gửi tin
             const exists = this.messages.find(m => m.id === msg.id);
             if (!exists) this.messages.push(msg);
@@ -66,7 +67,7 @@ export const useChatStore = defineStore('chat', {
                 conversationId: this.currentConversationId,
                 senderName: this.myUserName,
                 content: content
-            }, (response: any) => {
+            }, (response: Message) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
                 if (response && response.id) {
                     this.pushMessage(response);
@@ -74,6 +75,7 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
+        // Tạm thời để any[], sẽ xử lý interface Conversation sau
         setConversations(convs: any[]) {
             this.conversations = convs;
         },
