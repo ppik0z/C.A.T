@@ -2,10 +2,14 @@ import { Injectable, ForbiddenException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { messages, conversations, conversationMembers } from '../database/schema';
 import { eq, and } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class MessagesService {
-    constructor(private drizzle: DrizzleService) { }
+    constructor(
+        private drizzle: DrizzleService,
+        private eventEmitter: EventEmitter2
+    ) { }
 
     //check quyền
     private async validateMember(userId: number, conversationId: number) {
@@ -31,13 +35,9 @@ export class MessagesService {
 
     //----sendMessage----
     async sendMessage(senderId: number, conversationId: number, content: string, senderName: string) {
+        await this.validateMember(senderId, conversationId);
 
-        // 1. Kiểm tra quyền
-        const sender = await this.validateMember(senderId, conversationId);
-
-        // 2. Gửi tin nhắn
         return await this.drizzle.db.transaction(async (tx) => {
-
             const [conv] = await tx.select({ currentIdx: conversations.lastMessageIndex })
                 .from(conversations)
                 .where(eq(conversations.id, conversationId))
@@ -53,23 +53,19 @@ export class MessagesService {
                 conversationIndex: nextIndex,
             });
 
-            await tx
-                .update(conversations)
-                .set({
-                    lastMessageId: newMessage.insertId,
-                    lastMessageIndex: nextIndex,
-                    lastMessageContent: content,
-                    lastMessageSenderName: senderName,
-                    updatedAt: new Date(),
-                })
-                .where(eq(conversations.id, conversationId));
-
-            return {
+            const savedMsg = {
                 id: newMessage.insertId,
                 content,
+                conversationId,
+                senderId,
+                senderName,
                 conversationIndex: nextIndex,
                 createdAt: new Date()
             };
+
+            this.eventEmitter.emit('message.created', savedMsg);
+
+            return savedMsg;
         });
     }
 
