@@ -1,21 +1,69 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useChatStore } from '../../stores/chat';
 import { socket } from '../../socket';
+import type { Conversation } from '../../types/chat';
+import { fetchConversations } from '../../services/conversation.service';
+
+type ConversationFilter = 'all' | 'unread' | 'groups';
+
+interface FilterOption {
+  value: ConversationFilter;
+  label: string;
+}
 
 const chatStore = useChatStore();
-const conversations = computed(() => chatStore.conversations);
+const searchTerm = ref('');
+const activeFilter = ref<ConversationFilter>('all');
+
+const filterOptions: FilterOption[] = [
+  { value: 'all', label: 'All' },
+  { value: 'unread', label: 'Unread' },
+  { value: 'groups', label: 'Groups' },
+];
+
+const getConversationName = (conversation: Conversation) => {
+  return conversation.isGroup
+    ? conversation.name ?? `Nhóm #${conversation.id}`
+    : conversation.friend?.username ?? `Chat #${conversation.id}`;
+};
+
+const getConversationInitials = (conversation: Conversation) => {
+  return getConversationName(conversation)
+    .split(' ')
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+};
+
+const getLastMessagePreview = (conversation: Conversation) => {
+  if (conversation.lastMessage?.content) {
+    const sender = conversation.lastMessage.senderName === chatStore.myUserName ? 'Bạn' : conversation.lastMessage.senderName;
+    return sender ? `${sender}: ${conversation.lastMessage.content}` : conversation.lastMessage.content;
+  }
+
+  return conversation.lastMessageContent ?? 'Chưa có tin nhắn nào...';
+};
+
+const conversations = computed(() => {
+  const normalizedSearch = searchTerm.value.trim().toLowerCase();
+
+  return chatStore.conversations
+    .filter((conversation) => {
+      if (activeFilter.value === 'unread') return conversation.unreadCount > 0;
+      if (activeFilter.value === 'groups') return conversation.isGroup;
+      return true;
+    })
+    .filter((conversation) => getConversationName(conversation).toLowerCase().includes(normalizedSearch));
+});
 
 onMounted(async () => {
   const token = localStorage.getItem('accessToken');
   if (!token) return;
 
   try {
-    const res = await fetch('http://localhost:3000/conversations', {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
+    const data = await fetchConversations(token);
     chatStore.setConversations(data);
   } catch (error) {
     console.error('Lỗi lấy danh sách phòng:', error);
@@ -23,83 +71,98 @@ onMounted(async () => {
 });
 
 const handleSelectConv = (convId: number) => {
-    chatStore.currentConversationId = convId;
-    const currentConv = chatStore.conversations.find(c => c.id === convId);
-    
-    // Sử dụng lastMessageIndex để markAsRead (chuẩn theo logic Backend bồ đã viết)
-    const latestIndex = currentConv?.lastMessageIndex || 0; 
-    
-    if (latestIndex > 0) {
-        chatStore.markAsRead(convId, latestIndex);
-    } else {
-        chatStore.clearUnread(convId);
-    }
+  chatStore.currentConversationId = convId;
+  const currentConv = chatStore.conversations.find((conversation) => conversation.id === convId);
+  const latestIndex = currentConv?.lastMessageIndex ?? 0;
 
-    socket.emit("join_room", { conversationId: convId });
-    socket.emit("load_messages", { conversationId: convId });
+  if (latestIndex > 0) {
+    chatStore.markAsRead(convId, latestIndex);
+  } else {
+    chatStore.clearUnread(convId);
+  }
+
+  socket.emit('join_room', { conversationId: convId });
+  socket.emit('load_messages', { conversationId: convId });
 };
 </script>
 
 <template>
-  <aside class="w-80 bg-white dark:bg-bg-dark border-r border-slate-100 dark:border-slate-800 flex flex-col">
-    <div class="h-16 flex items-center px-6 border-b border-slate-50 dark:border-slate-800/50">
-      <h2 class="font-bold text-xl text-primary tracking-tight">CHATCHOI</h2>
+  <section class="w-[320px] md:w-[360px] h-full flex flex-col border-r border-outline-variant bg-surface-container-lowest shrink-0">
+    <div class="p-6">
+      <h2 class="text-[32px] leading-10 font-bold text-primary mb-4">Messages</h2>
+
+      <div class="relative mb-6">
+        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline text-[20px]">search</span>
+        <input
+          v-model="searchTerm"
+          class="w-full pl-11 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base"
+          placeholder="Search conversations..."
+          type="text"
+        />
+      </div>
+
+      <div class="flex gap-2">
+        <button
+          v-for="filter in filterOptions"
+          :key="filter.value"
+          :class="[
+            'px-4 py-1 rounded-full text-xs font-semibold transition-colors',
+            activeFilter === filter.value
+              ? 'bg-primary text-on-primary shadow-sm'
+              : 'bg-surface-container-high text-on-surface-variant hover:bg-outline-variant/20',
+          ]"
+          type="button"
+          @click="activeFilter = filter.value"
+        >
+          {{ filter.label }}
+        </button>
+      </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-2">
-      <p class="text-[10px] font-bold text-slate-400 uppercase px-2 mb-2">Đoạn chat</p>
-      
-      <div v-for="conv in conversations" :key="conv.id"
-           @click="handleSelectConv(conv.id)"
-           :class="['p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-3 relative group', 
-                    chatStore.currentConversationId === conv.id 
-                    ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-100 dark:ring-blue-800' 
-                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/50']">
-        
+    <div class="flex-1 overflow-y-auto thin-scrollbar">
+      <button
+        v-for="conv in conversations"
+        :key="conv.id"
+        :class="[
+          'w-full px-6 py-4 flex gap-4 text-left cursor-pointer transition-colors border-r-4',
+          chatStore.currentConversationId === conv.id
+            ? 'bg-primary-container/35 border-primary'
+            : 'border-transparent hover:bg-surface-container-high',
+        ]"
+        type="button"
+        @click="handleSelectConv(conv.id)"
+      >
         <div class="relative shrink-0">
-          <div class="w-12 h-12 rounded-full bg-linear-to-tr from-slate-200 to-slate-100 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center overflow-hidden shadow-sm">
-            <span class="text-sm font-bold text-slate-500 dark:text-slate-300 uppercase">
-              {{ conv.isGroup ? conv.name?.[0] : conv.friend?.username?.[0] }}
-            </span>
+          <div class="w-12 h-12 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold border-2 border-white shadow-sm overflow-hidden">
+            <img
+              v-if="!conv.isGroup && conv.friend?.avatar"
+              :alt="getConversationName(conv)"
+              :src="conv.friend.avatar"
+              class="w-full h-full object-cover"
+            />
+            <span v-else>{{ getConversationInitials(conv) }}</span>
           </div>
-          <span v-if="conv.isOnline" 
-                class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-bg-dark rounded-full">
-          </span>
+          <span
+            v-if="conv.isOnline"
+            class="absolute bottom-0 right-0 w-3.5 h-3.5 bg-secondary border-2 border-white rounded-full animate-pulse"
+          />
         </div>
 
         <div class="min-w-0 flex-1">
-          <div class="flex justify-between items-baseline mb-0.5">
-            <p :class="['text-sm truncate mr-2', 
-                        conv.unreadCount > 0 ? 'font-bold text-slate-900 dark:text-white' : 'font-semibold text-slate-700 dark:text-slate-200']">
-              {{ conv.isGroup ? conv.name : conv.friend?.username }}
-            </p>
+          <div class="flex justify-between items-baseline gap-3">
+            <h3 class="font-semibold text-on-surface truncate">{{ getConversationName(conv) }}</h3>
+            <span v-if="conv.unreadCount > 0" class="text-xs text-secondary shrink-0">{{ conv.unreadCount }} new</span>
           </div>
-          
-          <div class="flex items-center justify-between">
-            <p :class="['text-xs truncate flex-1', 
-                        conv.unreadCount > 0 ? 'text-slate-900 dark:text-slate-100 font-medium' : 'text-slate-400']">
-              <span v-if="conv.lastMessage?.content">
-                {{ conv.lastMessage.senderName === chatStore.myUserName ? 'Bạn' : conv.lastMessage.senderName }}: {{ conv.lastMessage.content }}
-              </span>
-              <span v-else class="italic">Chưa có tin nhắn nào...</span>
-            </p>
-
-            <div v-if="conv.unreadCount > 0" 
-                 class="ml-2 px-1.5 py-0.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] flex justify-center items-center shadow-sm">
-              {{ conv.unreadCount > 99 ? '99+' : conv.unreadCount }}
-            </div>
-            
-            <div v-if="conv.unreadCount > 0" class="w-2 h-2 bg-primary rounded-full ml-1"></div>
-          </div>
+          <p
+            :class="[
+              'text-sm truncate mt-1',
+              conv.unreadCount > 0 ? 'text-primary font-semibold' : 'text-on-surface-variant',
+            ]"
+          >
+            {{ getLastMessagePreview(conv) }}
+          </p>
         </div>
-
-      </div>
+      </button>
     </div>
-  </aside>
+  </section>
 </template>
-
-<style scoped>
-.group:hover .shadow-sm {
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-}
-</style>

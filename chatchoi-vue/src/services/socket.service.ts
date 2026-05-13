@@ -1,9 +1,10 @@
 import { socket } from "../socket";
 import { useChatStore } from "../stores/chat";
+import type { ChatMessage, ConversationListUpdate } from "../types/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
-    let heartbeatInterval: any;
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     socket.auth = { token };
     socket.connect();
@@ -21,21 +22,24 @@ export const initSocketService = (token: string) => {
 
     });
 
-    socket.on("load_messages_success", (msgs) => {
+    socket.on("load_messages_success", (msgs: ChatMessage[]) => {
         chatStore.setMessages(msgs);
     });
 
-    socket.on("new_message", (msg) => {
+    socket.on("new_message", (msg: ChatMessage) => {
         chatStore.pushMessage(msg);
 
         if (chatStore.currentConversationId === msg.conversationId) {
-            chatStore.markAsRead(msg.conversationId, msg.conversationIndex);
+            chatStore.markAsRead(msg.conversationId, msg.conversationIndex ?? 0);
         }
     });
 
     socket.on("disconnect", () => {
         chatStore.isConnected = false;
-        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
     });
 
     socket.on("initial_presence_sync", (data: { onlineUserIds: number[] }) => {
@@ -47,11 +51,11 @@ export const initSocketService = (token: string) => {
         chatStore.updateUserStatus(data.userId, data.status);
     });
 
-    socket.on("update_conversation_list", (data) => {
-        if (data.senderName === chatStore.myUserName) {
-            data.senderName = 'Bạn';
-        }
-        chatStore.updateConversationList(data);
+    socket.on("update_conversation_list", (data: ConversationListUpdate) => {
+        chatStore.updateConversationList({
+            ...data,
+            senderName: data.senderName === chatStore.myUserName ? 'Bạn' : data.senderName,
+        });
     });
 
     socket.on("sync_read_state", (data: { conversationId: number, lastMessageIndex: number }) => {

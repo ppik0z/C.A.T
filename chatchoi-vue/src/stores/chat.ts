@@ -1,21 +1,22 @@
 import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
+import type { ChatMessage, Conversation, ConversationListUpdate, JwtIdentity } from '../types/chat';
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
-        messages: [] as any[],
+        messages: [] as ChatMessage[],
         currentConversationId: null as number | null,
         myId: null as number | null,
         isConnected: false,
-        conversations: [] as any[],
+        conversations: [] as Conversation[],
         myUserName: null as string | null,
     }),
 
     actions: {
         setIdentity(token: string) {
             try {
-                const decoded: any = jwtDecode(token);
+                const decoded = jwtDecode<JwtIdentity>(token);
                 this.myId = decoded.userId; // Lấy userId từ Token
                 this.myUserName = decoded.username;
                 console.log("Định danh thành công, ID: ", this.myId);
@@ -25,7 +26,7 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Đổ dữ liệu lịch sử vào
-        setMessages(msgs: any[]) {
+        setMessages(msgs: ChatMessage[]) {
             this.messages = msgs;
         },
 
@@ -52,7 +53,7 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Thêm 1 tin nhắn mới 
-        pushMessage(msg: any) {
+        pushMessage(msg: ChatMessage) {
             // Tránh trùng lặp nếu đã nhận từ callback gửi tin
             const exists = this.messages.find(m => m.id === msg.id);
             if (!exists) this.messages.push(msg);
@@ -60,13 +61,13 @@ export const useChatStore = defineStore('chat', {
 
         // Hàm gửi tin nhắn đi
         sendMessage(content: string) {
-            if (!content.trim()) return;
+            if (!content.trim() || !this.currentConversationId || !this.myUserName) return;
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
                 senderName: this.myUserName,
                 content: content
-            }, (response: any) => {
+            }, (response: ChatMessage) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
                 if (response && response.id) {
                     this.pushMessage(response);
@@ -74,7 +75,7 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
-        setConversations(convs: any[]) {
+        setConversations(convs: Conversation[]) {
             this.conversations = convs;
         },
 
@@ -96,11 +97,16 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Cập nhật ConversationList
-        updateConversationList(data: any) {
+        updateConversationList(data: ConversationListUpdate) {
             const index = this.conversations.findIndex(c => c.id === data.conversationId);
             if (index !== -1) {
                 const conv = this.conversations[index];
                 conv.lastMessageContent = (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
+                conv.lastMessage = {
+                    id: data.lastMessageId,
+                    content: data.lastMessageContent,
+                    senderName: data.senderName,
+                };
                 conv.lastMessageIndex = data.lastMessageIndex;
 
                 if (this.currentConversationId !== data.conversationId) {
