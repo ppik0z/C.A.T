@@ -10,7 +10,7 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private pool: mysql.Pool;
   public db: DrizzleDB;
 
-  async onModuleInit() {
+  onModuleInit(): void {
     this.pool = mysql.createPool({
       uri: process.env.DATABASE_URL!,
       waitForConnections: true,

@@ -38,7 +38,6 @@ export class ReadStateService {
      */
     @Cron(CronExpression.EVERY_MINUTE)
     async syncReadStatesToDB() {
-        const lockKey = 'sync_read_states_lock';
         const dirtySetKey = 'dirty_read_users';
         const processingSetKey = 'dirty_read_users_processing';
 

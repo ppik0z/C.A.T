@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { MessagesService } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
+import type { AuthenticatedSocket } from 'src/common/index';
 import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { PresenceService } from 'src/presence/presence.service';
 import { FriendshipsService } from 'src/friendships/friendships.service';
@@ -19,13 +20,6 @@ import { conversationMembers } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import { ReadStateService } from '../read-state/read-state.service';
-
-interface AuthenticatedSocket extends Socket {
-    user: {
-        userId: number;
-        username: string;
-    };
-}
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
@@ -42,7 +36,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         private readonly readStateService: ReadStateService,
     ) { }
 
-    async handleConnection(client: any) {
+    async handleConnection(client: AuthenticatedSocket) {
         const userId = client.user?.userId;
         if (!userId) return;
 
@@ -62,14 +56,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.emit('initial_presence_sync', { onlineUserIds: onlineIds });
     }
 
-    handleDisconnect(client: any) {
+    handleDisconnect(client: AuthenticatedSocket) {
         const userId = client.user?.userId;
         console.log(`User ${userId} đã rời đi!`);
         if (!userId) return;
 
         //chờ 10 giây trước khi thực sự báo Offline
         const timer = setTimeout(() => {
-            (async () => {
+            void (async () => {
                 await this.presenceService.removeStatus(userId);
                 this.server.emit('user_status_changed', { userId, status: 'offline' });
                 this.offlineTimers.delete(userId);
@@ -81,7 +75,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SkipThrottle()
     @SubscribeMessage('heartbeat')
-    async handleHeartbeat(@ConnectedSocket() client: any) {
+    async handleHeartbeat(@ConnectedSocket() client: AuthenticatedSocket) {
         const userId = client.user.userId;
         await this.presenceService.updateStatus(userId);
         return { status: 'ack' };
@@ -90,7 +84,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
 
     @SubscribeMessage('join_room')
-    async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket) {
+    async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket): Promise<void> {
         console.log("User joined room: ", data.conversationId);
         await client.join(`conv_${data.conversationId}`);
     }
@@ -100,7 +94,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         @MessageBody() data: { conversationId: number; content: string, senderName: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
-
         const senderId = client.user.userId;
 
         // 1. Lưu tin nhắn

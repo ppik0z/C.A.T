@@ -8,6 +8,10 @@ import {
     type ThrottlerModuleOptions,
     type ThrottlerStorage
 } from '@nestjs/throttler';
+import type { AuthenticatedUser } from '../interfaces/request-with-user.interface';
+import type { Socket } from 'socket.io';
+
+type ThrottledSocket = Socket & { user?: AuthenticatedUser };
 
 @Injectable()
 export class HybridThrottlerGuard extends ThrottlerGuard {
@@ -20,7 +24,7 @@ export class HybridThrottlerGuard extends ThrottlerGuard {
     }
 
     // HÀM HELPER ĐỂ GIẢI MÃ GIÁ TRỊ (Vì resolveValue bị private)
-    private async parseValue(context: ExecutionContext, value: any): Promise<number> {
+    private async parseValue(context: ExecutionContext, value: number | ((context: ExecutionContext) => number | Promise<number>)): Promise<number> {
         return typeof value === 'function' ? await value(context) : value;
     }
 
@@ -28,8 +32,8 @@ export class HybridThrottlerGuard extends ThrottlerGuard {
         const { context, limit, ttl, blockDuration, throttler } = requestProps;
 
         if (context.getType() === 'ws') {
-            const client = context.switchToWs().getClient();
-            const userIdentifier = client.user?.userId ? `user_${client.user.userId}` : client.conn?.remoteAddress;
+            const client = context.switchToWs().getClient<ThrottledSocket>();
+            const userIdentifier = client.user?.userId ? `user_${client.user.userId}` : client.handshake.address;
             const throttlerName = throttler?.name || 'short';
 
             const resolvedLimit = await this.parseValue(context, limit);
@@ -37,7 +41,7 @@ export class HybridThrottlerGuard extends ThrottlerGuard {
 
             const key = this.generateKey(context, userIdentifier, throttlerName);
 
-            const { totalHits, timeToBlockExpire } = await this.storageService.increment(
+            const { totalHits } = await this.storageService.increment(
                 key,
                 resolvedTtl,
                 resolvedLimit,

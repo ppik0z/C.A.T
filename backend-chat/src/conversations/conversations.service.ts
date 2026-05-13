@@ -1,24 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { conversationMembers, conversations, messages, users } from 'src/database/schema';
-import { and, desc, eq, inArray, like, ne, or, sql } from 'drizzle-orm';
+import { conversationMembers, conversations, users } from 'src/database/schema';
+import { and, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { PresenceService } from '../presence/presence.service';
 import { aliasedTable } from 'drizzle-orm';
 
-type RawConvType = {
-    id: number;
-    name: string | null;
-    isGroup: boolean;
-    avatarGroup: string | null;
-    lastMessageId: number | null;
-    lastMessageIndex: number;
-    lastMessageContent: string | null;
-    lastMessageSenderName: string | null;
-    unreadCount: number;
-    friendId: number | null;
-    friendUsername: string | null;
-    friendAvatar: string | null;
-};
 
 @Injectable()
 export class ConversationsService {
@@ -77,7 +63,24 @@ export class ConversationsService {
         const friendMember = aliasedTable(conversationMembers, 'friendMember');
 
         // 1. SELECT
-        const rawConvs = await this.drizzle.db
+        // NOTE: aliasedTable() causes Drizzle to infer `never` for the result type.
+        // Explicit typing is required here until Drizzle fixes this limitation.
+        interface ConversationRow {
+            id: number;
+            name: string | null;
+            isGroup: boolean;
+            avatarGroup: string | null;
+            lastMessageId: number | null;
+            lastMessageIndex: number;
+            lastMessageContent: string | null;
+            lastMessageSenderName: string | null;
+            unreadCount: number;
+            friendId: number | null;
+            friendUsername: string | null;
+            friendAvatar: string | null;
+        }
+
+        const rawConvs: ConversationRow[] = await this.drizzle.db
             .select({
                 id: conversations.id,
                 name: conversations.name,
@@ -104,7 +107,7 @@ export class ConversationsService {
             ))
             .leftJoin(users, eq(friendMember.userId, users.id))
             .where(inArray(conversations.id, convIds))
-            .orderBy(desc(conversations.updatedAt)) as RawConvType[];
+            .orderBy(desc(conversations.updatedAt)) as ConversationRow[];
 
         // 2. GỘP OBJECT
         return await Promise.all(rawConvs.map(async (conv) => {
