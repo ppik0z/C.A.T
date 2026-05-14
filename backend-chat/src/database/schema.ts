@@ -6,6 +6,7 @@ import {
   boolean,
   datetime,
   longtext,
+  index,
   uniqueIndex,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -33,7 +34,10 @@ export const friendships = mysqlTable(
     status: varchar('status', { length: 50 }).notNull().default('pending'),
     createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
-  (t) => [uniqueIndex('uq_friendship').on(t.userId, t.friendId)],
+  (t) => [
+    uniqueIndex('uq_friendship').on(t.userId, t.friendId),
+    index('idx_friendship_friend_status').on(t.friendId, t.status),
+  ],
 );
 
 // ─── Conversations ────────────────────────────────────────────────────────────

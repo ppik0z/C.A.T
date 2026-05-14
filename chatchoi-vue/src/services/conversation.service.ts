@@ -14,3 +14,16 @@ export const fetchConversations = async (token: string): Promise<Conversation[]>
 
   return await response.json() as Conversation[];
 };
+
+export const accessDirectConversation = async (token: string, friendId: number): Promise<{ id: number }> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/access/${friendId}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error('Không thể mở đoạn chat');
+  }
+
+  return await response.json() as { id: number };
+};

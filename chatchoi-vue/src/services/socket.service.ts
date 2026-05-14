@@ -1,9 +1,11 @@
 import { socket } from "../socket";
 import { useChatStore } from "../stores/chat";
+import { useFriendsStore } from "../stores/friends";
 import type { ChatMessage, ConversationListUpdate, LoadMessagesSuccessPayload } from "../types/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
+    const friendsStore = useFriendsStore();
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     socket.auth = { token };
@@ -65,4 +67,14 @@ export const initSocketService = (token: string) => {
             conv.lastSeenMessageIndex = data.lastMessageIndex;
         }
     });
+
+    const refreshFriends = () => {
+        void friendsStore.refreshAll();
+    };
+
+    socket.on("friend_request_received", refreshFriends);
+    socket.on("friend_request_cancelled", refreshFriends);
+    socket.on("friend_request_accepted", refreshFriends);
+    socket.on("friend_request_rejected", refreshFriends);
+    socket.on("friend_removed", refreshFriends);
 };
