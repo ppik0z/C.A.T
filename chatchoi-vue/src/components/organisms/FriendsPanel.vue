@@ -45,7 +45,9 @@ watch(searchTerm, (value) => {
 });
 
 onMounted(() => {
-  void friendsStore.refreshAll();
+  if (!friendsStore.hasLoaded) {
+    void friendsStore.refreshAll();
+  }
 });
 
 const handleMessage = async (friendId: number) => {

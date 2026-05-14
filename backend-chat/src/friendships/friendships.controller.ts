@@ -12,10 +12,12 @@ import {
 import { FriendshipsService } from './friendships.service';
 import { AuthGuard } from '@nestjs/passport';
 import type { RequestWithUser } from '../common/interfaces/request-with-user.interface';
+import { Throttle } from '@nestjs/throttler';
 
 type RequestListType = 'incoming' | 'outgoing';
 
 @UseGuards(AuthGuard('jwt'))
+@Throttle({ short: { ttl: 10000, limit: 40 } })
 @Controller('friends')
 export class FriendshipsController {
     constructor(private readonly friendshipsService: FriendshipsService) { }

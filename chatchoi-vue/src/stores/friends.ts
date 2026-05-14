@@ -22,6 +22,8 @@ export const useFriendsStore = defineStore('friends', {
     suggestions: [] as FriendUser[],
     searchResults: [] as FriendUser[],
     isLoading: false,
+    hasLoaded: false,
+    refreshPromise: null as Promise<void> | null,
     error: null as string | null,
   }),
 
@@ -35,27 +37,34 @@ export const useFriendsStore = defineStore('friends', {
     async refreshAll() {
       const token = getToken();
       if (!token) return;
+      if (this.refreshPromise) return this.refreshPromise;
 
       this.isLoading = true;
       this.error = null;
 
-      try {
-        const [friends, incomingRequests, outgoingRequests, suggestions] = await Promise.all([
-          fetchFriends(token),
-          fetchFriendRequests(token, 'incoming'),
-          fetchFriendRequests(token, 'outgoing'),
-          fetchFriendSuggestions(token),
-        ]);
+      this.refreshPromise = (async () => {
+        try {
+          const [friends, incomingRequests, outgoingRequests, suggestions] = await Promise.all([
+            fetchFriends(token),
+            fetchFriendRequests(token, 'incoming'),
+            fetchFriendRequests(token, 'outgoing'),
+            fetchFriendSuggestions(token),
+          ]);
 
-        this.friends = friends;
-        this.incomingRequests = incomingRequests;
-        this.outgoingRequests = outgoingRequests;
-        this.suggestions = suggestions;
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Không thể tải dữ liệu bạn bè';
-      } finally {
-        this.isLoading = false;
-      }
+          this.friends = friends;
+          this.incomingRequests = incomingRequests;
+          this.outgoingRequests = outgoingRequests;
+          this.suggestions = suggestions;
+          this.hasLoaded = true;
+        } catch (error) {
+          this.error = error instanceof Error ? error.message : 'Không thể tải dữ liệu bạn bè';
+        } finally {
+          this.isLoading = false;
+          this.refreshPromise = null;
+        }
+      })();
+
+      return this.refreshPromise;
     },
 
     async search(query: string) {

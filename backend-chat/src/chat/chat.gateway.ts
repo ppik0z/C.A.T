@@ -16,7 +16,6 @@ import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { PresenceService } from 'src/presence/presence.service';
 import { FriendshipsService } from 'src/friendships/friendships.service';
 import { SkipThrottle } from '@nestjs/throttler';
-import { OnEvent } from '@nestjs/event-emitter';
 import { conversationMembers } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
@@ -55,33 +54,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const friends = await this.friendshipsService.getMyFriends(userId);
         const onlineIds = await this.presenceService.getOnlineUsers(friends.map(f => f.id));
         client.emit('initial_presence_sync', { onlineUserIds: onlineIds });
-    }
-
-    @OnEvent('friends.request.received')
-    handleFriendRequestReceived(payload: { senderId: number; receiverId: number }) {
-        this.server.to(`user_${payload.receiverId}`).emit('friend_request_received', payload);
-    }
-
-    @OnEvent('friends.request.cancelled')
-    handleFriendRequestCancelled(payload: { senderId: number; receiverId: number }) {
-        this.server.to(`user_${payload.receiverId}`).emit('friend_request_cancelled', payload);
-    }
-
-    @OnEvent('friends.request.accepted')
-    handleFriendRequestAccepted(payload: { requesterId: number; receiverId: number }) {
-        this.server.to(`user_${payload.requesterId}`).emit('friend_request_accepted', payload);
-        this.server.to(`user_${payload.receiverId}`).emit('friend_request_accepted', payload);
-    }
-
-    @OnEvent('friends.request.rejected')
-    handleFriendRequestRejected(payload: { requesterId: number; receiverId: number }) {
-        this.server.to(`user_${payload.requesterId}`).emit('friend_request_rejected', payload);
-    }
-
-    @OnEvent('friends.removed')
-    handleFriendRemoved(payload: { userId: number; targetId: number }) {
-        this.server.to(`user_${payload.userId}`).emit('friend_removed', payload);
-        this.server.to(`user_${payload.targetId}`).emit('friend_removed', payload);
     }
 
     handleDisconnect(client: AuthenticatedSocket) {

@@ -42,13 +42,13 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         href="#"
         @click.prevent="item.section && emit('navigate', item.section)"
       >
-        <span class="relative material-symbols-outlined !text-[22px]">
-          {{ item.icon }}
+        <span class="relative inline-flex items-center justify-center">
+          <span class="material-symbols-outlined !text-[22px]">{{ item.icon }}</span>
           <span
             v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4"
+            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
           >
-            {{ friendsStore.pendingCount }}
+            {{ Math.min(friendsStore.pendingCount, 99) }}
           </span>
         </span>
         <span class="leading-none">{{ item.label }}</span>
@@ -83,13 +83,13 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         @click.prevent="item.section && emit('navigate', item.section)"
       >
         <div class="min-w-12 h-12 flex items-center justify-center">
-          <span class="relative material-symbols-outlined !text-[24px]">
-            {{ item.icon }}
+          <span class="relative inline-flex items-center justify-center">
+            <span class="material-symbols-outlined !text-[24px]">{{ item.icon }}</span>
             <span
               v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center"
+              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
             >
-              {{ friendsStore.pendingCount }}
+              {{ Math.min(friendsStore.pendingCount, 99) }}
             </span>
           </span>
         </div>
