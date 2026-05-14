@@ -42,7 +42,13 @@ export class AuthService {
       .where(eq(users.username, data.username))
       .limit(1);
 
-    const { password, ...result } = newUser;
+    const result = {
+      id: newUser.id,
+      username: newUser.username,
+      avatar: newUser.avatar,
+      refreshToken: newUser.refreshToken,
+      createdAt: newUser.createdAt,
+    };
     return {
       message: 'Đăng ký thành công!',
       user: result,
@@ -119,7 +125,7 @@ export class AuthService {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
     }
 

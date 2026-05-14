@@ -18,12 +18,13 @@
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
   "include": [
     "src/**/*",
+    "test/**/*",
     "drizzle.config.ts"
   ],
   "exclude": [

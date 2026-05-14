@@ -3,10 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
-
-export interface AuthenticatedSocket extends Socket {
-  user: JwtPayload;
-}
+import type { AuthenticatedSocket } from '../interfaces/request-with-user.interface';
 
 @Injectable()
 export class WsJwtGuard implements CanActivate {
@@ -16,7 +13,7 @@ export class WsJwtGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     try {
-      const client: Socket = context.switchToWs().getClient();
+      const client = context.switchToWs().getClient<Socket>();
 
       const token = this.extractToken(client);
 
@@ -32,15 +29,17 @@ export class WsJwtGuard implements CanActivate {
       };
 
       return true;
-    } catch (err) {
-      this.logger.error(`Auth failed: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Auth failed: ${message}`);
       throw new WsException('Token lỏ!');
     }
   }
 
   private extractToken(client: Socket): string | undefined {
-    const { token } = client.handshake.auth as { token?: string };
-    if (token) return token;
+    const auth = client.handshake.auth as Record<string, unknown> | undefined;
+    const token = auth?.token;
+    if (typeof token === 'string') return token;
 
     const header = client.handshake.headers?.authorization;
     if (header && header.startsWith('Bearer ')) {

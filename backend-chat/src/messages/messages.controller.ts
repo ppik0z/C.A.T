@@ -9,8 +9,8 @@ export class MessagesController {
     constructor(private readonly messagesService: MessagesService) { }
 
     @Post()
-    async send(@Body() body: { conversationId: number, content: string }, @Request() req: RequestWithUser) {
-        return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content);
+    async send(@Body() body: { conversationId: number, content: string, senderName: string }, @Request() req: RequestWithUser) {
+        return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content, body.senderName);
     }
 
     @Get(':conversationId')

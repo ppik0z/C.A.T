@@ -2,15 +2,21 @@ import { Injectable, ForbiddenException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { messages, conversations, conversationMembers } from '../database/schema';
 import { eq, and } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class MessagesService {
-    constructor(private drizzle: DrizzleService) { }
+    constructor(
+        private drizzle: DrizzleService,
+        private eventEmitter: EventEmitter2
+    ) { }
 
     //check quyền
     private async validateMember(userId: number, conversationId: number) {
         const member = await this.drizzle.db
-            .select()
+            .select({
+                isAdmin: conversationMembers.isAdmin,
+            })
             .from(conversationMembers)
             .where(and(
                 eq(conversationMembers.conversationId, conversationId),
@@ -28,26 +34,38 @@ export class MessagesService {
 
 
     //----sendMessage----
-    async sendMessage(senderId: number, conversationId: number, content: string) {
-
-        // 1. Kiểm tra quyền
+    async sendMessage(senderId: number, conversationId: number, content: string, senderName: string) {
         await this.validateMember(senderId, conversationId);
 
-        // 2. Gửi tin nhắn
         return await this.drizzle.db.transaction(async (tx) => {
+            const [conv] = await tx.select({ currentIdx: conversations.lastMessageIndex })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .for('update');
+
+            const nextIndex = (conv?.currentIdx || 0) + 1;
+
             const [newMessage] = await tx.insert(messages).values({
                 content,
                 senderId,
                 conversationId,
                 type: 'text',
+                conversationIndex: nextIndex,
             });
 
-            await tx
-                .update(conversations)
-                .set({ updatedAt: new Date() })
-                .where(eq(conversations.id, conversationId));
+            const savedMsg = {
+                id: newMessage.insertId,
+                content,
+                conversationId,
+                senderId,
+                senderName,
+                conversationIndex: nextIndex,
+                createdAt: new Date()
+            };
 
-            return { id: newMessage.insertId, content, createdAt: new Date() };
+            this.eventEmitter.emit('message.created', savedMsg);
+
+            return savedMsg;
         });
     }
 

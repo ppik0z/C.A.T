@@ -16,8 +16,14 @@ import { HybridThrottlerGuard } from './common/guards/hybrid-throttler.guard';
 import { PresenceModule } from './presence/presence.module';
 import { RedisModule } from '@liaoliaots/nestjs-redis';
 
+import { ScheduleModule } from '@nestjs/schedule';
+import { ReadStateModule } from './read-state/read-state.module';
+
+import { EventEmitterModule } from '@nestjs/event-emitter';
+
 @Module({
-  imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule,
+  imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule, ScheduleModule.forRoot(),
+    ReadStateModule, EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot({
       throttlers: [
         {
