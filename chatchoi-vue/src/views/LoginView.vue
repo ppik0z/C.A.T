@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useChatStore } from '../stores/chat';
+import { useFriendsStore } from '../stores/friends';
 import { initSocketService } from '../services/socket.service';
 
 const chatStore = useChatStore();
+const friendsStore = useFriendsStore();
 const username = ref('');
 const password = ref('');
 const isLoading = ref(false);
@@ -29,6 +31,7 @@ const handleLogin = async () => {
       // 2. Định danh và kết nối Socket
       chatStore.setIdentity(data.accessToken);
       initSocketService(data.accessToken);
+      void friendsStore.refreshAll();
       
       alert("Đăng nhập thành công!");
     } else {

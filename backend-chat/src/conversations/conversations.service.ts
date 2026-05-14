@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { conversationMembers, conversations, users } from 'src/database/schema';
+import { conversationMembers, conversations, users } from '../database/schema';
 import { and, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { PresenceService } from '../presence/presence.service';
 import { aliasedTable } from 'drizzle-orm';

@@ -52,7 +52,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
 
         const friends = await this.friendshipsService.getMyFriends(userId);
-        const onlineIds = await this.presenceService.getOnlineUsers(friends.map(f => f.friendInfo.id));
+        const onlineIds = await this.presenceService.getOnlineUsers(friends.map(f => f.id));
         client.emit('initial_presence_sync', { onlineUserIds: onlineIds });
     }
 

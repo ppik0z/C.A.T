@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { DrizzleService } from '../database/drizzle.service';
+import { PresenceService } from '../presence/presence.service';
 import { ConversationsService } from './conversations.service';
 
 describe('ConversationsService', () => {
@@ -6,7 +8,17 @@ describe('ConversationsService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ConversationsService],
+      providers: [
+        ConversationsService,
+        {
+          provide: DrizzleService,
+          useValue: { db: {} },
+        },
+        {
+          provide: PresenceService,
+          useValue: { isUserOnline: jest.fn() },
+        },
+      ],
     }).compile();
 
     service = module.get<ConversationsService>(ConversationsService);
