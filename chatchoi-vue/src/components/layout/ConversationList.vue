@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useChatStore } from '../../stores/chat';
-import { socket } from '../../socket';
 import type { Conversation } from '../../types/chat';
 import { fetchConversations } from '../../services/conversation.service';
 
@@ -65,24 +64,14 @@ onMounted(async () => {
   try {
     const data = await fetchConversations(token);
     chatStore.setConversations(data);
+    await chatStore.prefetchMessagesForConversations(data.slice(0, 3).map((conversation) => conversation.id));
   } catch (error) {
     console.error('Lỗi lấy danh sách phòng:', error);
   }
 });
 
 const handleSelectConv = (convId: number) => {
-  chatStore.currentConversationId = convId;
-  const currentConv = chatStore.conversations.find((conversation) => conversation.id === convId);
-  const latestIndex = currentConv?.lastMessageIndex ?? 0;
-
-  if (latestIndex > 0) {
-    chatStore.markAsRead(convId, latestIndex);
-  } else {
-    chatStore.clearUnread(convId);
-  }
-
-  socket.emit('join_room', { conversationId: convId });
-  socket.emit('load_messages', { conversationId: convId });
+  chatStore.selectConversation(convId);
 };
 </script>
 

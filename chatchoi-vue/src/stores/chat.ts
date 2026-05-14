@@ -1,17 +1,35 @@
 import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
-import type { ChatMessage, Conversation, ConversationListUpdate, JwtIdentity } from '../types/chat';
+import type { ChatMessage, Conversation, ConversationListUpdate, JwtIdentity, MessageLoadState } from '../types/chat';
+
+const PREFETCH_DELAY_MS = 250;
+
+const delay = (milliseconds: number) => new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+});
+
+const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage) => {
+    return messages.some((item) => item.id === message.id) ? messages : [...messages, message];
+};
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
-        messages: [] as ChatMessage[],
+        messagesByConversationId: {} as Record<number, ChatMessage[]>,
+        messageLoadStateByConversationId: {} as Record<number, MessageLoadState>,
         currentConversationId: null as number | null,
         myId: null as number | null,
         isConnected: false,
         conversations: [] as Conversation[],
         myUserName: null as string | null,
     }),
+
+    getters: {
+        currentMessages(state): ChatMessage[] {
+            if (!state.currentConversationId) return [];
+            return state.messagesByConversationId[state.currentConversationId] ?? [];
+        },
+    },
 
     actions: {
         setIdentity(token: string) {
@@ -25,9 +43,44 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        // Đổ dữ liệu lịch sử vào
-        setMessages(msgs: ChatMessage[]) {
-            this.messages = msgs;
+        setMessagesForConversation(conversationId: number, msgs: ChatMessage[]) {
+            this.messagesByConversationId[conversationId] = msgs;
+            this.messageLoadStateByConversationId[conversationId] = 'loaded';
+        },
+
+        setMessageLoadError(conversationId: number) {
+            this.messageLoadStateByConversationId[conversationId] = 'error';
+        },
+
+        requestMessagesForConversation(conversationId: number, limit = 20) {
+            const loadState = this.messageLoadStateByConversationId[conversationId] ?? 'idle';
+            if (loadState === 'loading' || loadState === 'loaded') return;
+
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            socket.emit('load_messages', { conversationId, limit });
+        },
+
+        async prefetchMessagesForConversations(conversationIds: number[]) {
+            for (const conversationId of conversationIds) {
+                this.requestMessagesForConversation(conversationId);
+                await delay(PREFETCH_DELAY_MS);
+            }
+        },
+
+        selectConversation(conversationId: number) {
+            this.currentConversationId = conversationId;
+            const currentConv = this.conversations.find((conversation) => conversation.id === conversationId);
+            const latestIndex = currentConv?.lastMessageIndex ?? 0;
+            const lastSeenIndex = currentConv?.lastSeenMessageIndex ?? 0;
+
+            if (latestIndex > 0 && latestIndex > lastSeenIndex) {
+                this.markAsRead(conversationId, latestIndex);
+            } else {
+                this.clearUnread(conversationId);
+            }
+
+            socket.emit('join_room', { conversationId });
+            this.requestMessagesForConversation(conversationId);
         },
 
         // Xóa số lượng tin nhắn chưa đọc của một phòng
@@ -54,9 +107,11 @@ export const useChatStore = defineStore('chat', {
 
         // Thêm 1 tin nhắn mới 
         pushMessage(msg: ChatMessage) {
+            if (!msg.conversationId) return;
+
             // Tránh trùng lặp nếu đã nhận từ callback gửi tin
-            const exists = this.messages.find(m => m.id === msg.id);
-            if (!exists) this.messages.push(msg);
+            const messages = this.messagesByConversationId[msg.conversationId] ?? [];
+            this.messagesByConversationId[msg.conversationId] = appendUniqueMessage(messages, msg);
         },
 
         // Hàm gửi tin nhắn đi

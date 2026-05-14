@@ -1,6 +1,6 @@
 import { socket } from "../socket";
 import { useChatStore } from "../stores/chat";
-import type { ChatMessage, ConversationListUpdate } from "../types/chat";
+import type { ChatMessage, ConversationListUpdate, LoadMessagesSuccessPayload } from "../types/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
@@ -22,8 +22,8 @@ export const initSocketService = (token: string) => {
 
     });
 
-    socket.on("load_messages_success", (msgs: ChatMessage[]) => {
-        chatStore.setMessages(msgs);
+    socket.on("load_messages_success", (payload: LoadMessagesSuccessPayload) => {
+        chatStore.setMessagesForConversation(payload.conversationId, payload.messages);
     });
 
     socket.on("new_message", (msg: ChatMessage) => {

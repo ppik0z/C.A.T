@@ -9,7 +9,7 @@ const scrollRef = ref<HTMLElement | null>(null);
 const getSenderId = (message: ChatMessage) => message.senderId ?? message.sender?.id;
 
 const sortedMessages = computed(() => {
-  return [...chatStore.messages].sort((a, b) => a.id - b.id);
+  return [...chatStore.currentMessages].sort((a, b) => a.id - b.id);
 });
 
 const isOwnMessage = (message: ChatMessage) => getSenderId(message) === chatStore.myId;
@@ -19,7 +19,7 @@ const getSenderName = (message: ChatMessage) => {
 };
 
 watch(
-  () => chatStore.messages.length,
+  () => chatStore.currentMessages.length,
   async () => {
     await nextTick();
     if (scrollRef.value) {

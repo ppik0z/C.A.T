@@ -49,3 +49,10 @@ export interface ConversationListUpdate {
   lastMessageId: number;
   lastMessageIndex: number;
 }
+
+export type MessageLoadState = 'idle' | 'loading' | 'loaded' | 'error';
+
+export interface LoadMessagesSuccessPayload {
+  conversationId: number;
+  messages: ChatMessage[];
+}

@@ -82,7 +82,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
 
-
+    @SkipThrottle()
     @SubscribeMessage('join_room')
     async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket): Promise<void> {
         console.log("User joined room: ", data.conversationId);
@@ -140,7 +140,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             return {
                 event: 'load_messages_success',
-                data: history,
+                data: {
+                    conversationId: data.conversationId,
+                    messages: history,
+                },
             };
         } catch (error: unknown) {
             let errorMessage = 'Không thể tải tin nhắn';
@@ -156,6 +159,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
     }
 
+    @SkipThrottle()
     @SubscribeMessage('mark_as_read')
     async handleMarkAsRead(
         @MessageBody() data: { conversationId: number; lastMessageIndex: number },
