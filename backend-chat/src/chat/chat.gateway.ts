@@ -106,6 +106,49 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
     }
 
+    @OnEvent('message.created')
+    async handleMessageCreated(payload: {
+        id: number;
+        content: string;
+        previewContent: string;
+        type: string;
+        fileUrl?: string | null;
+        filePublicId?: string | null;
+        fileResourceType?: string | null;
+        fileName?: string | null;
+        fileMimeType?: string | null;
+        fileSizeBytes?: number | null;
+        fileFormat?: string | null;
+        fileWidth?: number | null;
+        fileHeight?: number | null;
+        conversationId: number;
+        senderId: number;
+        senderName: string;
+        conversationIndex: number;
+        createdAt: Date;
+        clientTempId?: string;
+    }) {
+        this.server.to(`conv_${payload.conversationId}`).emit('new_message', {
+            ...payload,
+            sender: { id: payload.senderId, username: payload.senderName },
+        });
+
+        const members = await this.drizzle.db
+            .select({ userId: conversationMembers.userId })
+            .from(conversationMembers)
+            .where(eq(conversationMembers.conversationId, payload.conversationId));
+
+        members.forEach((member) => {
+            this.server.to(`user_${member.userId}`).emit('update_conversation_list', {
+                conversationId: payload.conversationId,
+                lastMessageContent: payload.previewContent,
+                senderName: payload.senderName,
+                lastMessageId: payload.id,
+                lastMessageIndex: payload.conversationIndex,
+            });
+        });
+    }
+
 
     @SkipThrottle()
     @SubscribeMessage('join_room')
@@ -116,39 +159,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content: string, senderName: string, clientTempId?: string },
+        @MessageBody() data: { conversationId: number; content?: string, senderName: string, clientTempId?: string, type?: 'text' | 'gif', fileUrl?: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const senderId = client.user.userId;
 
-        // 1. Lưu tin nhắn
-        const savedMsg = await this.messagesService.sendMessage(senderId, data.conversationId, data.content, data.senderName, data.clientTempId);
-
-        // 2. Phát cho những người ĐANG MỞ PHÒNG
-        this.server.to(`conv_${data.conversationId}`).emit('new_message', {
-            ...savedMsg,
-            senderId: senderId,
-            sender: { id: senderId, username: data.senderName },
-        });
-
-        // 3. Tìm những người trong cuộc trò chuyện
-        const members = await this.drizzle.db
-            .select({ userId: conversationMembers.userId })
-            .from(conversationMembers)
-            .where(eq(conversationMembers.conversationId, data.conversationId));
-
-        // Bắn thông báo 'update_conversation_list' thẳng vào kênh cá nhân của từng người
-        members.forEach((m) => {
-            this.server.to(`user_${m.userId}`).emit('update_conversation_list', {
-                conversationId: data.conversationId,
-                lastMessageContent: data.content,
-                senderName: data.senderName,
-                lastMessageId: savedMsg.id,
-                lastMessageIndex: savedMsg.conversationIndex,
-            });
-        });
-
-        return savedMsg;
+        return this.messagesService.sendMessage(
+            senderId,
+            data.conversationId,
+            data.content ?? '',
+            client.user.username,
+            data.clientTempId,
+            {
+                type: data.type,
+                content: data.content,
+                fileUrl: data.fileUrl,
+                clientTempId: data.clientTempId,
+            },
+        );
     }
 
     @SubscribeMessage('load_messages')
