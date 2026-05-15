@@ -38,7 +38,7 @@ watch(text, (value) => {
   typingStopTimer = setTimeout(() => {
     emit('typingStop');
     typingStopTimer = null;
-  }, 1500);
+  }, 3000);
 });
 
 onBeforeUnmount(() => {
@@ -68,17 +68,6 @@ onBeforeUnmount(() => {
       <IconButton icon="send" label="Send message" @click="handleSend" />
     </div>
 
-    <div class="flex justify-between items-center mt-2 px-2 sm:px-4">
-      <div class="flex items-center gap-2 min-w-0">
-        <div class="flex gap-[2px] shrink-0">
-          <span class="w-1 h-1 bg-primary rounded-full animate-bounce"></span>
-          <span class="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.2s]"></span>
-          <span class="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:0.4s]"></span>
-        </div>
-        <span class="text-xs text-secondary truncate">Realtime connected</span>
-      </div>
-      <p class="text-xs text-secondary hidden md:block">Press Enter to send</p>
-    </div>
   </footer>
 </template>
 
