@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChatMessage } from '../../types/chat';
-import { formatMessageTime } from '../../utils/chatPresentation';
+import { formatFileSize, formatMessageTime } from '../../utils/chatPresentation';
 
 interface Props {
   message: ChatMessage;
@@ -13,6 +13,8 @@ const props = defineProps<Props>();
 const getSenderName = (message: ChatMessage) => {
   return message.sender?.username ?? message.senderName ?? 'Unknown';
 };
+
+const getMessageType = (message: ChatMessage) => message.type ?? 'text';
 </script>
 
 <template>
@@ -41,7 +43,46 @@ const getSenderName = (message: ChatMessage) => {
         <p v-if="!props.isOwn" class="text-[11px] font-semibold opacity-70 mb-1 uppercase tracking-wider">
           {{ getSenderName(props.message) }}
         </p>
-        <p class="text-sm sm:text-base leading-6 whitespace-pre-wrap">{{ props.message.content }}</p>
+        <template v-if="getMessageType(props.message) === 'image' || getMessageType(props.message) === 'gif'">
+          <a v-if="props.message.fileUrl" :href="props.message.fileUrl" target="_blank" rel="noreferrer">
+            <img
+              :src="props.message.fileUrl"
+              :alt="props.message.fileName ?? 'Media message'"
+              class="max-h-72 w-full rounded-xl object-cover"
+            />
+          </a>
+        </template>
+
+        <video
+          v-else-if="getMessageType(props.message) === 'video' && props.message.fileUrl"
+          :src="props.message.fileUrl"
+          class="max-h-72 w-full rounded-xl bg-black"
+          controls
+        />
+
+        <a
+          v-else-if="getMessageType(props.message) === 'document' && props.message.fileUrl"
+          :href="props.message.fileUrl"
+          target="_blank"
+          rel="noreferrer"
+          class="flex items-center gap-3 rounded-xl bg-surface-container-low text-on-surface p-3 min-w-[14rem]"
+        >
+          <span class="material-symbols-outlined text-[28px] text-primary">description</span>
+          <span class="min-w-0">
+            <span class="block truncate text-sm font-semibold">{{ props.message.fileName ?? 'Tài liệu' }}</span>
+            <span class="block text-xs text-secondary">{{ formatFileSize(props.message.fileSizeBytes) }}</span>
+          </span>
+        </a>
+
+        <p
+          v-if="props.message.content"
+          :class="[
+            'text-sm sm:text-base leading-6 whitespace-pre-wrap',
+            getMessageType(props.message) === 'text' ? '' : 'mt-2',
+          ]"
+        >
+          {{ props.message.content }}
+        </p>
       </div>
 
       <div :class="['flex items-center gap-1 text-xs text-secondary', props.isOwn ? 'flex-row-reverse' : '']">
