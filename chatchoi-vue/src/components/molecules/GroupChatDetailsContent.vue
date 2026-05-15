@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
+import GroupAddMembersModal from './GroupAddMembersModal.vue';
 import TextInput from '../atoms/TextInput.vue';
 import type { Conversation, ConversationMember } from '../../types/chat';
-import type { FriendUser } from '../../types/friends';
-import { addConversationMembers, removeConversationMember, updateConversation } from '../../services/conversation.service';
+import { removeConversationMember, updateConversation } from '../../services/conversation.service';
 import { useChatStore } from '../../stores/chat';
-import { useFriendsStore } from '../../stores/friends';
 import { getConversationName } from '../../utils/chatPresentation';
 
 interface Props {
@@ -19,16 +18,12 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const chatStore = useChatStore();
-const friendsStore = useFriendsStore();
 const isEditingGroup = ref(false);
 const isAddingMembers = ref(false);
 const editName = ref('');
 const editAvatar = ref('');
 const memberSearch = ref('');
-const addSearch = ref('');
-const selectedAddIds = ref<number[]>([]);
 const error = ref<string | null>(null);
-let addSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const detail = computed(() => chatStore.conversationDetailsById[props.conversation.id] ?? props.conversation);
 const isLoadingDetail = computed(() => chatStore.conversationDetailLoadStateById[props.conversation.id] === 'loading');
@@ -40,27 +35,13 @@ const filteredMembers = computed(() => {
   return members.value.filter((member) => member.username.toLowerCase().includes(query));
 });
 
-const addableUsers = computed(() => {
-  const existingIds = new Set(members.value.map((member) => member.userId));
-  const source = addSearch.value.trim() ? friendsStore.searchResults : friendsStore.friends;
-  const seen = new Set<number>();
-
-  return source.filter((user) => {
-    if (existingIds.has(user.id) || seen.has(user.id)) return false;
-    seen.add(user.id);
-    return true;
-  });
-});
-
 const token = () => localStorage.getItem('accessToken');
 
 const resetForms = () => {
   error.value = null;
   isEditingGroup.value = false;
   isAddingMembers.value = false;
-  selectedAddIds.value = [];
   memberSearch.value = '';
-  addSearch.value = '';
 };
 
 const refreshDetail = async (force = false) => {
@@ -72,13 +53,6 @@ const refreshDetail = async (force = false) => {
   }
 };
 
-watch(addSearch, (value) => {
-  if (addSearchTimer) clearTimeout(addSearchTimer);
-  addSearchTimer = setTimeout(() => {
-    void friendsStore.search(value);
-  }, 250);
-});
-
 watch(
   () => props.conversation.id,
   () => {
@@ -87,12 +61,6 @@ watch(
   },
   { immediate: true },
 );
-
-onMounted(() => {
-  if (!friendsStore.hasLoaded) {
-    void friendsStore.refreshAll();
-  }
-});
 
 const startEdit = () => {
   editName.value = detail.value.name ?? '';
@@ -114,30 +82,6 @@ const saveGroup = async () => {
     isEditingGroup.value = false;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Không thể cập nhật nhóm';
-  }
-};
-
-const toggleAddUser = (user: FriendUser) => {
-  if (selectedAddIds.value.includes(user.id)) {
-    selectedAddIds.value = selectedAddIds.value.filter((id) => id !== user.id);
-    return;
-  }
-
-  selectedAddIds.value = [...selectedAddIds.value, user.id];
-};
-
-const addMembers = async () => {
-  const accessToken = token();
-  if (!accessToken || selectedAddIds.value.length === 0) return;
-
-  try {
-    const updated = await addConversationMembers(accessToken, props.conversation.id, selectedAddIds.value);
-    chatStore.upsertConversationDetail(updated);
-    selectedAddIds.value = [];
-    addSearch.value = '';
-    isAddingMembers.value = false;
-  } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Không thể thêm thành viên';
   }
 };
 
@@ -201,29 +145,8 @@ const removeMember = async (member: ConversationMember) => {
     <div :class="['border-b border-outline-variant', props.compact ? 'p-4' : 'p-6']">
       <div class="flex items-center justify-between gap-3 mb-3">
         <h4 class="font-semibold text-on-surface">Members</h4>
-        <button v-if="isAdmin" class="text-xs font-semibold text-primary" type="button" @click="isAddingMembers = !isAddingMembers">
-          {{ isAddingMembers ? 'Close' : 'Add' }}
-        </button>
-      </div>
-
-      <div v-if="isAddingMembers" class="mb-4 space-y-3">
-        <TextInput v-model="addSearch" icon="search" placeholder="Tìm người để thêm..." />
-        <div class="max-h-52 overflow-y-auto thin-scrollbar space-y-1">
-          <button
-            v-for="user in addableUsers"
-            :key="user.id"
-            class="w-full flex items-center justify-between rounded-lg px-2 py-2 hover:bg-surface-container-high text-left"
-            type="button"
-            @click="toggleAddUser(user)"
-          >
-            <span class="font-semibold text-sm text-on-surface truncate">{{ user.username }}</span>
-            <span :class="['material-symbols-outlined', selectedAddIds.includes(user.id) ? 'text-primary' : 'text-outline']">
-              {{ selectedAddIds.includes(user.id) ? 'check_circle' : 'radio_button_unchecked' }}
-            </span>
-          </button>
-        </div>
-        <button class="w-full rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-50" :disabled="selectedAddIds.length === 0" type="button" @click="addMembers">
-          Thêm {{ selectedAddIds.length }} thành viên
+        <button v-if="isAdmin" class="text-xs font-semibold text-primary" type="button" @click="isAddingMembers = true">
+          Add
         </button>
       </div>
 
@@ -282,5 +205,13 @@ const removeMember = async (member: ConversationMember) => {
         <span class="text-base font-semibold">Rời nhóm</span>
       </button>
     </div>
+
+    <GroupAddMembersModal
+      v-if="isAddingMembers"
+      :conversation-id="props.conversation.id"
+      :members="members"
+      @added="refreshDetail(true)"
+      @close="isAddingMembers = false"
+    />
   </div>
 </template>

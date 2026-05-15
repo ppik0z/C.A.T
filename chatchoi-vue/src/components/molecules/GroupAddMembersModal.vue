@@ -2,19 +2,25 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import TextInput from '../atoms/TextInput.vue';
-import { createGroupConversation } from '../../services/conversation.service';
+import { addConversationMembers } from '../../services/conversation.service';
+import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
-import type { Conversation } from '../../types/chat';
+import type { ConversationMember } from '../../types/chat';
 import type { FriendUser } from '../../types/friends';
 
+interface Props {
+  conversationId: number;
+  members: ConversationMember[];
+}
+
+const props = defineProps<Props>();
 const emit = defineEmits<{
   close: [];
-  created: [conversation: Conversation];
+  added: [];
 }>();
 
+const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
-const groupName = ref('');
-const avatarGroup = ref('');
 const searchTerm = ref('');
 const selectedIds = ref<number[]>([]);
 const selectedUsersById = ref<Record<number, FriendUser>>({});
@@ -22,24 +28,20 @@ const isSubmitting = ref(false);
 const error = ref<string | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const selectedUsers = computed(() => {
-  return selectedIds.value
-    .map((id) => selectedUsersById.value[id])
-    .filter((user): user is FriendUser => Boolean(user));
-});
-
-const visibleUsers = computed(() => {
-  const source = searchTerm.value.trim() ? friendsStore.searchResults : friendsStore.friends;
+const addableUsers = computed(() => {
+  const existingIds = new Set(props.members.map((member) => member.userId));
+  const source = [
+    ...(searchTerm.value.trim() ? friendsStore.searchResults : friendsStore.friends),
+    ...Object.values(selectedUsersById.value),
+  ];
   const seen = new Set<number>();
 
   return source.filter((user) => {
-    if (seen.has(user.id)) return false;
+    if (existingIds.has(user.id) || seen.has(user.id)) return false;
     seen.add(user.id);
     return true;
   });
 });
-
-const canSubmit = computed(() => groupName.value.trim().length > 0 && selectedIds.value.length >= 2 && !isSubmitting.value);
 
 watch(searchTerm, (value) => {
   if (searchTimer) clearTimeout(searchTimer);
@@ -56,39 +58,36 @@ onMounted(() => {
 
 const toggleUser = (user: FriendUser) => {
   error.value = null;
-  const userId = user.id;
 
-  if (selectedIds.value.includes(userId)) {
-    selectedIds.value = selectedIds.value.filter((id) => id !== userId);
+  if (selectedIds.value.includes(user.id)) {
+    selectedIds.value = selectedIds.value.filter((id) => id !== user.id);
     const nextSelectedUsers = { ...selectedUsersById.value };
-    delete nextSelectedUsers[userId];
+    delete nextSelectedUsers[user.id];
     selectedUsersById.value = nextSelectedUsers;
     return;
   }
 
-  selectedIds.value = [...selectedIds.value, userId];
+  selectedIds.value = [...selectedIds.value, user.id];
   selectedUsersById.value = {
     ...selectedUsersById.value,
-    [userId]: user,
+    [user.id]: user,
   };
 };
 
-const createGroup = async () => {
+const submit = async () => {
   const token = localStorage.getItem('accessToken');
-  if (!token || !canSubmit.value) return;
+  if (!token || selectedIds.value.length === 0 || isSubmitting.value) return;
 
   isSubmitting.value = true;
   error.value = null;
 
   try {
-    const conversation = await createGroupConversation(token, {
-      name: groupName.value.trim(),
-      avatarGroup: avatarGroup.value.trim() || null,
-      memberIds: selectedIds.value,
-    });
-    emit('created', conversation);
+    const updated = await addConversationMembers(token, props.conversationId, selectedIds.value);
+    chatStore.upsertConversationDetail(updated);
+    emit('added');
+    emit('close');
   } catch (caught) {
-    error.value = caught instanceof Error ? caught.message : 'Không thể tạo nhóm';
+    error.value = caught instanceof Error ? caught.message : 'Không thể thêm thành viên';
   } finally {
     isSubmitting.value = false;
   }
@@ -96,31 +95,29 @@ const createGroup = async () => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+  <div class="fixed inset-0 z-[110] flex items-center justify-center px-4">
     <Transition appear name="modal-overlay">
-      <button class="absolute inset-0 bg-black/40" type="button" aria-label="Đóng tạo nhóm" @click="emit('close')" />
+      <button class="absolute inset-0 bg-black/40" type="button" aria-label="Đóng thêm thành viên" @click="emit('close')" />
     </Transition>
 
     <Transition appear name="modal-card">
-      <section class="relative w-full max-w-lg max-h-[88dvh] overflow-hidden rounded-lg bg-surface-container-lowest shadow-xl border border-outline-variant flex flex-col">
-      <header class="flex items-center justify-between gap-4 px-5 py-4 border-b border-outline-variant">
+      <section class="relative flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest shadow-xl">
+      <header class="flex items-center justify-between gap-4 border-b border-outline-variant px-5 py-4">
         <div>
-          <h3 class="text-lg font-bold text-on-surface">Tạo nhóm chat</h3>
-          <p class="text-xs font-semibold text-on-surface-variant">{{ selectedIds.length }} thành viên đã chọn</p>
+          <h3 class="text-lg font-bold text-on-surface">Thêm thành viên</h3>
+          <p class="text-xs font-semibold text-on-surface-variant">{{ selectedIds.length }} người đã chọn</p>
         </div>
         <button class="w-10 h-10 rounded-full hover:bg-surface-container-high text-on-surface-variant" type="button" @click="emit('close')">
           <span class="material-symbols-outlined">close</span>
         </button>
       </header>
 
-      <div class="p-5 space-y-4 overflow-y-auto thin-scrollbar">
-        <TextInput v-model="groupName" placeholder="Tên nhóm" />
-        <TextInput v-model="avatarGroup" placeholder="URL avatar nhóm (tuỳ chọn)" />
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 thin-scrollbar">
         <TextInput v-model="searchTerm" icon="search" placeholder="Tìm bạn bè hoặc người dùng..." />
 
-        <div v-if="selectedUsers.length" class="flex flex-wrap gap-2">
+        <div v-if="Object.values(selectedUsersById).length" class="flex flex-wrap gap-2">
           <button
-            v-for="user in selectedUsers"
+            v-for="user in Object.values(selectedUsersById)"
             :key="user.id"
             class="inline-flex items-center gap-2 rounded-full bg-primary-container px-2 py-1 text-xs font-semibold text-primary"
             type="button"
@@ -137,7 +134,7 @@ const createGroup = async () => {
 
         <div class="space-y-1">
           <button
-            v-for="user in visibleUsers"
+            v-for="user in addableUsers"
             :key="user.id"
             class="w-full flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-surface-container-high"
             type="button"
@@ -150,33 +147,28 @@ const createGroup = async () => {
                 <p class="text-xs text-on-surface-variant">{{ user.relationshipStatus === 'friends' ? 'Bạn bè' : 'Tìm kiếm' }}</p>
               </div>
             </div>
-            <span
-              :class="[
-                'material-symbols-outlined',
-                selectedIds.includes(user.id) ? 'text-primary' : 'text-outline',
-              ]"
-            >
+            <span :class="['material-symbols-outlined', selectedIds.includes(user.id) ? 'text-primary' : 'text-outline']">
               {{ selectedIds.includes(user.id) ? 'check_circle' : 'radio_button_unchecked' }}
             </span>
           </button>
 
-          <div v-if="visibleUsers.length === 0" class="py-8 text-center text-sm text-on-surface-variant">
+          <div v-if="addableUsers.length === 0" class="py-8 text-center text-sm text-on-surface-variant">
             Không tìm thấy người dùng phù hợp.
           </div>
         </div>
       </div>
 
-      <footer class="flex items-center justify-end gap-3 px-5 py-4 border-t border-outline-variant">
+      <footer class="flex items-center justify-end gap-3 border-t border-outline-variant px-5 py-4">
         <button class="px-4 py-2 rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container-high" type="button" @click="emit('close')">
           Huỷ
         </button>
         <button
           class="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-on-primary disabled:opacity-50"
-          :disabled="!canSubmit"
+          :disabled="selectedIds.length === 0 || isSubmitting"
           type="button"
-          @click="createGroup"
+          @click="submit"
         >
-          {{ isSubmitting ? 'Đang tạo...' : 'Tạo nhóm' }}
+          {{ isSubmitting ? 'Đang thêm...' : `Thêm ${selectedIds.length} thành viên` }}
         </button>
       </footer>
       </section>
