@@ -2,9 +2,11 @@
 import { computed, onMounted, ref } from 'vue';
 import TextInput from '../atoms/TextInput.vue';
 import ConversationItem from '../molecules/ConversationItem.vue';
+import GroupCreateModal from '../molecules/GroupCreateModal.vue';
 import { useChatStore } from '../../stores/chat';
 import { fetchConversations } from '../../services/conversation.service';
 import { getConversationName } from '../../utils/chatPresentation';
+import type { Conversation } from '../../types/chat';
 
 type ConversationFilter = 'all' | 'unread' | 'groups';
 
@@ -20,6 +22,7 @@ const emit = defineEmits<{
 const chatStore = useChatStore();
 const searchTerm = ref('');
 const activeFilter = ref<ConversationFilter>('all');
+const isCreateGroupOpen = ref(false);
 
 const filterOptions: FilterOption[] = [
   { value: 'all', label: 'All' },
@@ -56,12 +59,29 @@ const handleSelect = (conversationId: number) => {
   chatStore.selectConversation(conversationId);
   emit('selected');
 };
+
+const handleGroupCreated = (conversation: Conversation) => {
+  chatStore.upsertConversation(conversation);
+  chatStore.selectConversation(conversation.id);
+  isCreateGroupOpen.value = false;
+  emit('selected');
+};
 </script>
 
 <template>
   <section class="h-full min-w-0 flex flex-col border-r border-outline-variant bg-surface-container-lowest">
     <div class="p-4 sm:p-6">
-      <h2 class="text-2xl sm:text-[32px] sm:leading-10 font-bold text-primary mb-4">Messages</h2>
+      <div class="flex items-center justify-between gap-4 mb-4">
+        <h2 class="text-2xl sm:text-[32px] sm:leading-10 font-bold text-primary">Messages</h2>
+        <button
+          class="h-10 w-10 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-sm"
+          title="Tạo nhóm chat"
+          type="button"
+          @click="isCreateGroupOpen = true"
+        >
+          <span class="material-symbols-outlined !text-[22px]">group_add</span>
+        </button>
+      </div>
 
       <TextInput v-model="searchTerm" class="mb-4 sm:mb-6" icon="search" placeholder="Search conversations..." />
 
@@ -97,5 +117,11 @@ const handleSelect = (conversationId: number) => {
         Không tìm thấy đoạn chat phù hợp.
       </div>
     </div>
+
+    <GroupCreateModal
+      v-if="isCreateGroupOpen"
+      @close="isCreateGroupOpen = false"
+      @created="handleGroupCreated"
+    />
   </section>
 </template>

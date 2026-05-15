@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PresenceModule } from 'src/presence/presence.module';
 import { FriendshipsModule } from 'src/friendships/friendships.module';
 import { ReadStateModule } from 'src/read-state/read-state.module';
+import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
     imports: [
@@ -12,6 +13,7 @@ import { ReadStateModule } from 'src/read-state/read-state.module';
         PresenceModule,
         FriendshipsModule,
         ReadStateModule,
+        ConversationsModule,
         JwtModule.register({
             secret: process.env.JWT_SECRET,
             signOptions: { expiresIn: '7d' },

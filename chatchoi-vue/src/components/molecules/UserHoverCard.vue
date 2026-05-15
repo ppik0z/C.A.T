@@ -82,15 +82,17 @@ const closeCard = () => {
     >
       <div class="flex items-center gap-3">
         <Avatar
-          :avatar-url="getConversationUser(props.conversation)?.avatar"
-          :is-online="props.conversation?.isOnline"
+          :avatar-url="props.conversation?.isGroup ? props.conversation.avatarGroup : getConversationUser(props.conversation)?.avatar"
+          :is-online="!props.conversation?.isGroup && props.conversation?.isOnline"
           :name="getConversationName(props.conversation)"
-          show-status
+          :show-status="!props.conversation?.isGroup"
           size="lg"
         />
         <div class="min-w-0">
           <p class="font-bold text-on-surface truncate">{{ getConversationName(props.conversation) }}</p>
-          <p class="text-xs font-semibold text-secondary">{{ props.conversation?.isOnline ? 'Online' : 'Offline' }}</p>
+          <p class="text-xs font-semibold text-secondary">
+            {{ props.conversation?.isGroup ? `${props.conversation.memberCount ?? 0} members` : props.conversation?.isOnline ? 'Online' : 'Offline' }}
+          </p>
         </div>
       </div>
 

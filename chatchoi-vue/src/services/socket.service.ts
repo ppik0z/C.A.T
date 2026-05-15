@@ -1,7 +1,7 @@
 import { socket } from "../socket";
 import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
-import type { ChatMessage, ConversationListUpdate, LoadMessagesSuccessPayload } from "../types/chat";
+import type { ChatMessage, Conversation, ConversationListUpdate, LoadMessagesSuccessPayload } from "../types/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
@@ -66,6 +66,14 @@ export const initSocketService = (token: string) => {
             conv.unreadCount = 0;
             conv.lastSeenMessageIndex = data.lastMessageIndex;
         }
+    });
+
+    socket.on("conversation_upsert", (conversation: Conversation) => {
+        chatStore.upsertConversation(conversation);
+    });
+
+    socket.on("conversation_removed", (data: { conversationId: number }) => {
+        chatStore.removeConversation(data.conversationId);
     });
 
     const refreshFriends = () => {

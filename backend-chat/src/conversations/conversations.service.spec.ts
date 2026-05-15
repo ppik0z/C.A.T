@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { PresenceService } from '../presence/presence.service';
 import { ConversationsService } from './conversations.service';
@@ -17,6 +18,10 @@ describe('ConversationsService', () => {
         {
           provide: PresenceService,
           useValue: { isUserOnline: jest.fn() },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();

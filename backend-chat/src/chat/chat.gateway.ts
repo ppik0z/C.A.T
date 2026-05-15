@@ -20,6 +20,8 @@ import { conversationMembers } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import { ReadStateService } from '../read-state/read-state.service';
+import { OnEvent } from '@nestjs/event-emitter';
+import { ConversationsService } from '../conversations/conversations.service';
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
@@ -34,6 +36,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         private readonly friendshipsService: FriendshipsService,
         private drizzle: DrizzleService,
         private readonly readStateService: ReadStateService,
+        private readonly conversationsService: ConversationsService,
     ) { }
 
     async handleConnection(client: AuthenticatedSocket) {
@@ -79,6 +82,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const userId = client.user.userId;
         await this.presenceService.updateStatus(userId);
         return { status: 'ack' };
+    }
+
+    @OnEvent('conversation.upsert')
+    async handleConversationUpsert(payload: { userIds: number[]; conversationId: number }) {
+        await Promise.all(payload.userIds.map(async (userId) => {
+            const conversation = await this.conversationsService.buildConversationForUser(userId, payload.conversationId);
+            this.server.to(`user_${userId}`).emit('conversation_upsert', conversation);
+        }));
+    }
+
+    @OnEvent('conversation.removed')
+    handleConversationRemoved(payload: { userId: number; conversationId: number }) {
+        this.server.to(`user_${payload.userId}`).emit('conversation_removed', {
+            conversationId: payload.conversationId,
+        });
     }
 
 

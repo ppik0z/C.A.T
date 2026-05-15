@@ -2,28 +2,97 @@ import type { Conversation } from '../types/chat';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
+const authHeaders = (token: string, json = false) => ({
+  Authorization: `Bearer ${token}`,
+  ...(json ? { 'Content-Type': 'application/json' } : {}),
+});
+
+const parseResponse = async <T>(response: Response, fallback: string): Promise<T> => {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message ?? fallback);
+  }
+
+  return await response.json() as T;
+};
+
 export const fetchConversations = async (token: string): Promise<Conversation[]> => {
   const response = await fetch(`${API_BASE_URL}/conversations`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
   });
 
-  if (!response.ok) {
-    throw new Error('Không thể tải danh sách hội thoại');
-  }
-
-  return await response.json() as Conversation[];
+  return parseResponse<Conversation[]>(response, 'Không thể tải danh sách hội thoại');
 };
 
 export const accessDirectConversation = async (token: string, friendId: number): Promise<{ id: number }> => {
   const response = await fetch(`${API_BASE_URL}/conversations/access/${friendId}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
   });
 
-  if (!response.ok) {
-    throw new Error('Không thể mở đoạn chat');
-  }
+  return parseResponse<{ id: number }>(response, 'Không thể mở đoạn chat');
+};
 
-  return await response.json() as { id: number };
+export const createGroupConversation = async (
+  token: string,
+  payload: { name: string; avatarGroup?: string | null; memberIds: number[] },
+): Promise<Conversation> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/groups`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify(payload),
+  });
+
+  return parseResponse<Conversation>(response, 'Không thể tạo nhóm');
+};
+
+export const fetchConversationDetail = async (token: string, conversationId: number): Promise<Conversation> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+
+  return parseResponse<Conversation>(response, 'Không thể tải thông tin nhóm');
+};
+
+export const updateConversation = async (
+  token: string,
+  conversationId: number,
+  payload: { name?: string; avatarGroup?: string | null },
+): Promise<Conversation> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`, {
+    method: 'PATCH',
+    headers: authHeaders(token, true),
+    body: JSON.stringify(payload),
+  });
+
+  return parseResponse<Conversation>(response, 'Không thể cập nhật nhóm');
+};
+
+export const addConversationMembers = async (
+  token: string,
+  conversationId: number,
+  memberIds: number[],
+): Promise<Conversation> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/members`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ memberIds }),
+  });
+
+  return parseResponse<Conversation>(response, 'Không thể thêm thành viên');
+};
+
+export const removeConversationMember = async (
+  token: string,
+  conversationId: number,
+  userId: number,
+): Promise<{ removed: boolean }> => {
+  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/members/${userId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  return parseResponse<{ removed: boolean }>(response, 'Không thể xoá thành viên');
 };
