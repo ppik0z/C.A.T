@@ -2,8 +2,10 @@ import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
 import { fetchConversationDetail } from '../services/conversation.service';
+import { uploadMediaMessage } from '../services/message.service';
 import type {
     ChatMessage,
+    ChatMessageType,
     Conversation,
     ConversationDetailLoadState,
     ConversationListUpdate,
@@ -40,6 +42,12 @@ const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): Cha
 };
 
 const getTypingKey = (conversationId: number, userId: number) => `${conversationId}:${userId}`;
+
+const resolveLocalMessageType = (file: File): ChatMessageType => {
+    if (file.type.startsWith('image/')) return 'image';
+    if (file.type.startsWith('video/')) return 'video';
+    return 'document';
+};
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
@@ -175,6 +183,7 @@ export const useChatStore = defineStore('chat', {
                 id: -Date.now(),
                 clientTempId,
                 conversationId: this.currentConversationId,
+                type: 'text',
                 content: content.trim(),
                 createdAt: new Date(),
                 senderId: this.myId ?? undefined,
@@ -189,6 +198,7 @@ export const useChatStore = defineStore('chat', {
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
                 senderName: this.myUserName,
+                type: 'text',
                 content: content.trim(),
                 clientTempId,
             }, (response: ChatMessage) => {
@@ -196,6 +206,92 @@ export const useChatStore = defineStore('chat', {
                 if (response && response.id) {
                     this.pushMessage(response);
                 }
+            });
+        },
+
+        async sendMediaMessage(file: File, caption = '') {
+            if (!this.currentConversationId || !this.myUserName) return;
+
+            const token = localStorage.getItem('accessToken');
+            if (!token) throw new Error('Bạn cần đăng nhập để gửi file.');
+
+            const clientTempId = crypto.randomUUID();
+            const conversationId = this.currentConversationId;
+            const optimisticMessage: ChatMessage = {
+                id: -Date.now(),
+                clientTempId,
+                conversationId,
+                type: resolveLocalMessageType(file),
+                content: caption.trim(),
+                createdAt: new Date(),
+                fileUrl: URL.createObjectURL(file),
+                fileName: file.name,
+                fileMimeType: file.type,
+                fileSizeBytes: file.size,
+                senderId: this.myId ?? undefined,
+                senderName: this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                localStatus: 'sending',
+            };
+
+            this.pushMessage(optimisticMessage);
+            this.stopTyping(conversationId);
+
+            try {
+                const response = await uploadMediaMessage(token, {
+                    conversationId,
+                    file,
+                    caption: caption.trim(),
+                    clientTempId,
+                });
+                this.pushMessage(response);
+            } catch (error) {
+                this.markLocalMessageFailed(conversationId, clientTempId);
+                console.error(error);
+            }
+        },
+
+        sendGifMessage(gifUrl: string, caption = '') {
+            if (!gifUrl.trim() || !this.currentConversationId || !this.myUserName) return;
+
+            const clientTempId = crypto.randomUUID();
+            const optimisticMessage: ChatMessage = {
+                id: -Date.now(),
+                clientTempId,
+                conversationId: this.currentConversationId,
+                type: 'gif',
+                content: caption.trim(),
+                createdAt: new Date(),
+                fileUrl: gifUrl.trim(),
+                senderId: this.myId ?? undefined,
+                senderName: this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                localStatus: 'sending',
+            };
+
+            this.pushMessage(optimisticMessage);
+            this.stopTyping(this.currentConversationId);
+
+            socket.emit("send_message", {
+                conversationId: this.currentConversationId,
+                senderName: this.myUserName,
+                type: 'gif',
+                content: caption.trim(),
+                fileUrl: gifUrl.trim(),
+                clientTempId,
+            }, (response: ChatMessage) => {
+                if (response && response.id) {
+                    this.pushMessage(response);
+                }
+            });
+        },
+
+        markLocalMessageFailed(conversationId: number, clientTempId: string) {
+            const messages = this.messagesByConversationId[conversationId] ?? [];
+            this.messagesByConversationId[conversationId] = messages.map((message) => {
+                return message.clientTempId === clientTempId
+                    ? { ...message, localStatus: 'failed' as const }
+                    : message;
             });
         },
 
@@ -370,6 +466,7 @@ export const useChatStore = defineStore('chat', {
 
         getMessageDisplayStatus(message: ChatMessage, conversation: Conversation | null) {
             if (message.localStatus === 'sending') return 'Đang gửi';
+            if (message.localStatus === 'failed') return 'Gửi thất bại';
             if (!conversation || this.myId === null) return 'Đã gửi';
 
             const messageIndex = message.conversationIndex ?? 0;

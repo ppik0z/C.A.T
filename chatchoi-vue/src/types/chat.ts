@@ -20,16 +20,28 @@ export interface ConversationMember {
   joinedAt: string;
 }
 
+export type ChatMessageType = 'text' | 'image' | 'video' | 'document' | 'gif';
+
 export interface ChatMessage {
   id: number;
   clientTempId?: string;
   conversationId?: number;
   conversationIndex?: number;
+  type?: ChatMessageType;
   content: string;
   createdAt?: string | Date;
+  fileUrl?: string | null;
+  filePublicId?: string | null;
+  fileResourceType?: string | null;
+  fileName?: string | null;
+  fileMimeType?: string | null;
+  fileSizeBytes?: number | null;
+  fileFormat?: string | null;
+  fileWidth?: number | null;
+  fileHeight?: number | null;
   senderId?: number;
   senderName?: string;
-  localStatus?: 'sending' | 'sent';
+  localStatus?: 'sending' | 'sent' | 'failed';
   sender?: {
     id: number;
     username: string;
