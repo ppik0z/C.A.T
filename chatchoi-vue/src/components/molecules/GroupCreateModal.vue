@@ -17,15 +17,14 @@ const groupName = ref('');
 const avatarGroup = ref('');
 const searchTerm = ref('');
 const selectedIds = ref<number[]>([]);
+const selectedUsersById = ref<Record<number, FriendUser>>({});
 const isSubmitting = ref(false);
 const error = ref<string | null>(null);
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const selectedUsers = computed(() => {
-  const usersById = new Map<number, FriendUser>();
-  [...friendsStore.friends, ...friendsStore.searchResults].forEach((user) => usersById.set(user.id, user));
   return selectedIds.value
-    .map((id) => usersById.get(id))
+    .map((id) => selectedUsersById.value[id])
     .filter((user): user is FriendUser => Boolean(user));
 });
 
@@ -55,14 +54,23 @@ onMounted(() => {
   }
 });
 
-const toggleUser = (userId: number) => {
+const toggleUser = (user: FriendUser) => {
   error.value = null;
+  const userId = user.id;
+
   if (selectedIds.value.includes(userId)) {
     selectedIds.value = selectedIds.value.filter((id) => id !== userId);
+    const nextSelectedUsers = { ...selectedUsersById.value };
+    delete nextSelectedUsers[userId];
+    selectedUsersById.value = nextSelectedUsers;
     return;
   }
 
   selectedIds.value = [...selectedIds.value, userId];
+  selectedUsersById.value = {
+    ...selectedUsersById.value,
+    [userId]: user,
+  };
 };
 
 const createGroup = async () => {
@@ -111,7 +119,7 @@ const createGroup = async () => {
             :key="user.id"
             class="inline-flex items-center gap-2 rounded-full bg-primary-container px-2 py-1 text-xs font-semibold text-primary"
             type="button"
-            @click="toggleUser(user.id)"
+            @click="toggleUser(user)"
           >
             <span>{{ user.username }}</span>
             <span class="material-symbols-outlined !text-[16px]">close</span>
@@ -128,7 +136,7 @@ const createGroup = async () => {
             :key="user.id"
             class="w-full flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-left hover:bg-surface-container-high"
             type="button"
-            @click="toggleUser(user.id)"
+            @click="toggleUser(user)"
           >
             <div class="flex items-center gap-3 min-w-0">
               <Avatar :avatar-url="user.avatar" :name="user.username" />
