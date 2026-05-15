@@ -6,4 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
   cacheDir: 'node_modules/.vite',
+  server: {
+    host: '0.0.0.0',
+    allowedHosts: ['dangtuankhai.id.vn'],
+  },
 })

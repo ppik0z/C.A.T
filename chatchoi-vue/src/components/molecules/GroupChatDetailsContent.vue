@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import GroupAddMembersModal from './GroupAddMembersModal.vue';
+import MemberHoverCard from './MemberHoverCard.vue';
 import TextInput from '../atoms/TextInput.vue';
 import type { Conversation, ConversationMember } from '../../types/chat';
 import { removeConversationMember, updateConversation } from '../../services/conversation.service';
@@ -160,7 +161,9 @@ const removeMember = async (member: ConversationMember) => {
           class="flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-surface-container-high"
         >
           <div class="flex items-center gap-3 min-w-0">
-            <Avatar :avatar-url="member.avatar" :is-online="member.isOnline" :name="member.username" show-status />
+            <MemberHoverCard :member="member">
+              <Avatar :avatar-url="member.avatar" :is-online="member.isOnline" :name="member.username" show-status />
+            </MemberHoverCard>
             <div class="min-w-0">
               <p class="font-semibold text-on-surface truncate">{{ member.username }}</p>
               <p class="text-xs text-on-surface-variant">
