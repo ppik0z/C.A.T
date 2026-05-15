@@ -22,11 +22,14 @@ export interface ConversationMember {
 
 export interface ChatMessage {
   id: number;
+  clientTempId?: string;
   conversationId?: number;
   conversationIndex?: number;
   content: string;
+  createdAt?: string | Date;
   senderId?: number;
   senderName?: string;
+  localStatus?: 'sending' | 'sent';
   sender?: {
     id: number;
     username: string;
@@ -68,10 +71,53 @@ export interface ConversationListUpdate {
   lastMessageIndex: number;
 }
 
+export type MessageDeliveryStatus = 'sent' | 'delivered';
+
+export interface MessageStatusSnapshot {
+  messageId: number;
+  userId: number;
+  status: MessageDeliveryStatus;
+  updatedAt: string | Date;
+}
+
+export interface MemberReadState {
+  userId: number;
+  username: string | null;
+  lastSeenMessageIndex: number;
+}
+
+export interface MessageStatusUpdate {
+  conversationId: number;
+  messageId: number;
+  userId: number;
+  status: MessageDeliveryStatus;
+}
+
+export interface ReadStateUpdate {
+  conversationId: number;
+  userId: number;
+  username: string;
+  lastSeenMessageIndex: number;
+}
+
+export interface TypingStateUpdate {
+  conversationId: number;
+  userId: number;
+  username: string;
+  isTyping: boolean;
+}
+
+export interface TypingUser {
+  userId: number;
+  username: string;
+}
+
 export type MessageLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 export type ConversationDetailLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 export interface LoadMessagesSuccessPayload {
   conversationId: number;
   messages: ChatMessage[];
+  messageStatuses?: MessageStatusSnapshot[];
+  memberReadStates?: MemberReadState[];
 }

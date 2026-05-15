@@ -1,7 +1,15 @@
 import { socket } from "../socket";
 import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
-import type { ChatMessage, Conversation, ConversationListUpdate, LoadMessagesSuccessPayload } from "../types/chat";
+import type {
+    ChatMessage,
+    Conversation,
+    ConversationListUpdate,
+    LoadMessagesSuccessPayload,
+    MessageStatusUpdate,
+    ReadStateUpdate,
+    TypingStateUpdate,
+} from "../types/chat";
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
@@ -25,11 +33,24 @@ export const initSocketService = (token: string) => {
     });
 
     socket.on("load_messages_success", (payload: LoadMessagesSuccessPayload) => {
-        chatStore.setMessagesForConversation(payload.conversationId, payload.messages);
+        chatStore.setMessagesForConversation(
+            payload.conversationId,
+            payload.messages,
+            payload.messageStatuses ?? [],
+            payload.memberReadStates ?? [],
+        );
     });
 
     socket.on("new_message", (msg: ChatMessage) => {
         chatStore.pushMessage(msg);
+
+        const senderId = msg.senderId ?? msg.sender?.id;
+        if (senderId !== chatStore.myId && msg.conversationId && msg.id > 0) {
+            socket.emit('message_delivered', {
+                conversationId: msg.conversationId,
+                messageId: msg.id,
+            });
+        }
 
         if (chatStore.currentConversationId === msg.conversationId) {
             chatStore.markAsRead(msg.conversationId, msg.conversationIndex ?? 0);
@@ -66,6 +87,18 @@ export const initSocketService = (token: string) => {
             conv.unreadCount = 0;
             conv.lastSeenMessageIndex = data.lastMessageIndex;
         }
+    });
+
+    socket.on("message_status_updated", (data: MessageStatusUpdate) => {
+        chatStore.applyMessageStatusUpdate(data);
+    });
+
+    socket.on("read_state_updated", (data: ReadStateUpdate) => {
+        chatStore.applyReadStateUpdate(data);
+    });
+
+    socket.on("typing_state_changed", (data: TypingStateUpdate) => {
+        chatStore.applyTypingState(data);
     });
 
     socket.on("conversation_upsert", (conversation: Conversation) => {

@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import IconButton from '../atoms/IconButton.vue';
 
 const emit = defineEmits<{
   send: [content: string];
+  typingStart: [];
+  typingStop: [];
 }>();
 
 const text = ref('');
+let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+const clearTypingStopTimer = () => {
+  if (!typingStopTimer) return;
+  clearTimeout(typingStopTimer);
+  typingStopTimer = null;
+};
 
 const handleSend = () => {
   const content = text.value.trim();
@@ -14,7 +23,28 @@ const handleSend = () => {
 
   emit('send', content);
   text.value = '';
+  clearTypingStopTimer();
+  emit('typingStop');
 };
+
+watch(text, (value) => {
+  clearTypingStopTimer();
+  if (!value.trim()) {
+    emit('typingStop');
+    return;
+  }
+
+  emit('typingStart');
+  typingStopTimer = setTimeout(() => {
+    emit('typingStop');
+    typingStopTimer = null;
+  }, 1500);
+});
+
+onBeforeUnmount(() => {
+  clearTypingStopTimer();
+  emit('typingStop');
+});
 </script>
 
 <template>

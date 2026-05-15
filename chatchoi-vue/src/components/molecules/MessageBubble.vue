@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { ChatMessage } from '../../types/chat';
+import { formatMessageTime } from '../../utils/chatPresentation';
 
 interface Props {
   message: ChatMessage;
   isOwn: boolean;
+  statusText?: string;
 }
 
 const props = defineProps<Props>();
@@ -43,7 +45,7 @@ const getSenderName = (message: ChatMessage) => {
       </div>
 
       <div :class="['flex items-center gap-1 text-xs text-secondary', props.isOwn ? 'flex-row-reverse' : '']">
-        <span>Just now</span>
+        <span>{{ props.isOwn && props.statusText ? props.statusText : formatMessageTime(props.message.createdAt) }}</span>
         <span v-if="props.isOwn" class="material-symbols-outlined text-[16px] text-primary">done_all</span>
       </div>
     </div>

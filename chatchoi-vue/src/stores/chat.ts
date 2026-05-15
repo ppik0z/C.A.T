@@ -2,22 +2,52 @@ import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
 import { fetchConversationDetail } from '../services/conversation.service';
-import type { ChatMessage, Conversation, ConversationDetailLoadState, ConversationListUpdate, JwtIdentity, MessageLoadState } from '../types/chat';
+import type {
+    ChatMessage,
+    Conversation,
+    ConversationDetailLoadState,
+    ConversationListUpdate,
+    JwtIdentity,
+    MemberReadState,
+    MessageDeliveryStatus,
+    MessageLoadState,
+    MessageStatusSnapshot,
+    MessageStatusUpdate,
+    ReadStateUpdate,
+    TypingStateUpdate,
+    TypingUser,
+} from '../types/chat';
 
 const PREFETCH_DELAY_MS = 250;
 const CONVERSATION_DETAIL_TTL_MS = 60_000;
+const TYPING_TTL_MS = 7_000;
+const TYPING_REFRESH_MS = 2_000;
+const typingExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 const delay = (milliseconds: number) => new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
 });
 
-const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage) => {
+const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): ChatMessage[] => {
+    if (message.clientTempId) {
+        const tempIndex = messages.findIndex((item) => item.clientTempId === message.clientTempId);
+        if (tempIndex !== -1) {
+            return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: 'sent' as const } : item);
+        }
+    }
+
     return messages.some((item) => item.id === message.id) ? messages : [...messages, message];
 };
+
+const getTypingKey = (conversationId: number, userId: number) => `${conversationId}:${userId}`;
 
 export const useChatStore = defineStore('chat', {
     state: () => ({
         messagesByConversationId: {} as Record<number, ChatMessage[]>,
+        messageStatusesByMessageId: {} as Record<number, Record<number, MessageDeliveryStatus>>,
+        memberReadStatesByConversationId: {} as Record<number, MemberReadState[]>,
+        typingUsersByConversationId: {} as Record<number, TypingUser[]>,
+        lastTypingSentAtByConversationId: {} as Record<number, number>,
         messageLoadStateByConversationId: {} as Record<number, MessageLoadState>,
         conversationDetailsById: {} as Record<number, Conversation>,
         conversationDetailLoadStateById: {} as Record<number, ConversationDetailLoadState>,
@@ -49,9 +79,25 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        setMessagesForConversation(conversationId: number, msgs: ChatMessage[]) {
+        setMessagesForConversation(
+            conversationId: number,
+            msgs: ChatMessage[],
+            statuses: MessageStatusSnapshot[] = [],
+            readStates: MemberReadState[] = [],
+        ) {
             this.messagesByConversationId[conversationId] = msgs;
+            this.setMessageStatuses(statuses);
+            this.memberReadStatesByConversationId[conversationId] = readStates;
             this.messageLoadStateByConversationId[conversationId] = 'loaded';
+        },
+
+        setMessageStatuses(statuses: MessageStatusSnapshot[]) {
+            statuses.forEach((item) => {
+                this.messageStatusesByMessageId[item.messageId] = {
+                    ...this.messageStatusesByMessageId[item.messageId],
+                    [item.userId]: item.status,
+                };
+            });
         },
 
         setMessageLoadError(conversationId: number) {
@@ -124,10 +170,27 @@ export const useChatStore = defineStore('chat', {
         sendMessage(content: string) {
             if (!content.trim() || !this.currentConversationId || !this.myUserName) return;
 
+            const clientTempId = crypto.randomUUID();
+            const optimisticMessage: ChatMessage = {
+                id: -Date.now(),
+                clientTempId,
+                conversationId: this.currentConversationId,
+                content: content.trim(),
+                createdAt: new Date(),
+                senderId: this.myId ?? undefined,
+                senderName: this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                localStatus: 'sending',
+            };
+
+            this.pushMessage(optimisticMessage);
+            this.stopTyping(this.currentConversationId);
+
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
                 senderName: this.myUserName,
-                content: content
+                content: content.trim(),
+                clientTempId,
             }, (response: ChatMessage) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
                 if (response && response.id) {
@@ -216,6 +279,8 @@ export const useChatStore = defineStore('chat', {
         removeConversation(conversationId: number) {
             this.conversations = this.conversations.filter((conversation) => conversation.id !== conversationId);
             delete this.messagesByConversationId[conversationId];
+            delete this.memberReadStatesByConversationId[conversationId];
+            delete this.typingUsersByConversationId[conversationId];
             delete this.messageLoadStateByConversationId[conversationId];
             delete this.conversationDetailsById[conversationId];
             delete this.conversationDetailLoadStateById[conversationId];
@@ -280,6 +345,91 @@ export const useChatStore = defineStore('chat', {
                 this.conversations.splice(index, 1);
                 this.conversations.unshift(conv);
             }
+        },
+
+        applyMessageStatusUpdate(update: MessageStatusUpdate) {
+            this.messageStatusesByMessageId[update.messageId] = {
+                ...this.messageStatusesByMessageId[update.messageId],
+                [update.userId]: update.status,
+            };
+        },
+
+        applyReadStateUpdate(update: ReadStateUpdate) {
+            const states = this.memberReadStatesByConversationId[update.conversationId] ?? [];
+            const nextState: MemberReadState = {
+                userId: update.userId,
+                username: update.username,
+                lastSeenMessageIndex: update.lastSeenMessageIndex,
+            };
+            const existingIndex = states.findIndex((item) => item.userId === update.userId);
+
+            this.memberReadStatesByConversationId[update.conversationId] = existingIndex === -1
+                ? [...states, nextState]
+                : states.map((item, index) => index === existingIndex ? nextState : item);
+        },
+
+        getMessageDisplayStatus(message: ChatMessage, conversation: Conversation | null) {
+            if (message.localStatus === 'sending') return 'Đang gửi';
+            if (!conversation || this.myId === null) return 'Đã gửi';
+
+            const messageIndex = message.conversationIndex ?? 0;
+            const readStates = this.memberReadStatesByConversationId[conversation.id] ?? [];
+            const seenCount = readStates.filter((state) => {
+                return state.userId !== this.myId && messageIndex > 0 && state.lastSeenMessageIndex >= messageIndex;
+            }).length;
+
+            if (conversation.isGroup && seenCount > 0) return `${seenCount} đã xem`;
+            if (!conversation.isGroup && seenCount > 0) return 'Đã xem';
+
+            const statusByUser = this.messageStatusesByMessageId[message.id] ?? {};
+            const deliveredCount = Object.entries(statusByUser).filter(([userId, status]) => {
+                return Number(userId) !== this.myId && status === 'delivered';
+            }).length;
+
+            return deliveredCount > 0 ? 'Đã nhận' : 'Đã gửi';
+        },
+
+        startTyping(conversationId: number) {
+            const now = Date.now();
+            const lastSentAt = this.lastTypingSentAtByConversationId[conversationId] ?? 0;
+            if (now - lastSentAt < TYPING_REFRESH_MS) return;
+
+            this.lastTypingSentAtByConversationId[conversationId] = now;
+            socket.emit('typing_start', { conversationId });
+        },
+
+        stopTyping(conversationId: number) {
+            delete this.lastTypingSentAtByConversationId[conversationId];
+            socket.emit('typing_stop', { conversationId });
+        },
+
+        applyTypingState(update: TypingStateUpdate) {
+            if (update.userId === this.myId) return;
+
+            const users = this.typingUsersByConversationId[update.conversationId] ?? [];
+            const existingIndex = users.findIndex((item) => item.userId === update.userId);
+            const key = getTypingKey(update.conversationId, update.userId);
+
+            if (!update.isTyping) {
+                this.typingUsersByConversationId[update.conversationId] = users.filter((item) => item.userId !== update.userId);
+                const timer = typingExpiryTimers.get(key);
+                if (timer) clearTimeout(timer);
+                typingExpiryTimers.delete(key);
+                return;
+            }
+
+            const nextUser = { userId: update.userId, username: update.username };
+            this.typingUsersByConversationId[update.conversationId] = existingIndex === -1
+                ? [...users, nextUser]
+                : users.map((item, index) => index === existingIndex ? nextUser : item);
+
+            const existingTimer = typingExpiryTimers.get(key);
+            if (existingTimer) clearTimeout(existingTimer);
+            typingExpiryTimers.set(key, setTimeout(() => {
+                const currentUsers = this.typingUsersByConversationId[update.conversationId] ?? [];
+                this.typingUsersByConversationId[update.conversationId] = currentUsers.filter((item) => item.userId !== update.userId);
+                typingExpiryTimers.delete(key);
+            }, TYPING_TTL_MS));
         }
     }
 });
