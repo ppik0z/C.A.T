@@ -34,8 +34,8 @@ const DOCUMENT_MIME_TYPES = new Set([
 ]);
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
-const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class MediaUploadService {

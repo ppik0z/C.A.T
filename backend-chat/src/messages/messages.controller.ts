@@ -28,7 +28,7 @@ export class MessagesController {
     @Post('media')
     @UseInterceptors(FileInterceptor('file', {
         limits: {
-            fileSize: 100 * 1024 * 1024,
+            fileSize: 10 * 1024 * 1024,
         },
     }))
     async sendMedia(

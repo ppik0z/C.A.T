@@ -2,15 +2,6 @@ import type { ChatMessage } from '../types/chat';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
-const parseResponse = async <T>(response: Response, fallback: string): Promise<T> => {
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(payload?.message ?? fallback);
-  }
-
-  return await response.json() as T;
-};
-
 export const uploadMediaMessage = async (
   token: string,
   payload: {
@@ -18,6 +9,7 @@ export const uploadMediaMessage = async (
     file: File;
     caption?: string;
     clientTempId?: string;
+    onProgress?: (progress: number) => void;
   },
 ): Promise<ChatMessage> => {
   const formData = new FormData();
@@ -27,13 +19,46 @@ export const uploadMediaMessage = async (
   if (payload.caption) formData.append('caption', payload.caption);
   if (payload.clientTempId) formData.append('clientTempId', payload.clientTempId);
 
-  const response = await fetch(`${API_BASE_URL}/messages/media`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `${API_BASE_URL}/messages/media`);
+    request.setRequestHeader('Authorization', `Bearer ${token}`);
 
-  return parseResponse<ChatMessage>(response, 'Không thể gửi file.');
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      payload.onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+
+    request.onload = () => {
+      const responsePayload = parseJsonResponse(request.responseText);
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(getErrorMessage(responsePayload) ?? 'Không thể gửi file.'));
+        return;
+      }
+
+      if (!responsePayload || 'message' in responsePayload) {
+        reject(new Error('Không thể gửi file.'));
+        return;
+      }
+
+      resolve(responsePayload as ChatMessage);
+    };
+
+    request.onerror = () => reject(new Error('Không thể gửi file.'));
+    request.onabort = () => reject(new Error('Đã huỷ gửi file.'));
+    request.send(formData);
+  });
+};
+
+const parseJsonResponse = (value: string): { message?: string } | ChatMessage | null => {
+  try {
+    return JSON.parse(value) as { message?: string } | ChatMessage;
+  } catch {
+    return null;
+  }
+};
+
+const getErrorMessage = (payload: { message?: string } | ChatMessage | null): string | null => {
+  if (!payload || !('message' in payload)) return null;
+  return payload.message ?? null;
 };

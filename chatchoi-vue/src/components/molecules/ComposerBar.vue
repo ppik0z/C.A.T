@@ -17,6 +17,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 const previewUrl = ref<string | null>(null);
 const errorText = ref('');
 let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const allowedMimeTypes = new Set([
   'image/jpeg',
@@ -36,12 +37,6 @@ const allowedMimeTypes = new Set([
   'text/plain',
   'text/csv',
 ]);
-
-const maxFileBytes = (file: File) => {
-  if (file.type.startsWith('image/')) return 10 * 1024 * 1024;
-  if (file.type.startsWith('video/')) return 100 * 1024 * 1024;
-  return 25 * 1024 * 1024;
-};
 
 const isSelectedImage = computed(() => selectedFile.value?.type.startsWith('image/') ?? false);
 const isSelectedVideo = computed(() => selectedFile.value?.type.startsWith('video/') ?? false);
@@ -83,8 +78,8 @@ const handleFileSelected = (event: Event) => {
     errorText.value = 'Định dạng file không được hỗ trợ.';
     return;
   }
-  if (file.size > maxFileBytes(file)) {
-    errorText.value = 'File vượt quá dung lượng cho phép.';
+  if (file.size > MAX_FILE_BYTES) {
+    errorText.value = `File tối đa 10 MB. File này ${formatFileSize(file.size)}.`;
     return;
   }
 

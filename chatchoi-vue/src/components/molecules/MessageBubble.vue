@@ -9,12 +9,32 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const emit = defineEmits<{
+  retryMedia: [clientTempId: string];
+}>();
 
 const getSenderName = (message: ChatMessage) => {
   return message.sender?.username ?? message.senderName ?? 'Unknown';
 };
 
 const getMessageType = (message: ChatMessage) => message.type ?? 'text';
+
+const getUploadStatusText = (message: ChatMessage): string => {
+  if (message.localStatus === 'compressing' || message.localStatus === 'uploading' || message.localStatus === 'sending') {
+    return 'Đang gửi...';
+  }
+  if (message.localStatus === 'failed') return message.uploadError ?? 'Gửi thất bại';
+  return '';
+};
+
+const showUploadState = (message: ChatMessage): boolean => {
+  return ['sending', 'compressing', 'uploading', 'failed'].includes(message.localStatus ?? '');
+};
+
+const getFooterStatusText = (message: ChatMessage): string => {
+  if (showUploadState(message)) return getUploadStatusText(message);
+  return props.isOwn && props.statusText ? props.statusText : formatMessageTime(message.createdAt);
+};
 </script>
 
 <template>
@@ -83,12 +103,47 @@ const getMessageType = (message: ChatMessage) => message.type ?? 'text';
         >
           {{ props.message.content }}
         </p>
+        <div v-if="props.message.localStatus === 'failed'" class="mt-2">
+          <button
+            v-if="props.message.canRetry && props.message.clientTempId"
+            class="text-xs font-semibold text-primary hover:underline"
+            type="button"
+            @click="emit('retryMedia', props.message.clientTempId)"
+          >
+            Thử lại
+          </button>
+        </div>
       </div>
 
       <div :class="['flex items-center gap-1 text-xs text-secondary', props.isOwn ? 'flex-row-reverse' : '']">
-        <span>{{ props.isOwn && props.statusText ? props.statusText : formatMessageTime(props.message.createdAt) }}</span>
+        <span
+          v-if="['sending', 'compressing', 'uploading'].includes(props.message.localStatus ?? '')"
+          class="upload-spinner"
+          aria-hidden="true"
+        ></span>
+        <span :class="props.message.localStatus === 'failed' ? 'text-error' : ''">
+          {{ getFooterStatusText(props.message) }}
+        </span>
         <span v-if="props.isOwn" class="material-symbols-outlined text-[16px] text-primary">done_all</span>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.upload-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.75;
+  animation: upload-spin 0.8s linear infinite;
+}
+
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>
