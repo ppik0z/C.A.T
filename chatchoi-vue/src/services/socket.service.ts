@@ -6,6 +6,7 @@ import type {
     Conversation,
     ConversationListUpdate,
     LoadMessagesSuccessPayload,
+    MessageSearchResult,
     MessageStatusUpdate,
     ReadStateUpdate,
     TypingStateUpdate,
@@ -33,12 +34,21 @@ export const initSocketService = (token: string) => {
     });
 
     socket.on("load_messages_success", (payload: LoadMessagesSuccessPayload) => {
-        chatStore.setMessagesForConversation(
+        chatStore.handleMessagesLoaded(
             payload.conversationId,
             payload.messages,
             payload.messageStatuses ?? [],
             payload.memberReadStates ?? [],
+            payload.pageInfo,
         );
+    });
+
+    socket.on("search_messages_success", (payload: { conversationId: number; keyword: string; results: MessageSearchResult[] }) => {
+        chatStore.applySearchResults(payload.conversationId, payload.keyword, payload.results);
+    });
+
+    socket.on("search_messages_error", (payload: { conversationId: number; message: string }) => {
+        chatStore.setSearchError(payload.conversationId, payload.message);
     });
 
     socket.on("new_message", (msg: ChatMessage) => {

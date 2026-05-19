@@ -181,25 +181,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('load_messages')
     async handleLoadMessages(
-        @MessageBody() data: { conversationId: number, limit?: number },
+        @MessageBody() data: { conversationId: number, limit?: number, beforeIndex?: number, afterIndex?: number, anchorIndex?: number },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         try {
-            const history = await this.messagesService.getMessages(
-                client.user.userId,
-                data.conversationId,
-                data.limit || 20
-            );
-            const messageStatuses = await this.messagesService.getMessageStatuses(history.map((message) => message.id));
+            const window = await this.messagesService.getMessageWindow(client.user.userId, {
+                conversationId: data.conversationId,
+                limit: data.limit,
+                beforeIndex: data.beforeIndex,
+                afterIndex: data.afterIndex,
+                anchorIndex: data.anchorIndex,
+            });
+            const messageStatuses = await this.messagesService.getMessageStatuses(window.messages.map((message) => message.id));
             const memberReadStates = await this.readStateService.getMemberReadStates(data.conversationId);
 
             return {
                 event: 'load_messages_success',
                 data: {
                     conversationId: data.conversationId,
-                    messages: history,
+                    messages: window.messages,
                     messageStatuses,
                     memberReadStates,
+                    pageInfo: window.pageInfo,
                 },
             };
         } catch (error: unknown) {
@@ -212,6 +215,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             return {
                 event: 'error',
                 message: errorMessage,
+            };
+        }
+    }
+
+    @SubscribeMessage('search_messages')
+    async handleSearchMessages(
+        @MessageBody() data: { conversationId: number; keyword: string; limit?: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        try {
+            const results = await this.messagesService.searchMessages(client.user.userId, {
+                conversationId: data.conversationId,
+                keyword: data.keyword,
+                limit: data.limit,
+            });
+
+            return {
+                event: 'search_messages_success',
+                data: {
+                    conversationId: data.conversationId,
+                    keyword: data.keyword,
+                    results,
+                },
+            };
+        } catch (error: unknown) {
+            return {
+                event: 'search_messages_error',
+                data: {
+                    conversationId: data.conversationId,
+                    message: error instanceof Error ? error.message : 'Không thể tìm kiếm tin nhắn',
+                },
             };
         }
     }

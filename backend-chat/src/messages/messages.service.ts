@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { messages, conversations, conversationMembers, messageStatuses } from '../database/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { asc, desc, eq, and, gt, gte, inArray, like, lt } from 'drizzle-orm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { ChatMessageType, UploadedMedia } from './media-upload.service';
 
@@ -29,6 +29,32 @@ export interface MessageStatusSnapshot {
     status: MessageDeliveryStatus;
     updatedAt: Date;
 }
+
+export interface MessagePageInfo {
+    startIndex: number | null;
+    endIndex: number | null;
+    hasOlder: boolean;
+    hasNewer: boolean;
+    anchorIndex?: number;
+}
+
+export interface MessageWindow {
+    messages: Awaited<ReturnType<MessagesService['getMessages']>>;
+    pageInfo: MessagePageInfo;
+}
+
+export interface SearchMessageResult {
+    messageId: number;
+    conversationIndex: number;
+    content: string;
+    type: string;
+    senderName: string;
+    createdAt: Date;
+}
+
+const DEFAULT_MESSAGE_LIMIT = 40;
+const AROUND_BEFORE_LIMIT = 20;
+const AROUND_AFTER_LIMIT = 20;
 
 @Injectable()
 export class MessagesService {
@@ -257,8 +283,7 @@ export class MessagesService {
     }
 
     //----getMessages----
-    // TODO: Logic pagination
-    async getMessages(userId: number, conversationId: number, limit = 20) {
+    async getMessages(userId: number, conversationId: number, limit = DEFAULT_MESSAGE_LIMIT) {
         // 1. Kiểm tra quyền
         await this.validateMember(userId, conversationId);
 
@@ -275,6 +300,173 @@ export class MessagesService {
         });
 
         return results.reverse();
+    }
+
+    async getMessageWindow(
+        userId: number,
+        input: {
+            conversationId: number;
+            limit?: number;
+            beforeIndex?: number;
+            afterIndex?: number;
+            anchorIndex?: number;
+        },
+    ): Promise<MessageWindow> {
+        await this.validateMember(userId, input.conversationId);
+
+        const limit = this.normalizeLimit(input.limit);
+        if (input.anchorIndex && input.anchorIndex > 0) {
+            return this.getMessagesAround(input.conversationId, input.anchorIndex);
+        }
+        if (input.beforeIndex && input.beforeIndex > 0) {
+            return this.getMessagesBefore(input.conversationId, input.beforeIndex, limit);
+        }
+        if (input.afterIndex && input.afterIndex > 0) {
+            return this.getMessagesAfter(input.conversationId, input.afterIndex, limit);
+        }
+
+        return this.getLatestMessages(input.conversationId, limit);
+    }
+
+    async searchMessages(
+        userId: number,
+        input: { conversationId: number; keyword: string; limit?: number },
+    ): Promise<SearchMessageResult[]> {
+        await this.validateMember(userId, input.conversationId);
+
+        const keyword = input.keyword.trim();
+        if (keyword.length < 2) return [];
+
+        const limit = this.normalizeSearchLimit(input.limit);
+        const results = await this.drizzle.db.query.messages.findMany({
+            where: and(
+                eq(messages.conversationId, input.conversationId),
+                like(messages.content, `%${this.escapeLike(keyword)}%`),
+            ),
+            with: {
+                sender: {
+                    columns: { id: true, username: true }
+                }
+            },
+            orderBy: (messages, { desc }) => [desc(messages.conversationIndex)],
+            limit,
+        });
+
+        return results.map((message) => ({
+            messageId: message.id,
+            conversationIndex: message.conversationIndex,
+            content: message.content ?? '',
+            type: message.type,
+            senderName: message.sender?.username ?? `User #${message.senderId}`,
+            createdAt: message.createdAt,
+        }));
+    }
+
+    private async getLatestMessages(conversationId: number, limit: number): Promise<MessageWindow> {
+        const rows = await this.findMessages(conversationId, limit + 1, 'latest');
+        const hasOlder = rows.length > limit;
+        const windowRows = rows.slice(0, limit).reverse();
+
+        return {
+            messages: windowRows,
+            pageInfo: this.buildPageInfo(windowRows, hasOlder, false),
+        };
+    }
+
+    private async getMessagesBefore(conversationId: number, beforeIndex: number, limit: number): Promise<MessageWindow> {
+        const rows = await this.findMessages(conversationId, limit + 1, 'before', beforeIndex);
+        const hasOlder = rows.length > limit;
+        const windowRows = rows.slice(0, limit).reverse();
+
+        return {
+            messages: windowRows,
+            pageInfo: this.buildPageInfo(windowRows, hasOlder, true),
+        };
+    }
+
+    private async getMessagesAfter(conversationId: number, afterIndex: number, limit: number): Promise<MessageWindow> {
+        const rows = await this.findMessages(conversationId, limit + 1, 'after', afterIndex);
+        const hasNewer = rows.length > limit;
+        const windowRows = rows.slice(0, limit);
+
+        return {
+            messages: windowRows,
+            pageInfo: this.buildPageInfo(windowRows, true, hasNewer),
+        };
+    }
+
+    private async getMessagesAround(conversationId: number, anchorIndex: number): Promise<MessageWindow> {
+        const beforeRows = await this.findMessages(conversationId, AROUND_BEFORE_LIMIT + 1, 'before', anchorIndex);
+        const afterRows = await this.findMessages(conversationId, AROUND_AFTER_LIMIT + 1, 'from', anchorIndex);
+        const hasOlder = beforeRows.length > AROUND_BEFORE_LIMIT;
+        const hasNewer = afterRows.length > AROUND_AFTER_LIMIT;
+        const windowRows = [
+            ...beforeRows.slice(0, AROUND_BEFORE_LIMIT).reverse(),
+            ...afterRows.slice(0, AROUND_AFTER_LIMIT),
+        ];
+
+        return {
+            messages: windowRows,
+            pageInfo: {
+                ...this.buildPageInfo(windowRows, hasOlder, hasNewer),
+                anchorIndex,
+            },
+        };
+    }
+
+    private async findMessages(
+        conversationId: number,
+        limit: number,
+        mode: 'latest' | 'before' | 'after' | 'from',
+        index?: number,
+    ) {
+        const where = mode === 'before' && index
+            ? and(eq(messages.conversationId, conversationId), lt(messages.conversationIndex, index))
+            : mode === 'after' && index
+                ? and(eq(messages.conversationId, conversationId), gt(messages.conversationIndex, index))
+                : mode === 'from' && index
+                    ? and(eq(messages.conversationId, conversationId), gte(messages.conversationIndex, index))
+                    : eq(messages.conversationId, conversationId);
+
+        return await this.drizzle.db.query.messages.findMany({
+            where,
+            with: {
+                sender: {
+                    columns: { id: true, username: true, avatar: true }
+                }
+            },
+            orderBy: mode === 'after' || mode === 'from'
+                ? [asc(messages.conversationIndex)]
+                : [desc(messages.conversationIndex)],
+            limit,
+        });
+    }
+
+    private buildPageInfo(
+        rows: Awaited<ReturnType<MessagesService['findMessages']>>,
+        hasOlder: boolean,
+        hasNewer: boolean,
+    ): MessagePageInfo {
+        return {
+            startIndex: rows[0]?.conversationIndex ?? null,
+            endIndex: rows[rows.length - 1]?.conversationIndex ?? null,
+            hasOlder,
+            hasNewer,
+        };
+    }
+
+    private normalizeLimit(limit: number | undefined) {
+        if (!limit || limit < 1) return DEFAULT_MESSAGE_LIMIT;
+        return Math.min(Math.floor(limit), 60);
+    }
+
+    private normalizeSearchLimit(limit: number | undefined) {
+        if (!limit || limit < 1) return 20;
+        return Math.min(Math.floor(limit), 50);
+    }
+
+    private escapeLike(value: string) {
+        return value.replace(/[\\%_]/g, (match) => `\\${match}`);
     }
 
     async getMessageStatuses(messageIds: number[]): Promise<MessageStatusSnapshot[]> {

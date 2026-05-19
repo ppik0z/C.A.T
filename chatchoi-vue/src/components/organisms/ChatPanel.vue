@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import ChatHeader from '../molecules/ChatHeader.vue';
 import ComposerBar from '../molecules/ComposerBar.vue';
 import MessageBubble from '../molecules/MessageBubble.vue';
@@ -19,6 +19,11 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
+const scrollRef = ref<HTMLElement | null>(null);
+const searchText = ref('');
+const pendingScrollAnchorIndex = ref<number | null>(null);
+const pendingPrependHeight = ref<number | null>(null);
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
 const sortedMessages = computed(() => {
   return [...chatStore.currentMessages].sort((a, b) => {
@@ -56,8 +61,102 @@ const typingLabel = computed(() => {
   return `${users.length} người đang soạn tin...`;
 });
 
+const currentPageInfo = computed(() => {
+  return props.conversation ? chatStore.messagePageInfoByConversationId[props.conversation.id] : null;
+});
+
+const currentSearchState = computed(() => {
+  return props.conversation
+    ? chatStore.messageSearchStateByConversationId[props.conversation.id]
+    : null;
+});
+
+const activeSearchResult = computed(() => {
+  const state = currentSearchState.value;
+  if (!state || state.activeResultIndex < 0) return null;
+  return state.results[state.activeResultIndex] ?? null;
+});
+
 const getSenderId = (message: ChatMessage) => message.senderId ?? message.sender?.id;
 const isOwnMessage = (message: ChatMessage) => getSenderId(message) === chatStore.myId;
+const isActiveSearchMessage = (message: ChatMessage) => {
+  return Boolean(activeSearchResult.value && message.conversationIndex === activeSearchResult.value.conversationIndex);
+};
+
+const handleScroll = () => {
+  const element = scrollRef.value;
+  const conversationId = props.conversation?.id;
+  if (!element || !conversationId) return;
+
+  if (element.scrollTop < 120 && currentPageInfo.value?.hasOlder) {
+    pendingPrependHeight.value = element.scrollHeight;
+    chatStore.loadOlderMessages(conversationId);
+    return;
+  }
+
+  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+  if (
+    distanceFromBottom < 120 &&
+    currentPageInfo.value?.hasNewer &&
+    chatStore.messageWindowModeByConversationId[conversationId] === 'search'
+  ) {
+    chatStore.loadNewerMessages(conversationId);
+  }
+};
+
+const handleSearchInput = () => {
+  if (!props.conversation) return;
+  if (searchTimer) clearTimeout(searchTimer);
+
+  searchTimer = setTimeout(() => {
+    if (!props.conversation) return;
+    chatStore.searchMessages(props.conversation.id, searchText.value);
+  }, 250);
+};
+
+const navigateSearch = (direction: 'previous' | 'next') => {
+  if (!props.conversation) return;
+  pendingScrollAnchorIndex.value = null;
+  chatStore.navigateSearchResult(props.conversation.id, direction);
+};
+
+watch(
+  () => props.conversation?.id,
+  () => {
+    searchText.value = '';
+  },
+);
+
+watch(
+  () => currentPageInfo.value?.anchorIndex,
+  (anchorIndex) => {
+    if (anchorIndex) pendingScrollAnchorIndex.value = anchorIndex;
+  },
+);
+
+watch(
+  () => sortedMessages.value.length,
+  async () => {
+    await nextTick();
+    const element = scrollRef.value;
+    if (!element) return;
+
+    if (pendingPrependHeight.value !== null) {
+      element.scrollTop = element.scrollHeight - pendingPrependHeight.value + element.scrollTop;
+      pendingPrependHeight.value = null;
+    }
+
+    if (pendingScrollAnchorIndex.value !== null) {
+      const target = element.querySelector<HTMLElement>(`[data-message-index="${pendingScrollAnchorIndex.value}"]`);
+      target?.scrollIntoView({ block: 'center' });
+      pendingScrollAnchorIndex.value = null;
+    }
+  },
+);
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer);
+});
 </script>
 
 <template>
@@ -70,7 +169,51 @@ const isOwnMessage = (message: ChatMessage) => getSenderId(message) === chatStor
         @toggle-details="emit('toggleDetails')"
       />
 
-      <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 flex flex-col gap-5 sm:gap-6 thin-scrollbar bg-background/50">
+      <div class="px-4 sm:px-6 py-3 bg-surface-container-lowest border-b border-outline-variant">
+        <div class="flex items-center gap-2">
+          <div class="flex-1 min-w-0 flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
+            <span class="material-symbols-outlined text-[18px] text-secondary">search</span>
+            <input
+              v-model="searchText"
+              class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-outline"
+              placeholder="Tìm tin nhắn..."
+              type="search"
+              @input="handleSearchInput"
+            />
+          </div>
+
+          <button
+            class="h-9 w-9 rounded-full text-secondary hover:bg-surface-container-highest disabled:opacity-40"
+            type="button"
+            :disabled="!currentSearchState || currentSearchState.activeResultIndex <= 0"
+            @click="navigateSearch('previous')"
+          >
+            <span class="material-symbols-outlined text-[20px]">keyboard_arrow_up</span>
+          </button>
+          <button
+            class="h-9 w-9 rounded-full text-secondary hover:bg-surface-container-highest disabled:opacity-40"
+            type="button"
+            :disabled="!currentSearchState || currentSearchState.activeResultIndex >= currentSearchState.results.length - 1"
+            @click="navigateSearch('next')"
+          >
+            <span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+          </button>
+          <span class="w-16 text-right text-xs text-secondary">
+            <template v-if="currentSearchState?.loading">...</template>
+            <template v-else-if="currentSearchState && currentSearchState.results.length > 0">
+              {{ currentSearchState.activeResultIndex + 1 }}/{{ currentSearchState.results.length }}
+            </template>
+            <template v-else>0/0</template>
+          </span>
+        </div>
+        <p v-if="currentSearchState?.error" class="mt-2 text-xs text-error">{{ currentSearchState.error }}</p>
+      </div>
+
+      <div
+        ref="scrollRef"
+        class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 flex flex-col gap-5 sm:gap-6 thin-scrollbar bg-background/50"
+        @scroll.passive="handleScroll"
+      >
         <template v-for="group in messageGroups" :key="group.key">
           <div class="flex justify-center">
             <span class="px-4 py-1 bg-tertiary-container/30 text-tertiary text-xs rounded-full font-semibold uppercase tracking-wider">
@@ -81,9 +224,12 @@ const isOwnMessage = (message: ChatMessage) => getSenderId(message) === chatStor
           <MessageBubble
             v-for="message in group.messages"
             :key="message.id"
+            :data-message-index="message.conversationIndex"
+            :class="isActiveSearchMessage(message) ? 'ring-2 ring-primary/40 rounded-2xl' : ''"
             :is-own="isOwnMessage(message)"
             :message="message"
             :status-text="isOwnMessage(message) ? chatStore.getMessageDisplayStatus(message, props.conversation) : undefined"
+            @retry-media="chatStore.retryMediaMessage"
           />
         </template>
       </div>
