@@ -40,6 +40,8 @@ interface PendingMediaUpload {
     previewUrl: string;
 }
 
+type MessageLoadDirection = 'replace' | 'older' | 'newer' | 'anchor';
+
 const pendingMediaUploads = new Map<string, PendingMediaUpload>();
 
 const delay = (milliseconds: number) => new Promise<void>((resolve) => {
@@ -90,6 +92,7 @@ export const useChatStore = defineStore('chat', {
         messagesByConversationId: {} as Record<number, ChatMessage[]>,
         messagePageInfoByConversationId: {} as Record<number, MessagePageInfo>,
         messageWindowModeByConversationId: {} as Record<number, MessageWindowMode>,
+        messageLoadDirectionByConversationId: {} as Record<number, MessageLoadDirection>,
         messageSearchStateByConversationId: {} as Record<number, MessageSearchState>,
         messageStatusesByMessageId: {} as Record<number, Record<number, MessageDeliveryStatus>>,
         memberReadStatesByConversationId: {} as Record<number, MemberReadState[]>,
@@ -200,44 +203,51 @@ export const useChatStore = defineStore('chat', {
             if (loadState === 'loading' || loadState === 'loaded') return;
 
             this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageLoadDirectionByConversationId[conversationId] = 'replace';
             socket.emit('load_messages', { conversationId, limit });
         },
 
         loadLatestMessages(conversationId: number) {
             this.messageLoadStateByConversationId[conversationId] = 'loading';
             this.messageWindowModeByConversationId[conversationId] = 'latest';
+            this.messageLoadDirectionByConversationId[conversationId] = 'replace';
             socket.emit('load_messages', { conversationId, limit: MESSAGE_WINDOW_LIMIT });
         },
 
         loadOlderMessages(conversationId: number) {
             const pageInfo = this.messagePageInfoByConversationId[conversationId];
-            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return;
-            if (!pageInfo?.hasOlder || !pageInfo.startIndex) return;
+            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return false;
+            if (!pageInfo?.hasOlder || !pageInfo.startIndex) return false;
 
             this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageLoadDirectionByConversationId[conversationId] = 'older';
             socket.emit('load_messages', {
                 conversationId,
                 limit: MESSAGE_WINDOW_LIMIT,
                 beforeIndex: pageInfo.startIndex,
             });
+            return true;
         },
 
         loadNewerMessages(conversationId: number) {
             const pageInfo = this.messagePageInfoByConversationId[conversationId];
-            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return;
-            if (!pageInfo?.hasNewer || !pageInfo.endIndex) return;
+            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return false;
+            if (!pageInfo?.hasNewer || !pageInfo.endIndex) return false;
 
             this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageLoadDirectionByConversationId[conversationId] = 'newer';
             socket.emit('load_messages', {
                 conversationId,
                 limit: MESSAGE_WINDOW_LIMIT,
                 afterIndex: pageInfo.endIndex,
             });
+            return true;
         },
 
         loadMessagesAround(conversationId: number, anchorIndex: number) {
             this.messageLoadStateByConversationId[conversationId] = 'loading';
             this.messageWindowModeByConversationId[conversationId] = 'search';
+            this.messageLoadDirectionByConversationId[conversationId] = 'anchor';
             socket.emit('load_messages', {
                 conversationId,
                 limit: MESSAGE_WINDOW_LIMIT,
@@ -275,28 +285,21 @@ export const useChatStore = defineStore('chat', {
             readStates: MemberReadState[] = [],
             pageInfo?: MessagePageInfo,
         ) {
-            const currentPageInfo = this.messagePageInfoByConversationId[conversationId];
+            const loadDirection = this.messageLoadDirectionByConversationId[conversationId] ?? 'replace';
+            delete this.messageLoadDirectionByConversationId[conversationId];
 
-            if (pageInfo?.anchorIndex) {
+            if (loadDirection === 'anchor' || pageInfo?.anchorIndex) {
                 this.replaceMessageWindow(conversationId, msgs, statuses, readStates, pageInfo, 'search');
                 return;
             }
 
-            if (
-                currentPageInfo?.startIndex &&
-                pageInfo?.endIndex &&
-                pageInfo.endIndex < currentPageInfo.startIndex
-            ) {
+            if (loadDirection === 'older') {
                 this.prependOlderMessages(conversationId, msgs, pageInfo, statuses);
                 this.memberReadStatesByConversationId[conversationId] = readStates;
                 return;
             }
 
-            if (
-                currentPageInfo?.endIndex &&
-                pageInfo?.startIndex &&
-                pageInfo.startIndex > currentPageInfo.endIndex
-            ) {
+            if (loadDirection === 'newer') {
                 this.appendNewerMessages(conversationId, msgs, pageInfo, statuses);
                 this.memberReadStatesByConversationId[conversationId] = readStates;
                 return;
@@ -695,6 +698,7 @@ export const useChatStore = defineStore('chat', {
             delete this.messagesByConversationId[conversationId];
             delete this.messagePageInfoByConversationId[conversationId];
             delete this.messageWindowModeByConversationId[conversationId];
+            delete this.messageLoadDirectionByConversationId[conversationId];
             delete this.messageSearchStateByConversationId[conversationId];
             delete this.memberReadStatesByConversationId[conversationId];
             delete this.typingUsersByConversationId[conversationId];

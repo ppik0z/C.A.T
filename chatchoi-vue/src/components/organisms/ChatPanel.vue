@@ -89,8 +89,10 @@ const handleScroll = () => {
   if (!element || !conversationId) return;
 
   if (element.scrollTop < 120 && currentPageInfo.value?.hasOlder) {
-    pendingPrependHeight.value = element.scrollHeight;
-    chatStore.loadOlderMessages(conversationId);
+    const didRequest = chatStore.loadOlderMessages(conversationId);
+    if (didRequest) {
+      pendingPrependHeight.value = element.scrollHeight;
+    }
     return;
   }
 
