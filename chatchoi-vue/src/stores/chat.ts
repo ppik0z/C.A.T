@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
 import { fetchConversationDetail } from '../services/conversation.service';
+import { prepareMediaForUpload } from '../services/mediaProcessing.service';
 import { uploadMediaMessage } from '../services/message.service';
 import type {
     ChatMessage,
@@ -13,7 +14,11 @@ import type {
     MemberReadState,
     MessageDeliveryStatus,
     MessageLoadState,
+    MessagePageInfo,
+    MessageSearchResult,
+    MessageSearchState,
     MessageStatusSnapshot,
+    MessageWindowMode,
     MessageStatusUpdate,
     ReadStateUpdate,
     TypingStateUpdate,
@@ -24,7 +29,18 @@ const PREFETCH_DELAY_MS = 250;
 const CONVERSATION_DETAIL_TTL_MS = 60_000;
 const TYPING_TTL_MS = 7_000;
 const TYPING_REFRESH_MS = 2_000;
+const MAX_MEDIA_FILE_BYTES = 10 * 1024 * 1024;
+const MESSAGE_WINDOW_LIMIT = 40;
 const typingExpiryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+interface PendingMediaUpload {
+    conversationId: number;
+    file: File;
+    caption: string;
+    previewUrl: string;
+}
+
+const pendingMediaUploads = new Map<string, PendingMediaUpload>();
 
 const delay = (milliseconds: number) => new Promise<void>((resolve) => {
     setTimeout(resolve, milliseconds);
@@ -41,6 +57,24 @@ const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): Cha
     return messages.some((item) => item.id === message.id) ? messages : [...messages, message];
 };
 
+const mergeMessages = (messages: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] => {
+    return incoming.reduce((items, message) => appendUniqueMessage(items, message), messages)
+        .sort((a, b) => {
+            const indexA = a.conversationIndex ?? Number.MAX_SAFE_INTEGER;
+            const indexB = b.conversationIndex ?? Number.MAX_SAFE_INTEGER;
+            if (indexA !== indexB) return indexA - indexB;
+            return a.id - b.id;
+        });
+};
+
+const defaultSearchState = (): MessageSearchState => ({
+    keyword: '',
+    results: [],
+    activeResultIndex: -1,
+    loading: false,
+    error: null,
+});
+
 const getTypingKey = (conversationId: number, userId: number) => `${conversationId}:${userId}`;
 
 const resolveLocalMessageType = (file: File): ChatMessageType => {
@@ -49,9 +83,14 @@ const resolveLocalMessageType = (file: File): ChatMessageType => {
     return 'document';
 };
 
+const isStaticImage = (file: File) => ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+
 export const useChatStore = defineStore('chat', {
     state: () => ({
         messagesByConversationId: {} as Record<number, ChatMessage[]>,
+        messagePageInfoByConversationId: {} as Record<number, MessagePageInfo>,
+        messageWindowModeByConversationId: {} as Record<number, MessageWindowMode>,
+        messageSearchStateByConversationId: {} as Record<number, MessageSearchState>,
         messageStatusesByMessageId: {} as Record<number, Record<number, MessageDeliveryStatus>>,
         memberReadStatesByConversationId: {} as Record<number, MemberReadState[]>,
         typingUsersByConversationId: {} as Record<number, TypingUser[]>,
@@ -92,10 +131,54 @@ export const useChatStore = defineStore('chat', {
             msgs: ChatMessage[],
             statuses: MessageStatusSnapshot[] = [],
             readStates: MemberReadState[] = [],
+            pageInfo?: MessagePageInfo,
         ) {
-            this.messagesByConversationId[conversationId] = msgs;
+            this.replaceMessageWindow(conversationId, msgs, statuses, readStates, pageInfo);
+        },
+
+        replaceMessageWindow(
+            conversationId: number,
+            msgs: ChatMessage[],
+            statuses: MessageStatusSnapshot[] = [],
+            readStates: MemberReadState[] = [],
+            pageInfo?: MessagePageInfo,
+            mode: MessageWindowMode = 'latest',
+        ) {
+            this.messagesByConversationId[conversationId] = mergeMessages([], msgs);
             this.setMessageStatuses(statuses);
             this.memberReadStatesByConversationId[conversationId] = readStates;
+            if (pageInfo) this.messagePageInfoByConversationId[conversationId] = pageInfo;
+            this.messageWindowModeByConversationId[conversationId] = mode;
+            this.messageLoadStateByConversationId[conversationId] = 'loaded';
+        },
+
+        prependOlderMessages(conversationId: number, msgs: ChatMessage[], pageInfo?: MessagePageInfo, statuses: MessageStatusSnapshot[] = []) {
+            this.messagesByConversationId[conversationId] = mergeMessages(msgs, this.messagesByConversationId[conversationId] ?? []);
+            this.setMessageStatuses(statuses);
+            if (pageInfo) {
+                const current = this.messagePageInfoByConversationId[conversationId];
+                this.messagePageInfoByConversationId[conversationId] = {
+                    ...pageInfo,
+                    endIndex: current?.endIndex ?? pageInfo.endIndex,
+                    hasNewer: current?.hasNewer ?? pageInfo.hasNewer,
+                    anchorIndex: current?.anchorIndex,
+                };
+            }
+            this.messageLoadStateByConversationId[conversationId] = 'loaded';
+        },
+
+        appendNewerMessages(conversationId: number, msgs: ChatMessage[], pageInfo?: MessagePageInfo, statuses: MessageStatusSnapshot[] = []) {
+            this.messagesByConversationId[conversationId] = mergeMessages(this.messagesByConversationId[conversationId] ?? [], msgs);
+            this.setMessageStatuses(statuses);
+            if (pageInfo) {
+                const current = this.messagePageInfoByConversationId[conversationId];
+                this.messagePageInfoByConversationId[conversationId] = {
+                    ...pageInfo,
+                    startIndex: current?.startIndex ?? pageInfo.startIndex,
+                    hasOlder: current?.hasOlder ?? pageInfo.hasOlder,
+                    anchorIndex: current?.anchorIndex,
+                };
+            }
             this.messageLoadStateByConversationId[conversationId] = 'loaded';
         },
 
@@ -112,12 +195,54 @@ export const useChatStore = defineStore('chat', {
             this.messageLoadStateByConversationId[conversationId] = 'error';
         },
 
-        requestMessagesForConversation(conversationId: number, limit = 20) {
+        requestMessagesForConversation(conversationId: number, limit = MESSAGE_WINDOW_LIMIT) {
             const loadState = this.messageLoadStateByConversationId[conversationId] ?? 'idle';
             if (loadState === 'loading' || loadState === 'loaded') return;
 
             this.messageLoadStateByConversationId[conversationId] = 'loading';
             socket.emit('load_messages', { conversationId, limit });
+        },
+
+        loadLatestMessages(conversationId: number) {
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageWindowModeByConversationId[conversationId] = 'latest';
+            socket.emit('load_messages', { conversationId, limit: MESSAGE_WINDOW_LIMIT });
+        },
+
+        loadOlderMessages(conversationId: number) {
+            const pageInfo = this.messagePageInfoByConversationId[conversationId];
+            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return;
+            if (!pageInfo?.hasOlder || !pageInfo.startIndex) return;
+
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            socket.emit('load_messages', {
+                conversationId,
+                limit: MESSAGE_WINDOW_LIMIT,
+                beforeIndex: pageInfo.startIndex,
+            });
+        },
+
+        loadNewerMessages(conversationId: number) {
+            const pageInfo = this.messagePageInfoByConversationId[conversationId];
+            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return;
+            if (!pageInfo?.hasNewer || !pageInfo.endIndex) return;
+
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            socket.emit('load_messages', {
+                conversationId,
+                limit: MESSAGE_WINDOW_LIMIT,
+                afterIndex: pageInfo.endIndex,
+            });
+        },
+
+        loadMessagesAround(conversationId: number, anchorIndex: number) {
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageWindowModeByConversationId[conversationId] = 'search';
+            socket.emit('load_messages', {
+                conversationId,
+                limit: MESSAGE_WINDOW_LIMIT,
+                anchorIndex,
+            });
         },
 
         async prefetchMessagesForConversations(conversationIds: number[]) {
@@ -141,6 +266,114 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit('join_room', { conversationId });
             this.requestMessagesForConversation(conversationId);
+        },
+
+        handleMessagesLoaded(
+            conversationId: number,
+            msgs: ChatMessage[],
+            statuses: MessageStatusSnapshot[] = [],
+            readStates: MemberReadState[] = [],
+            pageInfo?: MessagePageInfo,
+        ) {
+            const currentPageInfo = this.messagePageInfoByConversationId[conversationId];
+
+            if (pageInfo?.anchorIndex) {
+                this.replaceMessageWindow(conversationId, msgs, statuses, readStates, pageInfo, 'search');
+                return;
+            }
+
+            if (
+                currentPageInfo?.startIndex &&
+                pageInfo?.endIndex &&
+                pageInfo.endIndex < currentPageInfo.startIndex
+            ) {
+                this.prependOlderMessages(conversationId, msgs, pageInfo, statuses);
+                this.memberReadStatesByConversationId[conversationId] = readStates;
+                return;
+            }
+
+            if (
+                currentPageInfo?.endIndex &&
+                pageInfo?.startIndex &&
+                pageInfo.startIndex > currentPageInfo.endIndex
+            ) {
+                this.appendNewerMessages(conversationId, msgs, pageInfo, statuses);
+                this.memberReadStatesByConversationId[conversationId] = readStates;
+                return;
+            }
+
+            this.replaceMessageWindow(
+                conversationId,
+                msgs,
+                statuses,
+                readStates,
+                pageInfo,
+                this.messageWindowModeByConversationId[conversationId] ?? 'latest',
+            );
+        },
+
+        searchMessages(conversationId: number, keyword: string) {
+            const trimmedKeyword = keyword.trim();
+            const currentState = this.messageSearchStateByConversationId[conversationId] ?? defaultSearchState();
+
+            this.messageSearchStateByConversationId[conversationId] = {
+                ...currentState,
+                keyword,
+                loading: trimmedKeyword.length >= 2,
+                error: null,
+                results: trimmedKeyword.length >= 2 ? currentState.results : [],
+                activeResultIndex: trimmedKeyword.length >= 2 ? currentState.activeResultIndex : -1,
+            };
+
+            if (trimmedKeyword.length < 2) return;
+
+            socket.emit('search_messages', {
+                conversationId,
+                keyword: trimmedKeyword,
+                limit: 20,
+            });
+        },
+
+        applySearchResults(conversationId: number, keyword: string, results: MessageSearchResult[]) {
+            const currentKeyword = this.messageSearchStateByConversationId[conversationId]?.keyword.trim();
+            if (currentKeyword && currentKeyword !== keyword.trim()) return;
+
+            this.messageSearchStateByConversationId[conversationId] = {
+                keyword,
+                results,
+                activeResultIndex: results.length > 0 ? 0 : -1,
+                loading: false,
+                error: null,
+            };
+
+            if (results[0]) {
+                this.loadMessagesAround(conversationId, results[0].conversationIndex);
+            }
+        },
+
+        setSearchError(conversationId: number, message: string) {
+            const currentState = this.messageSearchStateByConversationId[conversationId] ?? defaultSearchState();
+            this.messageSearchStateByConversationId[conversationId] = {
+                ...currentState,
+                loading: false,
+                error: message,
+            };
+        },
+
+        navigateSearchResult(conversationId: number, direction: 'previous' | 'next') {
+            const state = this.messageSearchStateByConversationId[conversationId];
+            if (!state || state.results.length === 0) return;
+
+            const delta = direction === 'next' ? 1 : -1;
+            const nextIndex = Math.min(Math.max(state.activeResultIndex + delta, 0), state.results.length - 1);
+            const result = state.results[nextIndex];
+            if (!result) return;
+
+            this.messageSearchStateByConversationId[conversationId] = {
+                ...state,
+                activeResultIndex: nextIndex,
+            };
+            this.loadMessagesAround(conversationId, result.conversationIndex);
         },
 
         // Xóa số lượng tin nhắn chưa đọc của một phòng
@@ -214,9 +447,11 @@ export const useChatStore = defineStore('chat', {
 
             const token = localStorage.getItem('accessToken');
             if (!token) throw new Error('Bạn cần đăng nhập để gửi file.');
+            if (file.size > MAX_MEDIA_FILE_BYTES) throw new Error('File tối đa 10 MB.');
 
             const clientTempId = crypto.randomUUID();
             const conversationId = this.currentConversationId;
+            const previewUrl = URL.createObjectURL(file);
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
@@ -224,29 +459,104 @@ export const useChatStore = defineStore('chat', {
                 type: resolveLocalMessageType(file),
                 content: caption.trim(),
                 createdAt: new Date(),
-                fileUrl: URL.createObjectURL(file),
+                fileUrl: previewUrl,
                 fileName: file.name,
                 fileMimeType: file.type,
                 fileSizeBytes: file.size,
+                originalFileSizeBytes: file.size,
+                uploadProgress: 0,
+                compressionProgress: 0,
                 senderId: this.myId ?? undefined,
                 senderName: this.myUserName,
                 sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
                 localStatus: 'sending',
             };
 
+            pendingMediaUploads.set(clientTempId, {
+                conversationId,
+                file,
+                caption: caption.trim(),
+                previewUrl,
+            });
             this.pushMessage(optimisticMessage);
             this.stopTyping(conversationId);
+            await this.uploadPendingMedia(clientTempId, token);
+        },
 
+        async retryMediaMessage(clientTempId: string) {
+            const pendingUpload = pendingMediaUploads.get(clientTempId);
+            const token = localStorage.getItem('accessToken');
+            if (!pendingUpload || !token) return;
+
+            await this.uploadPendingMedia(clientTempId, token);
+        },
+
+        async uploadPendingMedia(clientTempId: string, token: string) {
+            const pendingUpload = pendingMediaUploads.get(clientTempId);
+            if (!pendingUpload) return;
+
+            this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                localStatus: 'sending',
+                uploadError: undefined,
+                canRetry: false,
+                uploadProgress: 0,
+                compressionProgress: 0,
+            });
+
+            let uploadFile = pendingUpload.file;
             try {
+                if (pendingUpload.file.size > MAX_MEDIA_FILE_BYTES) {
+                    throw new Error('File tối đa 10 MB.');
+                }
+
+                if (isStaticImage(pendingUpload.file)) {
+                    this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                        localStatus: 'compressing',
+                    });
+                    const processedFile = await prepareMediaForUpload(pendingUpload.file, {
+                        onCompressionProgress: (progress) => {
+                            this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                                compressionProgress: progress,
+                            });
+                        },
+                    });
+                    uploadFile = processedFile.file;
+
+                    if (uploadFile.size > MAX_MEDIA_FILE_BYTES) {
+                        throw new Error('Ảnh WebP sau khi chuyển đổi vẫn vượt quá 10 MB.');
+                    }
+
+                    this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                        fileName: uploadFile.name,
+                        fileMimeType: uploadFile.type,
+                        fileSizeBytes: uploadFile.size,
+                        compressedFileSizeBytes: uploadFile.size,
+                        compressionProgress: 100,
+                    });
+                }
+
+                this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                    localStatus: 'uploading',
+                    uploadProgress: 0,
+                });
+
                 const response = await uploadMediaMessage(token, {
-                    conversationId,
-                    file,
-                    caption: caption.trim(),
+                    conversationId: pendingUpload.conversationId,
+                    file: uploadFile,
+                    caption: pendingUpload.caption,
                     clientTempId,
+                    onProgress: (progress) => {
+                        this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
+                            uploadProgress: progress,
+                        });
+                    },
                 });
                 this.pushMessage(response);
+                URL.revokeObjectURL(pendingUpload.previewUrl);
+                pendingMediaUploads.delete(clientTempId);
             } catch (error) {
-                this.markLocalMessageFailed(conversationId, clientTempId);
+                const message = error instanceof Error ? error.message : 'Không thể gửi file.';
+                this.markLocalMessageFailed(pendingUpload.conversationId, clientTempId, message);
                 console.error(error);
             }
         },
@@ -286,11 +596,19 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
-        markLocalMessageFailed(conversationId: number, clientTempId: string) {
+        markLocalMessageFailed(conversationId: number, clientTempId: string, uploadError = 'Không thể gửi file.') {
+            this.updateLocalMessage(conversationId, clientTempId, {
+                localStatus: 'failed',
+                uploadError,
+                canRetry: true,
+            });
+        },
+
+        updateLocalMessage(conversationId: number, clientTempId: string, patch: Partial<ChatMessage>) {
             const messages = this.messagesByConversationId[conversationId] ?? [];
             this.messagesByConversationId[conversationId] = messages.map((message) => {
                 return message.clientTempId === clientTempId
-                    ? { ...message, localStatus: 'failed' as const }
+                    ? { ...message, ...patch }
                     : message;
             });
         },
@@ -375,6 +693,9 @@ export const useChatStore = defineStore('chat', {
         removeConversation(conversationId: number) {
             this.conversations = this.conversations.filter((conversation) => conversation.id !== conversationId);
             delete this.messagesByConversationId[conversationId];
+            delete this.messagePageInfoByConversationId[conversationId];
+            delete this.messageWindowModeByConversationId[conversationId];
+            delete this.messageSearchStateByConversationId[conversationId];
             delete this.memberReadStatesByConversationId[conversationId];
             delete this.typingUsersByConversationId[conversationId];
             delete this.messageLoadStateByConversationId[conversationId];
@@ -466,6 +787,8 @@ export const useChatStore = defineStore('chat', {
 
         getMessageDisplayStatus(message: ChatMessage, conversation: Conversation | null) {
             if (message.localStatus === 'sending') return 'Đang gửi';
+            if (message.localStatus === 'compressing') return 'Đang nén';
+            if (message.localStatus === 'uploading') return 'Đang tải lên';
             if (message.localStatus === 'failed') return 'Gửi thất bại';
             if (!conversation || this.myId === null) return 'Đã gửi';
 

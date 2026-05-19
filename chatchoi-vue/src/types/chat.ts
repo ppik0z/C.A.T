@@ -41,7 +41,13 @@ export interface ChatMessage {
   fileHeight?: number | null;
   senderId?: number;
   senderName?: string;
-  localStatus?: 'sending' | 'sent' | 'failed';
+  localStatus?: 'sending' | 'compressing' | 'uploading' | 'sent' | 'failed';
+  uploadProgress?: number;
+  compressionProgress?: number;
+  uploadError?: string;
+  originalFileSizeBytes?: number;
+  compressedFileSizeBytes?: number;
+  canRetry?: boolean;
   sender?: {
     id: number;
     username: string;
@@ -124,6 +130,33 @@ export interface TypingUser {
   username: string;
 }
 
+export interface MessagePageInfo {
+  startIndex: number | null;
+  endIndex: number | null;
+  hasOlder: boolean;
+  hasNewer: boolean;
+  anchorIndex?: number;
+}
+
+export type MessageWindowMode = 'latest' | 'search';
+
+export interface MessageSearchResult {
+  messageId: number;
+  conversationIndex: number;
+  content: string;
+  type: ChatMessageType;
+  senderName: string;
+  createdAt: string | Date;
+}
+
+export interface MessageSearchState {
+  keyword: string;
+  results: MessageSearchResult[];
+  activeResultIndex: number;
+  loading: boolean;
+  error: string | null;
+}
+
 export type MessageLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 export type ConversationDetailLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -132,4 +165,5 @@ export interface LoadMessagesSuccessPayload {
   messages: ChatMessage[];
   messageStatuses?: MessageStatusSnapshot[];
   memberReadStates?: MemberReadState[];
+  pageInfo?: MessagePageInfo;
 }
