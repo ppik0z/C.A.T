@@ -29,7 +29,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
         {
           name: 'short',
           ttl: 10000, // 10 giây
-          limit: 5,   // Tối đa 5 requests 
+          limit: 30,   // Tối đa 30 requests 
         },
       ],
       storage: new ThrottlerStorageRedisService(
