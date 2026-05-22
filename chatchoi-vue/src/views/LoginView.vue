@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useChatStore } from '../stores/chat';
 import { useFriendsStore } from '../stores/friends';
 import { initSocketService } from '../services/socket.service';
+import { apiBaseUrl } from '../config/api';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
@@ -13,7 +14,7 @@ const isLoading = ref(false);
 const handleLogin = async () => {
   isLoading.value = true;
   try {
-    const response = await fetch('http://localhost:3000/auth/login', {
+    const response = await fetch(`${apiBaseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: username.value, password: password.value })

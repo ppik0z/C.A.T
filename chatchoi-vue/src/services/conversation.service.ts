@@ -1,6 +1,5 @@
 import type { Conversation } from '../types/chat';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import { apiBaseUrl } from '../config/api';
 
 const authHeaders = (token: string, json = false) => ({
   Authorization: `Bearer ${token}`,
@@ -17,7 +16,7 @@ const parseResponse = async <T>(response: Response, fallback: string): Promise<T
 };
 
 export const fetchConversations = async (token: string): Promise<Conversation[]> => {
-  const response = await fetch(`${API_BASE_URL}/conversations`, {
+  const response = await fetch(`${apiBaseUrl}/conversations`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -26,7 +25,7 @@ export const fetchConversations = async (token: string): Promise<Conversation[]>
 };
 
 export const accessDirectConversation = async (token: string, friendId: number): Promise<{ id: number }> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/access/${friendId}`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/access/${friendId}`, {
     method: 'POST',
     headers: authHeaders(token),
   });
@@ -38,7 +37,7 @@ export const createGroupConversation = async (
   token: string,
   payload: { name: string; avatarGroup?: string | null; memberIds: number[] },
 ): Promise<Conversation> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/groups`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/groups`, {
     method: 'POST',
     headers: authHeaders(token, true),
     body: JSON.stringify(payload),
@@ -48,7 +47,7 @@ export const createGroupConversation = async (
 };
 
 export const fetchConversationDetail = async (token: string, conversationId: number): Promise<Conversation> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -61,7 +60,7 @@ export const updateConversation = async (
   conversationId: number,
   payload: { name?: string; avatarGroup?: string | null },
 ): Promise<Conversation> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}`, {
     method: 'PATCH',
     headers: authHeaders(token, true),
     body: JSON.stringify(payload),
@@ -75,7 +74,7 @@ export const addConversationMembers = async (
   conversationId: number,
   memberIds: number[],
 ): Promise<Conversation> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/members`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/members`, {
     method: 'POST',
     headers: authHeaders(token, true),
     body: JSON.stringify({ memberIds }),
@@ -89,7 +88,7 @@ export const removeConversationMember = async (
   conversationId: number,
   userId: number,
 ): Promise<{ removed: boolean }> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}/members/${userId}`, {
+  const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/members/${userId}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });

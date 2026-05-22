@@ -1,6 +1,5 @@
 import type { FriendRequest, FriendUser } from '../types/friends';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import { apiBaseUrl } from '../config/api';
 
 const authHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
@@ -16,7 +15,7 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
 };
 
 export const fetchFriends = async (token: string): Promise<FriendUser[]> => {
-  const response = await fetch(`${API_BASE_URL}/friends`, {
+  const response = await fetch(`${apiBaseUrl}/friends`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -25,7 +24,7 @@ export const fetchFriends = async (token: string): Promise<FriendUser[]> => {
 };
 
 export const fetchFriendRequests = async (token: string, type: 'incoming' | 'outgoing'): Promise<FriendRequest[]> => {
-  const response = await fetch(`${API_BASE_URL}/friends/requests?type=${type}`, {
+  const response = await fetch(`${apiBaseUrl}/friends/requests?type=${type}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -34,7 +33,7 @@ export const fetchFriendRequests = async (token: string, type: 'incoming' | 'out
 };
 
 export const searchFriends = async (token: string, query: string): Promise<FriendUser[]> => {
-  const response = await fetch(`${API_BASE_URL}/friends/search?q=${encodeURIComponent(query)}`, {
+  const response = await fetch(`${apiBaseUrl}/friends/search?q=${encodeURIComponent(query)}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -43,7 +42,7 @@ export const searchFriends = async (token: string, query: string): Promise<Frien
 };
 
 export const fetchFriendSuggestions = async (token: string): Promise<FriendUser[]> => {
-  const response = await fetch(`${API_BASE_URL}/friends/suggestions`, {
+  const response = await fetch(`${apiBaseUrl}/friends/suggestions`, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -52,7 +51,7 @@ export const fetchFriendSuggestions = async (token: string): Promise<FriendUser[
 };
 
 export const sendFriendRequest = async (token: string, userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/friends/requests/${userId}`, {
+  const response = await fetch(`${apiBaseUrl}/friends/requests/${userId}`, {
     method: 'POST',
     headers: authHeaders(token),
   });
@@ -61,7 +60,7 @@ export const sendFriendRequest = async (token: string, userId: number): Promise<
 };
 
 export const cancelFriendRequest = async (token: string, userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/friends/requests/${userId}`, {
+  const response = await fetch(`${apiBaseUrl}/friends/requests/${userId}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -70,7 +69,7 @@ export const cancelFriendRequest = async (token: string, userId: number): Promis
 };
 
 export const acceptFriendRequest = async (token: string, userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/friends/requests/${userId}/accept`, {
+  const response = await fetch(`${apiBaseUrl}/friends/requests/${userId}/accept`, {
     method: 'POST',
     headers: authHeaders(token),
   });
@@ -79,7 +78,7 @@ export const acceptFriendRequest = async (token: string, userId: number): Promis
 };
 
 export const rejectFriendRequest = async (token: string, userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/friends/requests/${userId}/reject`, {
+  const response = await fetch(`${apiBaseUrl}/friends/requests/${userId}/reject`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -88,7 +87,7 @@ export const rejectFriendRequest = async (token: string, userId: number): Promis
 };
 
 export const removeFriend = async (token: string, userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/friends/${userId}`, {
+  const response = await fetch(`${apiBaseUrl}/friends/${userId}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
