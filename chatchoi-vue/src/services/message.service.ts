@@ -1,6 +1,5 @@
 import type { ChatMessage } from '../types/chat';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+import { apiBaseUrl } from '../config/api';
 
 export const uploadMediaMessage = async (
   token: string,
@@ -21,7 +20,7 @@ export const uploadMediaMessage = async (
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open('POST', `${API_BASE_URL}/messages/media`);
+    request.open('POST', `${apiBaseUrl}/messages/media`);
     request.setRequestHeader('Authorization', `Bearer ${token}`);
 
     request.upload.onprogress = (event) => {
