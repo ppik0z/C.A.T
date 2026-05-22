@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 export interface MessageCreatedEvent {
     id: number;
     content: string;
+    previewContent: string;
     conversationId: number;
     senderId: number;
     senderName: string;
@@ -27,7 +28,7 @@ export class MessagesListener {
             .set({
                 lastMessageId: payload.id,
                 lastMessageIndex: payload.conversationIndex,
-                lastMessageContent: payload.content,
+                lastMessageContent: payload.previewContent,
                 lastMessageSenderName: payload.senderName,
                 updatedAt: new Date(), 
             })

@@ -33,6 +33,26 @@ export class ReadStateService {
         await pipeline.exec();
     }
 
+    async getMemberReadStates(conversationId: number) {
+        const members = await this.drizzle.db
+            .select({
+                userId: conversationMembers.userId,
+                username: conversationMembers.username,
+                lastSeenMessageIndex: conversationMembers.lastSeenMessageIndex,
+            })
+            .from(conversationMembers)
+            .where(eq(conversationMembers.conversationId, conversationId));
+
+        return Promise.all(members.map(async (member) => {
+            const cachedIndex = await this.redis.hget(`read_states:${member.userId}`, conversationId.toString());
+            return {
+                userId: member.userId,
+                username: member.username,
+                lastSeenMessageIndex: cachedIndex ? parseInt(cachedIndex, 10) : member.lastSeenMessageIndex,
+            };
+        }));
+    }
+
     /**
      * CRONJOB: Đồng bộ mốc đọc xuống MySQL
      */

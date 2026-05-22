@@ -20,6 +20,10 @@ import { conversationMembers } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import { ReadStateService } from '../read-state/read-state.service';
+import { OnEvent } from '@nestjs/event-emitter';
+import { ConversationsService } from '../conversations/conversations.service';
+import { RedisService } from '@liaoliaots/nestjs-redis';
+import Redis from 'ioredis';
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
@@ -27,6 +31,8 @@ import { ReadStateService } from '../read-state/read-state.service';
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private offlineTimers = new Map<number, NodeJS.Timeout>();
+    private readonly redis: Redis;
+    private readonly typingTtlSeconds = 6;
 
     constructor(
         private readonly messagesService: MessagesService,
@@ -34,7 +40,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         private readonly friendshipsService: FriendshipsService,
         private drizzle: DrizzleService,
         private readonly readStateService: ReadStateService,
-    ) { }
+        private readonly conversationsService: ConversationsService,
+        private readonly redisService: RedisService,
+    ) {
+        this.redis = this.redisService.getOrThrow();
+    }
 
     async handleConnection(client: AuthenticatedSocket) {
         const userId = client.user?.userId;
@@ -81,6 +91,64 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return { status: 'ack' };
     }
 
+    @OnEvent('conversation.upsert')
+    async handleConversationUpsert(payload: { userIds: number[]; conversationId: number }) {
+        await Promise.all(payload.userIds.map(async (userId) => {
+            const conversation = await this.conversationsService.buildConversationForUser(userId, payload.conversationId);
+            this.server.to(`user_${userId}`).emit('conversation_upsert', conversation);
+        }));
+    }
+
+    @OnEvent('conversation.removed')
+    handleConversationRemoved(payload: { userId: number; conversationId: number }) {
+        this.server.to(`user_${payload.userId}`).emit('conversation_removed', {
+            conversationId: payload.conversationId,
+        });
+    }
+
+    @OnEvent('message.created')
+    async handleMessageCreated(payload: {
+        id: number;
+        content: string;
+        previewContent: string;
+        type: string;
+        fileUrl?: string | null;
+        filePublicId?: string | null;
+        fileResourceType?: string | null;
+        fileName?: string | null;
+        fileMimeType?: string | null;
+        fileSizeBytes?: number | null;
+        fileFormat?: string | null;
+        fileWidth?: number | null;
+        fileHeight?: number | null;
+        conversationId: number;
+        senderId: number;
+        senderName: string;
+        conversationIndex: number;
+        createdAt: Date;
+        clientTempId?: string;
+    }) {
+        this.server.to(`conv_${payload.conversationId}`).emit('new_message', {
+            ...payload,
+            sender: { id: payload.senderId, username: payload.senderName },
+        });
+
+        const members = await this.drizzle.db
+            .select({ userId: conversationMembers.userId })
+            .from(conversationMembers)
+            .where(eq(conversationMembers.conversationId, payload.conversationId));
+
+        members.forEach((member) => {
+            this.server.to(`user_${member.userId}`).emit('update_conversation_list', {
+                conversationId: payload.conversationId,
+                lastMessageContent: payload.previewContent,
+                senderName: payload.senderName,
+                lastMessageId: payload.id,
+                lastMessageIndex: payload.conversationIndex,
+            });
+        });
+    }
+
 
     @SkipThrottle()
     @SubscribeMessage('join_room')
@@ -91,58 +159,50 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content: string, senderName: string },
+        @MessageBody() data: { conversationId: number; content?: string, senderName: string, clientTempId?: string, type?: 'text' | 'gif', fileUrl?: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const senderId = client.user.userId;
 
-        // 1. Lưu tin nhắn
-        const savedMsg = await this.messagesService.sendMessage(senderId, data.conversationId, data.content, data.senderName);
-
-        // 2. Phát cho những người ĐANG MỞ PHÒNG
-        this.server.to(`conv_${data.conversationId}`).emit('new_message', {
-            ...savedMsg,
-            senderId: senderId,
-            sender: { id: senderId, username: data.senderName },
-        });
-
-        // 3. Tìm những người trong cuộc trò chuyện
-        const members = await this.drizzle.db
-            .select({ userId: conversationMembers.userId })
-            .from(conversationMembers)
-            .where(eq(conversationMembers.conversationId, data.conversationId));
-
-        // Bắn thông báo 'update_conversation_list' thẳng vào kênh cá nhân của từng người
-        members.forEach((m) => {
-            this.server.to(`user_${m.userId}`).emit('update_conversation_list', {
-                conversationId: data.conversationId,
-                lastMessageContent: data.content,
-                senderName: data.senderName,
-                lastMessageId: savedMsg.id,
-                lastMessageIndex: savedMsg.conversationIndex,
-            });
-        });
-
-        return savedMsg;
+        return this.messagesService.sendMessage(
+            senderId,
+            data.conversationId,
+            data.content ?? '',
+            client.user.username,
+            data.clientTempId,
+            {
+                type: data.type,
+                content: data.content,
+                fileUrl: data.fileUrl,
+                clientTempId: data.clientTempId,
+            },
+        );
     }
 
     @SubscribeMessage('load_messages')
     async handleLoadMessages(
-        @MessageBody() data: { conversationId: number, limit?: number },
+        @MessageBody() data: { conversationId: number, limit?: number, beforeIndex?: number, afterIndex?: number, anchorIndex?: number },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         try {
-            const history = await this.messagesService.getMessages(
-                client.user.userId,
-                data.conversationId,
-                data.limit || 20
-            );
+            const window = await this.messagesService.getMessageWindow(client.user.userId, {
+                conversationId: data.conversationId,
+                limit: data.limit,
+                beforeIndex: data.beforeIndex,
+                afterIndex: data.afterIndex,
+                anchorIndex: data.anchorIndex,
+            });
+            const messageStatuses = await this.messagesService.getMessageStatuses(window.messages.map((message) => message.id));
+            const memberReadStates = await this.readStateService.getMemberReadStates(data.conversationId);
 
             return {
                 event: 'load_messages_success',
                 data: {
                     conversationId: data.conversationId,
-                    messages: history,
+                    messages: window.messages,
+                    messageStatuses,
+                    memberReadStates,
+                    pageInfo: window.pageInfo,
                 },
             };
         } catch (error: unknown) {
@@ -157,6 +217,56 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 message: errorMessage,
             };
         }
+    }
+
+    @SubscribeMessage('search_messages')
+    async handleSearchMessages(
+        @MessageBody() data: { conversationId: number; keyword: string; limit?: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        try {
+            const results = await this.messagesService.searchMessages(client.user.userId, {
+                conversationId: data.conversationId,
+                keyword: data.keyword,
+                limit: data.limit,
+            });
+
+            return {
+                event: 'search_messages_success',
+                data: {
+                    conversationId: data.conversationId,
+                    keyword: data.keyword,
+                    results,
+                },
+            };
+        } catch (error: unknown) {
+            return {
+                event: 'search_messages_error',
+                data: {
+                    conversationId: data.conversationId,
+                    message: error instanceof Error ? error.message : 'Không thể tìm kiếm tin nhắn',
+                },
+            };
+        }
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('message_delivered')
+    async handleMessageDelivered(
+        @MessageBody() data: { conversationId: number; messageId: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        const statusUpdate = await this.messagesService.markMessageDelivered(
+            client.user.userId,
+            data.conversationId,
+            data.messageId,
+        );
+
+        if (statusUpdate) {
+            this.server.to(`conv_${data.conversationId}`).emit('message_status_updated', statusUpdate);
+        }
+
+        return { status: 'ack' };
     }
 
     @SkipThrottle()
@@ -176,7 +286,64 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             lastMessageIndex: data.lastMessageIndex
         });
 
+        this.server.to(`conv_${data.conversationId}`).emit('read_state_updated', {
+            conversationId: data.conversationId,
+            userId,
+            username: client.user.username,
+            lastSeenMessageIndex: data.lastMessageIndex,
+        });
+
         return { status: 'ack' };
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('typing_start')
+    async handleTypingStart(
+        @MessageBody() data: { conversationId: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        await this.messagesService.validateMember(client.user.userId, data.conversationId);
+        await this.redis.set(
+            this.getTypingKey(data.conversationId, client.user.userId),
+            client.user.username,
+            'EX',
+            this.typingTtlSeconds,
+        );
+
+        client.to(`conv_${data.conversationId}`).emit('typing_state_changed', {
+            conversationId: data.conversationId,
+            userId: client.user.userId,
+            username: client.user.username,
+            isTyping: true,
+        });
+
+        return { status: 'ack' };
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('typing_stop')
+    async handleTypingStop(
+        @MessageBody() data: { conversationId: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        await this.messagesService.validateMember(client.user.userId, data.conversationId);
+        await this.clearTypingState(client, data.conversationId);
+
+        return { status: 'ack' };
+    }
+
+    private async clearTypingState(client: AuthenticatedSocket, conversationId: number) {
+        await this.redis.del(this.getTypingKey(conversationId, client.user.userId));
+        client.to(`conv_${conversationId}`).emit('typing_state_changed', {
+            conversationId,
+            userId: client.user.userId,
+            username: client.user.username,
+            isTyping: false,
+        });
+    }
+
+    private getTypingKey(conversationId: number, userId: number) {
+        return `typing:${conversationId}:${userId}`;
     }
 
 

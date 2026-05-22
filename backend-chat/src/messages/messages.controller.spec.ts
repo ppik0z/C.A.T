@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessagesController } from './messages.controller';
+import { MediaUploadService } from './media-upload.service';
 import { MessagesService } from './messages.service';
 
 describe('MessagesController', () => {
@@ -11,6 +12,10 @@ describe('MessagesController', () => {
       providers: [
         {
           provide: MessagesService,
+          useValue: {},
+        },
+        {
+          provide: MediaUploadService,
           useValue: {},
         },
       ],

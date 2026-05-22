@@ -32,10 +32,10 @@ const emit = defineEmits<{
   >
     <UserHoverCard :conversation="props.conversation">
       <Avatar
-        :avatar-url="getConversationUser(props.conversation)?.avatar"
-        :is-online="props.conversation.isOnline"
+        :avatar-url="props.conversation.isGroup ? props.conversation.avatarGroup : getConversationUser(props.conversation)?.avatar"
+        :is-online="!props.conversation.isGroup && props.conversation.isOnline"
         :name="getConversationName(props.conversation)"
-        show-status
+        :show-status="!props.conversation.isGroup"
         size="lg"
       />
     </UserHoverCard>
