@@ -14,6 +14,7 @@ const chatStore = useChatStore();
 const activeSection = ref<AppSection>('messages');
 const mobileView = ref<MobileView>('list');
 const isDetailsOpen = ref(false);
+const isMessageSearchOpen = ref(false);
 
 const currentConversation = computed(() => {
   return chatStore.conversations.find((conversation) => conversation.id === chatStore.currentConversationId) ?? null;
@@ -25,6 +26,7 @@ watch(
   () => chatStore.currentConversationId,
   () => {
     isDetailsOpen.value = false;
+    isMessageSearchOpen.value = false;
   },
 );
 
@@ -35,18 +37,26 @@ const handleConversationSelected = () => {
 const handleBackToList = () => {
   mobileView.value = 'list';
   isDetailsOpen.value = false;
+  isMessageSearchOpen.value = false;
 };
 
 const handleNavigate = (section: AppSection) => {
   activeSection.value = section;
   if (section === 'friends') {
     isDetailsOpen.value = false;
+    isMessageSearchOpen.value = false;
     mobileView.value = 'list';
   }
 };
 
 const handleOpenMessages = () => {
   activeSection.value = 'messages';
+  mobileView.value = 'chat';
+};
+
+const handleOpenMessageSearch = () => {
+  isDetailsOpen.value = false;
+  isMessageSearchOpen.value = true;
   mobileView.value = 'chat';
 };
 </script>
@@ -74,7 +84,9 @@ const handleOpenMessages = () => {
         <ChatPanel
           :conversation="currentConversation"
           :details-open="isDetailsOpen"
+          :search-open="isMessageSearchOpen"
           @back="handleBackToList"
+          @close-search="isMessageSearchOpen = false"
           @toggle-details="isDetailsOpen = !isDetailsOpen"
         />
       </div>
@@ -83,6 +95,7 @@ const handleOpenMessages = () => {
         :conversation="currentConversation"
         :is-open="Boolean(currentConversation) && isDetailsOpen"
         @close="isDetailsOpen = false"
+        @open-message-search="handleOpenMessageSearch"
       />
     </main>
 

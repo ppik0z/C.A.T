@@ -18,6 +18,10 @@ const props = withDefaults(defineProps<Props>(), {
   compact: false,
 });
 
+const emit = defineEmits<{
+  openMessageSearch: [];
+}>();
+
 const chatStore = useChatStore();
 const isEditingGroup = ref(false);
 const isAddingMembers = ref(false);
@@ -126,6 +130,15 @@ const removeMember = async (member: ConversationMember) => {
       <div v-if="error" class="mt-4 rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
         {{ error }}
       </div>
+
+      <button
+        class="mt-5 w-full flex items-center justify-center gap-2 rounded-lg bg-surface-container-high px-3 py-2 text-sm font-semibold text-primary hover:bg-primary hover:text-on-primary transition-colors"
+        type="button"
+        @click="emit('openMessageSearch')"
+      >
+        <span class="material-symbols-outlined !text-[18px]">search</span>
+        Tìm tin nhắn
+      </button>
 
       <div v-if="isAdmin" class="mt-5 space-y-3">
         <template v-if="isEditingGroup">

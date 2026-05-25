@@ -369,6 +369,13 @@ export const useChatStore = defineStore('chat', {
             };
         },
 
+        clearMessageSearch(conversationId: number) {
+            this.messageSearchStateByConversationId[conversationId] = defaultSearchState();
+            if (this.messageWindowModeByConversationId[conversationId] === 'search') {
+                this.loadLatestMessages(conversationId);
+            }
+        },
+
         navigateSearchResult(conversationId: number, direction: 'previous' | 'next') {
             const state = this.messageSearchStateByConversationId[conversationId];
             if (!state || state.results.length === 0) return null;
