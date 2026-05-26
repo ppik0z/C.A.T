@@ -24,12 +24,19 @@ const emit = defineEmits<{
 
 const callStore = useCallStore();
 const activeCall = computed(() => callStore.getCallByConversationId(props.conversation.id));
+const hasLiveCall = computed(() => Boolean(activeCall.value && ['ringing', 'active'].includes(activeCall.value.status)));
+const callStatusLabel = computed(() => {
+  if (!activeCall.value) return '';
+  if (activeCall.value.currentUserStatus === 'ringing') return 'Cuộc gọi đến';
+  if (activeCall.value.status === 'ringing') return 'Đang gọi';
+  return 'Đang có cuộc gọi';
+});
 </script>
 
 <template>
   <button
     :class="[
-      'w-full px-4 sm:px-6 py-4 flex gap-4 text-left cursor-pointer transition-colors border-r-4',
+      'w-full px-4 sm:px-6 py-4 flex items-start gap-4 text-left cursor-pointer transition-colors border-r-4',
       props.active ? 'bg-primary-container/35 border-primary' : 'border-transparent hover:bg-surface-container-high',
     ]"
     type="button"
@@ -51,6 +58,7 @@ const activeCall = computed(() => callStore.getCallByConversationId(props.conver
         <Badge v-if="props.conversation.unreadCount > 0" tone="primary">{{ props.conversation.unreadCount }}</Badge>
       </div>
       <p
+        v-if="!hasLiveCall"
         :class="[
           'text-sm truncate mt-1',
           props.conversation.unreadCount > 0 ? 'text-primary font-semibold' : 'text-on-surface-variant',
@@ -59,11 +67,11 @@ const activeCall = computed(() => callStore.getCallByConversationId(props.conver
         {{ getLastMessagePreview(props.conversation, props.currentUsername) }}
       </p>
       <p
-        v-if="activeCall && ['ringing', 'active'].includes(activeCall.status)"
-        class="mt-2 inline-flex max-w-full items-center gap-1 rounded-full bg-primary-container px-2 py-1 text-[11px] font-bold text-primary"
+        v-else-if="activeCall"
+        class="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-container px-2.5 py-1 text-[11px] font-bold text-primary"
       >
         <span class="material-symbols-outlined text-[14px]">{{ activeCall.kind === 'video' ? 'videocam' : 'call' }}</span>
-        <span class="truncate">Đang có cuộc gọi</span>
+        <span class="truncate">{{ callStatusLabel }}</span>
       </p>
     </div>
   </button>
