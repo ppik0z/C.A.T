@@ -1,6 +1,8 @@
 import { socket } from "../socket";
+import { useCallStore } from "../stores/call";
 import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
+import type { ActiveCallsPayload, CallErrorPayload, CallState } from "../types/call";
 import type {
     ChatMessage,
     Conversation,
@@ -14,6 +16,7 @@ import type {
 
 export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
+    const callStore = useCallStore();
     const friendsStore = useFriendsStore();
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -31,6 +34,7 @@ export const initSocketService = (token: string) => {
             }
         }, 15000);
 
+        callStore.syncActiveCalls();
     });
 
     socket.on("load_messages_success", (payload: LoadMessagesSuccessPayload) => {
@@ -109,6 +113,26 @@ export const initSocketService = (token: string) => {
 
     socket.on("typing_state_changed", (data: TypingStateUpdate) => {
         chatStore.applyTypingState(data);
+    });
+
+    socket.on("call:active_sync", (data: ActiveCallsPayload) => {
+        callStore.applyActiveSync(data.calls);
+    });
+
+    socket.on("call:ringing", (data: CallState) => {
+        callStore.applyRinging(data);
+    });
+
+    socket.on("call:state_updated", (data: CallState) => {
+        callStore.applyCallState(data);
+    });
+
+    socket.on("call:ended", (data: CallState) => {
+        callStore.applyCallEnded(data);
+    });
+
+    socket.on("call:error", (data: CallErrorPayload) => {
+        callStore.setCallError(data.message);
     });
 
     socket.on("conversation_upsert", (conversation: Conversation) => {
