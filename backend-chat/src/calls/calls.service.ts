@@ -8,6 +8,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import { and, desc, eq, inArray, lt } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { callParticipants, callSessions, conversationMembers, conversations, users } from '../database/schema';
 import { MessagesService } from '../messages/messages.service';
@@ -105,6 +106,7 @@ export class CallsService {
         private readonly drizzle: DrizzleService,
         private readonly redisService: RedisService,
         private readonly messagesService: MessagesService,
+        private readonly eventEmitter: EventEmitter2,
     ) {
         this.redis = this.redisService.getOrThrow();
     }
@@ -216,7 +218,7 @@ export class CallsService {
 
         const participant = this.findParticipant(state, userId);
         if (!participant) throw new ForbiddenException('Bạn không có quyền tham gia cuộc gọi này.');
-        if (participant.status === 'declined' || participant.status === 'missed') {
+        if (participant.status === 'missed') {
             throw new BadRequestException('Bạn không thể tham gia lại cuộc gọi này.');
         }
 
@@ -598,7 +600,9 @@ export class CallsService {
 
         await this.saveEndedState(nextState);
         await this.createCallEventMessage(nextState);
-        return this.toMutationResult(nextState);
+        const result = this.toMutationResult(nextState);
+        this.eventEmitter.emit('call.ended', result);
+        return result;
     }
 
     private async createCallEventMessage(state: StoredCallState) {

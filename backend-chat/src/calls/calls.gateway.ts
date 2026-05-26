@@ -8,6 +8,7 @@ import {
 import { UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Server } from 'socket.io';
+import { OnEvent } from '@nestjs/event-emitter';
 import { CallsService, type CallKind, type CallMutationResult } from './calls.service';
 import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
@@ -37,6 +38,11 @@ export class CallsGateway {
     @WebSocketServer() server: Server;
 
     constructor(private readonly callsService: CallsService) { }
+
+    @OnEvent('call.ended')
+    async handleCallEnded(result: CallMutationResult) {
+        await this.emitPublicStateToUsers('call:ended', result.memberIds, result.callId);
+    }
 
     @SubscribeMessage('call:start')
     async startCall(@MessageBody() data: StartCallPayload, @ConnectedSocket() client: AuthenticatedSocket) {

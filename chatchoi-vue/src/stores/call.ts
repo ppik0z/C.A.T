@@ -198,7 +198,23 @@ export const useCallStore = defineStore('call', {
     },
 
     expireIncomingCall(callId: number) {
+      const call = this.findCallById(callId);
       this.removeIncomingCall(callId);
+      if (!call || call.status !== 'ringing') return;
+
+      this.applyCallEnded({
+        ...call,
+        status: 'missed',
+        endedAt: new Date().toISOString(),
+        endedReason: 'local_timeout',
+        ringExpiresAt: null,
+        currentUserStatus: call.currentUserStatus === 'ringing' ? 'missed' : call.currentUserStatus,
+        participants: call.participants.map((participant) => {
+          return participant.status === 'ringing'
+            ? { ...participant, status: 'missed' }
+            : participant;
+        }),
+      });
     },
 
     dismissError() {
