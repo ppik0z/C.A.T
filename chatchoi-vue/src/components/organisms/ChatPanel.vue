@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import ActiveCallBanner from '../molecules/ActiveCallBanner.vue';
 import ChatHeader from '../molecules/ChatHeader.vue';
 import ComposerBar from '../molecules/ComposerBar.vue';
 import MessageBubble from '../molecules/MessageBubble.vue';
+import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
+import type { CallKind } from '../../types/call';
 import type { ChatMessage, Conversation } from '../../types/chat';
 import { formatMessageDateDivider, getMessageDateKey } from '../../utils/chatPresentation';
 
@@ -21,6 +24,7 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const scrollRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const searchText = ref('');
@@ -270,6 +274,11 @@ const closeSearch = () => {
   emit('closeSearch');
 };
 
+const handleStartCall = (kind: CallKind) => {
+  if (!props.conversation) return;
+  callStore.startCall(props.conversation.id, kind);
+};
+
 watch(
   () => props.conversation?.id,
   () => {
@@ -355,8 +364,11 @@ onBeforeUnmount(() => {
         :conversation="props.conversation"
         :details-open="props.detailsOpen"
         @back="emit('back')"
+        @start-call="handleStartCall"
         @toggle-details="emit('toggleDetails')"
       />
+
+      <ActiveCallBanner :conversation="props.conversation" />
 
       <div
         v-if="props.searchOpen"

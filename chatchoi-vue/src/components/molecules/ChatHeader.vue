@@ -14,6 +14,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   back: [];
+  startCall: [kind: 'audio' | 'video'];
   toggleDetails: [];
 }>();
 
@@ -47,8 +48,8 @@ const subtitle = computed(() => {
     </div>
 
     <div class="flex items-center gap-1 sm:gap-2">
-      <IconButton class="hidden sm:flex" icon="call" label="Call" />
-      <IconButton class="hidden sm:flex" icon="videocam" label="Video" />
+      <IconButton icon="call" label="Gọi thoại" @click="emit('startCall', 'audio')" />
+      <IconButton icon="videocam" label="Gọi video" @click="emit('startCall', 'video')" />
       <div class="hidden sm:block w-px h-6 bg-outline-variant mx-1"></div>
       <IconButton :active="props.detailsOpen" icon="info" label="Conversation info" @click="emit('toggleDetails')" />
     </div>

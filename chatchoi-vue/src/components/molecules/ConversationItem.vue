@@ -2,6 +2,8 @@
 import Avatar from '../atoms/Avatar.vue';
 import Badge from '../atoms/Badge.vue';
 import UserHoverCard from './UserHoverCard.vue';
+import { computed } from 'vue';
+import { useCallStore } from '../../stores/call';
 import type { Conversation } from '../../types/chat';
 import {
   getConversationName,
@@ -19,6 +21,9 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   select: [conversationId: number];
 }>();
+
+const callStore = useCallStore();
+const activeCall = computed(() => callStore.getCallByConversationId(props.conversation.id));
 </script>
 
 <template>
@@ -52,6 +57,13 @@ const emit = defineEmits<{
         ]"
       >
         {{ getLastMessagePreview(props.conversation, props.currentUsername) }}
+      </p>
+      <p
+        v-if="activeCall && ['ringing', 'active'].includes(activeCall.status)"
+        class="mt-2 inline-flex max-w-full items-center gap-1 rounded-full bg-primary-container px-2 py-1 text-[11px] font-bold text-primary"
+      >
+        <span class="material-symbols-outlined text-[14px]">{{ activeCall.kind === 'video' ? 'videocam' : 'call' }}</span>
+        <span class="truncate">Đang có cuộc gọi</span>
       </p>
     </div>
   </button>
