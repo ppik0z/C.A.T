@@ -9,14 +9,14 @@ import SettingOptionButton from '@/components/molecules/SettingOptionButton.vue'
 import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
 import { useChatStore } from '@/stores/chat';
+import { themePresets, type ThemePresetId } from '@/theme/themePresets';
+import { useThemePreference } from '@/theme/themePreference';
 import type {
-  AccentColor,
   FontChoice,
   MessageDensity,
   SettingOption,
   SettingsTab,
   SettingsTabId,
-  ThemeMode,
 } from '@/types/settings';
 
 type LanguageChoice = 'vi' | 'en';
@@ -26,13 +26,8 @@ type SidebarMode = 'hover' | 'icons';
 type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
-interface AccentOption {
-  value: AccentColor;
-  label: string;
-  swatchClass: string;
-}
-
 const chatStore = useChatStore();
+const { activePreset, activePresetId, setThemePreset } = useThemePreference();
 
 const settingsTabs: SettingsTab[] = [
   { id: 'appearance', icon: 'palette', label: 'Appearance', summary: 'Theme, font, chat density' },
@@ -41,12 +36,6 @@ const settingsTabs: SettingsTab[] = [
   { id: 'privacy', icon: 'shield_lock', label: 'Privacy', summary: 'Trạng thái, quyền riêng tư' },
   { id: 'account', icon: 'account_circle', label: 'Account', summary: 'Hồ sơ, bảo mật' },
   { id: 'notifications', icon: 'notifications', label: 'Notifications', summary: 'Âm báo, preview' },
-];
-
-const themeOptions: Array<SettingOption<ThemeMode>> = [
-  { value: 'system', label: 'System', description: 'Theo thiết bị', icon: 'desktop_windows' },
-  { value: 'light', label: 'Light', description: 'Nền sáng', icon: 'light_mode' },
-  { value: 'dark', label: 'Dark', description: 'Nền tối', icon: 'dark_mode' },
 ];
 
 const fontOptions: Array<SettingOption<FontChoice>> = [
@@ -60,17 +49,8 @@ const densityOptions: Array<SettingOption<MessageDensity>> = [
   { value: 'compact', label: 'Compact', description: 'Hiển thị nhiều hơn' },
 ];
 
-const accentOptions: AccentOption[] = [
-  { value: 'ocean', label: 'Ocean', swatchClass: 'bg-primary' },
-  { value: 'emerald', label: 'Emerald', swatchClass: 'bg-emerald-600' },
-  { value: 'violet', label: 'Violet', swatchClass: 'bg-violet-600' },
-  { value: 'rose', label: 'Rose', swatchClass: 'bg-rose-600' },
-];
-
 const activeTab = ref<SettingsTabId>('appearance');
 const isMobileDetailOpen = ref(false);
-const themeMode = ref<ThemeMode>('system');
-const accentColor = ref<AccentColor>('ocean');
 const fontChoice = ref<FontChoice>('jakarta');
 const messageDensity = ref<MessageDensity>('comfortable');
 const language = ref<LanguageChoice>('vi');
@@ -100,6 +80,10 @@ const selectTab = (tabId: SettingsTabId) => {
 const closeMobileDetail = () => {
   isMobileDetailOpen.value = false;
 };
+
+const handleThemePresetSelected = (presetId: ThemePresetId) => {
+  setThemePreset(presetId);
+};
 </script>
 
 <template>
@@ -120,7 +104,7 @@ const closeMobileDetail = () => {
             </div>
             <div class="min-w-0">
               <p class="truncate text-sm font-bold text-on-surface">{{ userName }}</p>
-              <p class="truncate text-xs font-semibold text-emerald-600">Online</p>
+              <p class="truncate text-xs font-semibold text-success">Online</p>
             </div>
           </div>
         </div>
@@ -163,43 +147,31 @@ const closeMobileDetail = () => {
                     <Card>
                       <CardHeader>
                         <CardTitle>Theme</CardTitle>
-                        <CardDescription>Chọn nền và màu nhấn cho giao diện chat.</CardDescription>
+                        <CardDescription>Chọn preset màu cho toàn bộ giao diện chat.</CardDescription>
                       </CardHeader>
                       <CardContent class="space-y-4">
-                        <div class="grid gap-2 sm:grid-cols-3">
-                          <SettingOptionButton
-                            v-for="option in themeOptions"
-                            :key="option.value"
-                            :description="option.description"
-                            :icon="option.icon"
-                            :label="option.label"
-                            :selected="themeMode === option.value"
-                            @select="themeMode = option.value"
-                          />
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h4 class="mb-2 text-sm font-bold text-on-surface">Accent color</h4>
-                          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            <button
-                              v-for="accent in accentOptions"
-                              :key="accent.value"
-                              :aria-pressed="accentColor === accent.value"
-                              :class="[
-                                'flex h-11 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                                accentColor === accent.value
-                                  ? 'border-primary bg-primary-container/45 text-primary'
-                                  : 'border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-high',
-                              ]"
-                              type="button"
-                              @click="accentColor = accent.value"
-                            >
-                              <span :class="['size-4 rounded-full', accent.swatchClass]" />
-                              <span class="truncate">{{ accent.label }}</span>
-                            </button>
-                          </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                          <button
+                            v-for="preset in themePresets"
+                            :key="preset.id"
+                            :aria-pressed="activePresetId === preset.id"
+                            :class="[
+                              'rounded-lg border p-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]',
+                              activePresetId === preset.id
+                                ? 'border-primary bg-primary-container/30 shadow-sm'
+                                : 'border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low',
+                            ]"
+                            type="button"
+                            @click="handleThemePresetSelected(preset.id)"
+                          >
+                            <div class="mb-3 flex gap-1">
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.primary }" />
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.surfaceContainerLow }" />
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.surfaceContainerHighest }" />
+                            </div>
+                            <span class="block text-sm font-extrabold text-on-surface">{{ preset.name }}</span>
+                            <span class="mt-1 block text-xs font-semibold leading-4 text-on-surface-variant">{{ preset.description }}</span>
+                          </button>
                         </div>
                       </CardContent>
                     </Card>
@@ -244,10 +216,9 @@ const closeMobileDetail = () => {
                     </CardHeader>
                     <CardContent>
                       <ThemePreview
-                        :accent="accentColor"
                         :density="messageDensity"
                         :font="fontChoice"
-                        :mode="themeMode"
+                        :preset="activePreset"
                       />
                     </CardContent>
                   </Card>

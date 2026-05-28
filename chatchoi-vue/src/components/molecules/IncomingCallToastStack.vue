@@ -40,7 +40,7 @@ const getConversationLabel = (conversationId: number) => {
 
       <div class="mt-4 grid grid-cols-2 gap-2">
         <button
-          class="h-10 rounded-full bg-error text-white text-sm font-bold hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
+          class="h-10 rounded-full bg-error text-on-error text-sm font-bold hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
           type="button"
           @click="callStore.declineCall(call.id)"
         >

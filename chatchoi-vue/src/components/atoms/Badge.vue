@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Badge as UiBadge } from '@/components/ui/badge';
+
 interface Props {
   tone?: 'primary' | 'neutral';
 }
@@ -9,14 +11,7 @@ const props = withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-  <span
-    :class="[
-      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap',
-      props.tone === 'primary'
-        ? 'bg-primary text-on-primary'
-        : 'bg-surface-container-high text-on-surface-variant',
-    ]"
-  >
+  <UiBadge :variant="props.tone === 'primary' ? 'default' : 'secondary'">
     <slot />
-  </span>
+  </UiBadge>
 </template>

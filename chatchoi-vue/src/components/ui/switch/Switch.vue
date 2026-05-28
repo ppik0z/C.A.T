@@ -22,7 +22,7 @@ const props = withDefaults(defineProps<{
     )"
   >
     <SwitchThumb
-      :class="cn('pointer-events-none block size-5 rounded-full bg-white shadow-sm transition-transform duration-150 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0')"
+      :class="cn('pointer-events-none block size-5 rounded-full bg-surface-container-lowest shadow-sm transition-transform duration-150 data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0')"
     />
   </SwitchRoot>
 </template>
