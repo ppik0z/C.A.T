@@ -50,6 +50,7 @@ export const conversations = mysqlTable('conversations', {
   lastMessageIndex: int('lastMessageIndex').notNull().default(0),
   lastMessageContent: text('lastMessageContent'),
   lastMessageSenderName: varchar('lastMessageSenderName', { length: 191 }),
+  lastMessageType: varchar('lastMessageType', { length: 50 }),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
@@ -117,6 +118,49 @@ export const messageReactions = mysqlTable(
   (t) => [uniqueIndex('uq_msg_reaction').on(t.messageId, t.userId, t.emoji)],
 );
 
+// ─── CallSessions ─────────────────────────────────────────────────────────────
+export const callSessions = mysqlTable(
+  'call_sessions',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    conversationId: int('conversationId').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+    startedByUserId: int('startedByUserId').notNull().references(() => users.id),
+    kind: varchar('kind', { length: 20 }).notNull(),
+    status: varchar('status', { length: 30 }).notNull().default('ringing'),
+    provider: varchar('provider', { length: 50 }).notNull().default('stub'),
+    roomName: varchar('roomName', { length: 191 }).notNull(),
+    startedAt: datetime('startedAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    answeredAt: datetime('answeredAt'),
+    endedAt: datetime('endedAt'),
+    endedReason: varchar('endedReason', { length: 100 }),
+  },
+  (t) => [
+    index('idx_call_sessions_conversation_status').on(t.conversationId, t.status),
+    uniqueIndex('uq_call_sessions_room_name').on(t.roomName),
+  ],
+);
+
+// ─── CallParticipants ─────────────────────────────────────────────────────────
+export const callParticipants = mysqlTable(
+  'call_participants',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    callSessionId: int('callSessionId').notNull().references(() => callSessions.id, { onDelete: 'cascade' }),
+    userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    status: varchar('status', { length: 30 }).notNull().default('ringing'),
+    micEnabled: boolean('micEnabled').notNull().default(false),
+    cameraEnabled: boolean('cameraEnabled').notNull().default(false),
+    joinedAt: datetime('joinedAt'),
+    leftAt: datetime('leftAt'),
+    declinedAt: datetime('declinedAt'),
+    lastHeartbeatAt: datetime('lastHeartbeatAt'),
+  },
+  (t) => [
+    uniqueIndex('uq_call_participants_session_user').on(t.callSessionId, t.userId),
+    index('idx_call_participants_user_status').on(t.userId, t.status),
+  ],
+);
+
 // ─── Relations ────────────────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   sentMessages: many(messages),
@@ -125,6 +169,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   reactions: many(messageReactions),
   friends: many(friendships, { relationName: 'UserFriends' }),
   friendOf: many(friendships, { relationName: 'FriendOfUser' }),
+  startedCalls: many(callSessions),
+  callParticipations: many(callParticipants),
 }));
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
@@ -135,6 +181,7 @@ export const friendshipsRelations = relations(friendships, ({ one }) => ({
 export const conversationsRelations = relations(conversations, ({ many }) => ({
   members: many(conversationMembers),
   messages: many(messages),
+  callSessions: many(callSessions),
 }));
 
 export const conversationMembersRelations = relations(conversationMembers, ({ one }) => ({
@@ -157,4 +204,15 @@ export const messageStatusesRelations = relations(messageStatuses, ({ one }) => 
 export const messageReactionsRelations = relations(messageReactions, ({ one }) => ({
   message: one(messages, { fields: [messageReactions.messageId], references: [messages.id] }),
   user: one(users, { fields: [messageReactions.userId], references: [users.id] }),
+}));
+
+export const callSessionsRelations = relations(callSessions, ({ one, many }) => ({
+  conversation: one(conversations, { fields: [callSessions.conversationId], references: [conversations.id] }),
+  startedBy: one(users, { fields: [callSessions.startedByUserId], references: [users.id] }),
+  participants: many(callParticipants),
+}));
+
+export const callParticipantsRelations = relations(callParticipants, ({ one }) => ({
+  callSession: one(callSessions, { fields: [callParticipants.callSessionId], references: [callSessions.id] }),
+  user: one(users, { fields: [callParticipants.userId], references: [users.id] }),
 }));

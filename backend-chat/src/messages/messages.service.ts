@@ -6,7 +6,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { ChatMessageType, UploadedMedia } from './media-upload.service';
 
 export type MessageDeliveryStatus = 'sent' | 'delivered';
-export type MessageType = 'text' | 'gif' | ChatMessageType;
+export type MessageType = 'text' | 'gif' | 'call_event' | ChatMessageType;
 
 export interface SendMessageInput {
     type?: 'text' | 'gif';
@@ -21,6 +21,13 @@ export interface CreateMediaMessageInput {
     caption?: string;
     clientTempId?: string;
     media: UploadedMedia;
+}
+
+export interface CreateCallEventMessageInput {
+    conversationId: number;
+    senderId: number;
+    senderName: string;
+    content: string;
 }
 
 export interface MessageStatusSnapshot {
@@ -155,6 +162,16 @@ export class MessagesService {
             fileFormat: input.media.fileFormat,
             fileWidth: input.media.fileWidth,
             fileHeight: input.media.fileHeight,
+        });
+    }
+
+    async createCallEventMessage(input: CreateCallEventMessageInput) {
+        return this.createMessage({
+            senderId: input.senderId,
+            conversationId: input.conversationId,
+            senderName: input.senderName,
+            type: 'call_event',
+            content: input.content.trim(),
         });
     }
 
@@ -495,6 +512,7 @@ export class MessagesService {
         if (type === 'image') return content || '[Ảnh]';
         if (type === 'video') return content || '[Video]';
         if (type === 'document') return fileName ? `[Tài liệu] ${fileName}` : '[Tài liệu]';
+        if (type === 'call_event') return content || '[Cuộc gọi]';
         return content || '[GIF]';
     }
 

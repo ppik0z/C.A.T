@@ -35,6 +35,8 @@ export const getConversationUser = (conversation: Conversation | null): ChatUser
 
 export const getLastMessagePreview = (conversation: Conversation, currentUsername: string | null): string => {
   if (conversation.lastMessage?.content) {
+    if (conversation.lastMessage.type === 'call_event') return conversation.lastMessage.content;
+
     const sender = conversation.lastMessage.senderName === currentUsername ? 'Bạn' : conversation.lastMessage.senderName;
     return sender ? `${sender}: ${conversation.lastMessage.content}` : conversation.lastMessage.content;
   }

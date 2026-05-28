@@ -20,7 +20,7 @@ export interface ConversationMember {
   joinedAt: string;
 }
 
-export type ChatMessageType = 'text' | 'image' | 'video' | 'document' | 'gif';
+export type ChatMessageType = 'text' | 'image' | 'video' | 'document' | 'gif' | 'call_event';
 
 export interface ChatMessage {
   id: number;
@@ -58,6 +58,7 @@ export interface LastMessage {
   id: number | null;
   content: string | null;
   senderName: string | null;
+  type?: ChatMessageType | string | null;
 }
 
 export interface Conversation {
@@ -87,6 +88,7 @@ export interface ConversationListUpdate {
   senderName: string;
   lastMessageId: number;
   lastMessageIndex: number;
+  lastMessageType?: ChatMessageType | string;
 }
 
 export type MessageDeliveryStatus = 'sent' | 'delivered';

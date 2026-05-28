@@ -369,6 +369,13 @@ export const useChatStore = defineStore('chat', {
             };
         },
 
+        clearMessageSearch(conversationId: number) {
+            this.messageSearchStateByConversationId[conversationId] = defaultSearchState();
+            if (this.messageWindowModeByConversationId[conversationId] === 'search') {
+                this.loadLatestMessages(conversationId);
+            }
+        },
+
         navigateSearchResult(conversationId: number, direction: 'previous' | 'next') {
             const state = this.messageSearchStateByConversationId[conversationId];
             if (!state || state.results.length === 0) return null;
@@ -755,11 +762,15 @@ export const useChatStore = defineStore('chat', {
             const index = this.conversations.findIndex(c => c.id === data.conversationId);
             if (index !== -1) {
                 const conv = this.conversations[index];
-                conv.lastMessageContent = (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
+                const isCallEvent = data.lastMessageType === 'call_event';
+                conv.lastMessageContent = isCallEvent
+                    ? data.lastMessageContent
+                    : (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
                 conv.lastMessage = {
                     id: data.lastMessageId,
                     content: data.lastMessageContent,
                     senderName: data.senderName,
+                    type: data.lastMessageType,
                 };
                 conv.lastMessageIndex = data.lastMessageIndex;
 

@@ -12,10 +12,14 @@ const props = withDefaults(defineProps<Props>(), {
   compact: false,
 });
 
+const emit = defineEmits<{
+  openMessageSearch: [];
+}>();
+
 const actionItems = [
   { icon: 'call', label: 'Call' },
   { icon: 'videocam', label: 'Video' },
-  { icon: 'search', label: 'Search' },
+  { icon: 'search', label: 'Search', action: 'search' },
   { icon: 'notifications_off', label: 'Mute' },
 ];
 
@@ -43,7 +47,13 @@ const settingItems = [
       <p :class="['text-xs font-semibold uppercase text-on-surface-variant', props.compact ? 'mt-1' : 'mt-2']">{{ getConversationKindLabel(props.conversation) }}</p>
 
       <div :class="['grid grid-cols-4 w-full', props.compact ? 'gap-2 mt-4' : 'gap-4 mt-8']">
-        <button v-for="item in actionItems" :key="item.icon" class="flex flex-col items-center gap-1 group" type="button">
+        <button
+          v-for="item in actionItems"
+          :key="item.icon"
+          class="flex flex-col items-center gap-1 group"
+          type="button"
+          @click="item.action === 'search' && emit('openMessageSearch')"
+        >
           <div :class="['flex items-center justify-center bg-surface-container-high rounded-full text-on-surface-variant group-hover:bg-primary group-hover:text-on-primary transition-all', props.compact ? 'w-10 h-10' : 'w-12 h-12']">
             <span class="material-symbols-outlined text-[20px]">{{ item.icon }}</span>
           </div>

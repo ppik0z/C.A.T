@@ -9,6 +9,7 @@ export interface MessageCreatedEvent {
     content: string;
     previewContent: string;
     conversationId: number;
+    type: string;
     senderId: number;
     senderName: string;
     conversationIndex: number;
@@ -30,6 +31,7 @@ export class MessagesListener {
                 lastMessageIndex: payload.conversationIndex,
                 lastMessageContent: payload.previewContent,
                 lastMessageSenderName: payload.senderName,
+                lastMessageType: payload.type,
                 updatedAt: new Date(), 
             })
             .where(eq(conversations.id, payload.conversationId));
