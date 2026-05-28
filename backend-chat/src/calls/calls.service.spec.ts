@@ -3,6 +3,7 @@ import { RedisService } from '@liaoliaots/nestjs-redis';
 import { BadRequestException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CallsService } from './calls.service';
+import { CallLockService } from './call-lock.service';
 import { DrizzleService } from '../database/drizzle.service';
 import { MessagesService } from '../messages/messages.service';
 
@@ -21,6 +22,10 @@ describe('CallsService', () => {
         update: jest.Mock;
     };
     let eventEmitter: { emit: jest.Mock };
+    let callLockService: {
+        withCallLock: jest.Mock;
+        withConversationCreateLock: jest.Mock;
+    };
 
     const chain = () => ({
         set: jest.fn().mockReturnThis(),
@@ -97,6 +102,10 @@ describe('CallsService', () => {
             update: jest.fn(() => chain()),
         };
         eventEmitter = { emit: jest.fn() };
+        callLockService = {
+            withCallLock: jest.fn(async (_callId: number, task: () => Promise<unknown>) => task()),
+            withConversationCreateLock: jest.fn(async (_conversationId: number, task: () => Promise<unknown>) => task()),
+        };
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -118,6 +127,10 @@ describe('CallsService', () => {
                 {
                     provide: EventEmitter2,
                     useValue: eventEmitter,
+                },
+                {
+                    provide: CallLockService,
+                    useValue: callLockService,
                 },
             ],
         }).compile();
@@ -181,5 +194,40 @@ describe('CallsService', () => {
                 ended: true,
             }),
         );
+    });
+
+    it('does not clear another participant joined key during heartbeat', async () => {
+        const state = baseState();
+        state.participants[1] = {
+            ...state.participants[1],
+            status: 'joined',
+            joinedAt: new Date(Date.now() - 5_000).toISOString(),
+            lastHeartbeatAt: new Date(Date.now() - 5_000).toISOString(),
+        };
+        jest.spyOn(service as unknown as { getAccessibleState: jest.Mock }, 'getAccessibleState').mockResolvedValue(state);
+
+        await service.heartbeat(1, 10);
+
+        expect(redisClient.del).not.toHaveBeenCalledWith('call:user:2:joined');
+        expect(redisClient.set).toHaveBeenCalledWith('call:user:1:joined', '10', 'EX', expect.any(Number));
+    });
+
+    it('only clears joined keys for stale participants during cleanup', async () => {
+        const state = baseState();
+        state.participants = state.participants.map((participant, index) => ({
+            ...participant,
+            status: 'joined',
+            joinedAt: new Date(Date.now() - 120_000).toISOString(),
+            lastHeartbeatAt: new Date(Date.now() - (index === 0 ? 5_000 : 120_000)).toISOString(),
+        }));
+
+        redisClient.smembers.mockResolvedValue(['10']);
+        jest.spyOn(service as unknown as { getStoredState: jest.Mock }, 'getStoredState').mockResolvedValue(state);
+
+        await service.cleanupExpiredCalls();
+
+        expect(redisClient.del).toHaveBeenCalledWith('call:user:2:joined');
+        expect(redisClient.del).not.toHaveBeenCalledWith('call:user:1:joined');
+        expect(eventEmitter.emit).toHaveBeenCalledWith('call.state_changed', expect.objectContaining({ callId: 10 }));
     });
 });

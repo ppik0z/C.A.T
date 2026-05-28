@@ -12,6 +12,15 @@ interface PendingOutgoingCall {
 
 const incomingTimers = new Map<number, ReturnType<typeof setTimeout>>();
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let callErrorTimer: ReturnType<typeof setTimeout> | null = null;
+
+const CALL_ERROR_TTL_MS = 3_500;
+
+const clearCallErrorTimer = () => {
+  if (!callErrorTimer) return;
+  clearTimeout(callErrorTimer);
+  callErrorTimer = null;
+};
 
 const isTerminalCallStatus = (status: CallState['status']) => {
   return status === 'ended' || status === 'missed' || status === 'cancelled';
@@ -49,7 +58,7 @@ export const useCallStore = defineStore('call', {
         const calls = await fetchActiveCallsRequest(token);
         this.applyActiveSync(calls);
       } catch (error) {
-        this.callError = error instanceof Error ? error.message : 'Không thể đồng bộ cuộc gọi.';
+        this.setCallError(error instanceof Error ? error.message : 'Không thể đồng bộ cuộc gọi.');
       }
     },
 
@@ -62,7 +71,7 @@ export const useCallStore = defineStore('call', {
     },
 
     startCall(conversationId: number, kind: CallKind) {
-      this.callError = null;
+      this.dismissError();
       this.pendingOutgoing = {
         conversationId,
         kind,
@@ -193,8 +202,15 @@ export const useCallStore = defineStore('call', {
     },
 
     setCallError(message: string) {
+      clearCallErrorTimer();
       this.callError = message;
       this.pendingOutgoing = null;
+      callErrorTimer = setTimeout(() => {
+        if (this.callError === message) {
+          this.callError = null;
+        }
+        callErrorTimer = null;
+      }, CALL_ERROR_TTL_MS);
     },
 
     expireIncomingCall(callId: number) {
@@ -218,6 +234,7 @@ export const useCallStore = defineStore('call', {
     },
 
     dismissError() {
+      clearCallErrorTimer();
       this.callError = null;
     },
 

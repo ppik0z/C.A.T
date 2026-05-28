@@ -5,7 +5,7 @@ import {
     WebSocketGateway,
     WebSocketServer,
 } from '@nestjs/websockets';
-import { UseGuards } from '@nestjs/common';
+import { ConflictException, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Server } from 'socket.io';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -39,6 +39,16 @@ export class CallsGateway {
 
     constructor(private readonly callsService: CallsService) { }
 
+    @OnEvent('call.started')
+    async handleCallStarted(result: CallMutationResult) {
+        await this.emitCallMutation(result, true);
+    }
+
+    @OnEvent('call.state_changed')
+    async handleCallStateChanged(result: CallMutationResult) {
+        await this.emitCallMutation(result);
+    }
+
     @OnEvent('call.ended')
     async handleCallEnded(result: CallMutationResult) {
         await this.emitPublicStateToUsers('call:ended', result.memberIds, result.callId);
@@ -47,8 +57,7 @@ export class CallsGateway {
     @SubscribeMessage('call:start')
     async startCall(@MessageBody() data: StartCallPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.startCall(client.user.userId, client.user.username, data);
-            await this.emitCallMutation(result, true);
+            await this.callsService.startCall(client.user.userId, client.user.username, data);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -82,8 +91,7 @@ export class CallsGateway {
     @SubscribeMessage('call:accept')
     async acceptCall(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.acceptCall(client.user.userId, data.callId);
-            await this.emitCallMutation(result);
+            await this.callsService.acceptCall(client.user.userId, data.callId);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -93,8 +101,7 @@ export class CallsGateway {
     @SubscribeMessage('call:join')
     async joinCall(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.joinCall(client.user.userId, data.callId);
-            await this.emitCallMutation(result);
+            await this.callsService.joinCall(client.user.userId, data.callId);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -104,8 +111,7 @@ export class CallsGateway {
     @SubscribeMessage('call:decline')
     async declineCall(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.declineCall(client.user.userId, data.callId);
-            await this.emitCallMutation(result);
+            await this.callsService.declineCall(client.user.userId, data.callId);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -115,8 +121,7 @@ export class CallsGateway {
     @SubscribeMessage('call:leave')
     async leaveCall(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.leaveCall(client.user.userId, data.callId);
-            await this.emitCallMutation(result);
+            await this.callsService.leaveCall(client.user.userId, data.callId);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -126,11 +131,10 @@ export class CallsGateway {
     @SubscribeMessage('call:update_media')
     async updateMedia(@MessageBody() data: UpdateMediaPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            const result = await this.callsService.updateMediaState(client.user.userId, data.callId, {
+            await this.callsService.updateMediaState(client.user.userId, data.callId, {
                 micEnabled: data.micEnabled,
                 cameraEnabled: data.cameraEnabled,
             });
-            await this.emitCallMutation(result);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -144,6 +148,10 @@ export class CallsGateway {
             await this.callsService.heartbeat(client.user.userId, data.callId);
             return { status: 'ack' };
         } catch (error) {
+            if (error instanceof ConflictException) {
+                return { status: 'busy' };
+            }
+
             return this.emitCallError(client, error);
         }
     }

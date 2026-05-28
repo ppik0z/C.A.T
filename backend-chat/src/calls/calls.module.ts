@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { CallsController } from './calls.controller';
 import { CallsGateway } from './calls.gateway';
+import { CallLockService } from './call-lock.service';
 import { CallsService } from './calls.service';
 import { MessagesModule } from '../messages/messages.module';
 
@@ -14,7 +15,7 @@ import { MessagesModule } from '../messages/messages.module';
         }),
     ],
     controllers: [CallsController],
-    providers: [CallsGateway, CallsService],
+    providers: [CallsGateway, CallsService, CallLockService],
     exports: [CallsService],
 })
 export class CallsModule { }

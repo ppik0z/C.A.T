@@ -1,5 +1,6 @@
 import {
     BadRequestException,
+    ConflictException,
     ForbiddenException,
     Injectable,
     NotFoundException,
@@ -12,6 +13,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { callParticipants, callSessions, conversationMembers, conversations, users } from '../database/schema';
 import { MessagesService } from '../messages/messages.service';
+import { CallLockService } from './call-lock.service';
 
 export type CallKind = 'audio' | 'video';
 export type CallSessionStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'cancelled';
@@ -93,10 +95,9 @@ interface ConversationAccess {
 }
 
 const RINGING_TTL_MS = 60_000;
-const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 30_000;
+const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 60_000;
 const ACTIVE_CALL_TTL_SECONDS = 24 * 60 * 60;
 const ENDED_CALL_TTL_SECONDS = 120;
-const CREATE_LOCK_TTL_SECONDS = 5;
 
 @Injectable()
 export class CallsService {
@@ -107,6 +108,7 @@ export class CallsService {
         private readonly redisService: RedisService,
         private readonly messagesService: MessagesService,
         private readonly eventEmitter: EventEmitter2,
+        private readonly callLockService: CallLockService,
     ) {
         this.redis = this.redisService.getOrThrow();
     }
@@ -117,18 +119,14 @@ export class CallsService {
         const joinedCallId = await this.redis.get(this.userJoinedKey(userId));
         if (joinedCallId) throw new BadRequestException('Bạn đang ở trong một cuộc gọi khác.');
 
-        const lockKey = this.createLockKey(input.conversationId);
-        const lock = await this.redis.set(lockKey, String(userId), 'EX', CREATE_LOCK_TTL_SECONDS, 'NX');
-        if (lock !== 'OK') throw new BadRequestException('Đoạn chat đang xử lý một cuộc gọi khác.');
-
-        try {
+        return this.callLockService.withConversationCreateLock(input.conversationId, async () => {
             const activeCallId = await this.redis.get(this.activeConversationKey(input.conversationId));
             if (activeCallId) throw new BadRequestException('Đoạn chat này đang có cuộc gọi.');
 
             const existingActiveCall = await this.findActiveCallInDatabase(input.conversationId);
             if (existingActiveCall) {
                 const restoredState = await this.buildStateFromDatabase(existingActiveCall.id);
-                if (restoredState) await this.saveActiveState(restoredState);
+                if (restoredState) await this.saveInitialActiveState(restoredState);
                 throw new BadRequestException('Đoạn chat này đang có cuộc gọi.');
             }
 
@@ -195,12 +193,12 @@ export class CallsService {
                 })),
             };
 
-            await this.saveActiveState(state);
+            await this.saveInitialActiveState(state);
 
-            return this.toMutationResult(state);
-        } finally {
-            await this.redis.del(lockKey);
-        }
+            const result = this.toMutationResult(state);
+            this.eventEmitter.emit('call.started', result);
+            return result;
+        });
     }
 
     async acceptCall(userId: number, callId: number): Promise<CallMutationResult> {
@@ -208,6 +206,10 @@ export class CallsService {
     }
 
     async joinCall(userId: number, callId: number): Promise<CallMutationResult> {
+        return this.callLockService.withCallLock(callId, async () => this.joinCallLocked(userId, callId));
+    }
+
+    private async joinCallLocked(userId: number, callId: number): Promise<CallMutationResult> {
         const state = await this.getAccessibleState(userId, callId);
         this.ensureCallIsJoinable(state);
 
@@ -260,16 +262,23 @@ export class CallsService {
         });
 
         await this.saveActiveState(nextState);
-        return this.toMutationResult(nextState);
+        await this.markUserJoined(userId, callId);
+        const result = this.toMutationResult(nextState);
+        this.eventEmitter.emit('call.state_changed', result);
+        return result;
     }
 
     async declineCall(userId: number, callId: number): Promise<CallMutationResult> {
+        return this.callLockService.withCallLock(callId, async () => this.declineCallLocked(userId, callId));
+    }
+
+    private async declineCallLocked(userId: number, callId: number): Promise<CallMutationResult> {
         const state = await this.getAccessibleState(userId, callId);
         this.ensureCallIsActiveOrRinging(state);
 
         const participant = this.findParticipant(state, userId);
         if (!participant) throw new ForbiddenException('Bạn không có quyền từ chối cuộc gọi này.');
-        if (participant.status === 'joined') return this.leaveCall(userId, callId);
+        if (participant.status === 'joined') return this.leaveCallLocked(userId, callId, state);
         if (participant.status === 'declined' || participant.status === 'missed') return this.toMutationResult(state);
 
         const now = new Date();
@@ -299,11 +308,18 @@ export class CallsService {
         }
 
         await this.saveActiveState(nextState);
-        return this.toMutationResult(nextState);
+        await this.clearUserJoined(userId);
+        const result = this.toMutationResult(nextState);
+        this.eventEmitter.emit('call.state_changed', result);
+        return result;
     }
 
     async leaveCall(userId: number, callId: number): Promise<CallMutationResult> {
-        const state = await this.getAccessibleState(userId, callId);
+        return this.callLockService.withCallLock(callId, async () => this.leaveCallLocked(userId, callId));
+    }
+
+    private async leaveCallLocked(userId: number, callId: number, currentState?: StoredCallState): Promise<CallMutationResult> {
+        const state = currentState ?? await this.getAccessibleState(userId, callId);
         this.ensureCallIsActiveOrRinging(state);
 
         const participant = this.findParticipant(state, userId);
@@ -332,7 +348,7 @@ export class CallsService {
             })
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
-        await this.redis.del(this.userJoinedKey(userId));
+        await this.clearUserJoined(userId);
 
         const joinedCount = this.getJoinedParticipants(nextState).length;
         if (!state.isGroup || joinedCount === 0) {
@@ -340,10 +356,16 @@ export class CallsService {
         }
 
         await this.saveActiveState(nextState);
-        return this.toMutationResult(nextState);
+        const result = this.toMutationResult(nextState);
+        this.eventEmitter.emit('call.state_changed', result);
+        return result;
     }
 
     async updateMediaState(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean }): Promise<CallMutationResult> {
+        return this.callLockService.withCallLock(callId, async () => this.updateMediaStateLocked(userId, callId, input));
+    }
+
+    private async updateMediaStateLocked(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean }): Promise<CallMutationResult> {
         const state = await this.getAccessibleState(userId, callId);
         this.ensureCallIsActiveOrRinging(state);
 
@@ -365,10 +387,16 @@ export class CallsService {
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
         await this.saveActiveState(nextState);
-        return this.toMutationResult(nextState);
+        const result = this.toMutationResult(nextState);
+        this.eventEmitter.emit('call.state_changed', result);
+        return result;
     }
 
     async heartbeat(userId: number, callId: number): Promise<CallMutationResult> {
+        return this.callLockService.withCallLock(callId, async () => this.heartbeatLocked(userId, callId));
+    }
+
+    private async heartbeatLocked(userId: number, callId: number): Promise<CallMutationResult> {
         const state = await this.getAccessibleState(userId, callId);
         this.ensureCallIsActiveOrRinging(state);
 
@@ -386,7 +414,9 @@ export class CallsService {
             .set({ lastHeartbeatAt: now })
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
-        await this.saveActiveState(nextState);
+        await this.saveCallState(nextState);
+        await this.saveParticipantState(callId, this.findParticipant(nextState, userId)!);
+        await this.markUserJoined(userId, callId);
         return this.toMutationResult(nextState);
     }
 
@@ -473,19 +503,25 @@ export class CallsService {
             const callId = Number(callIdValue);
             if (!Number.isInteger(callId) || callId <= 0) return;
 
-            const state = await this.getStoredState(callId);
-            if (!state) {
-                await this.redis.srem(this.activeCallsKey(), callIdValue);
-                return;
-            }
+            try {
+                await this.callLockService.withCallLock(callId, async () => {
+                    const state = await this.getStoredState(callId);
+                    if (!state) {
+                        await this.redis.srem(this.activeCallsKey(), callIdValue);
+                        return;
+                    }
 
-            if (state.status === 'ringing' && state.ringExpiresAt && new Date(state.ringExpiresAt).getTime() <= Date.now()) {
-                await this.endCall(state, 'missed', 'timeout');
-                return;
-            }
+                    if (state.status === 'ringing' && state.ringExpiresAt && new Date(state.ringExpiresAt).getTime() <= Date.now()) {
+                        await this.endCall(state, 'missed', 'timeout');
+                        return;
+                    }
 
-            if (state.status === 'active') {
-                await this.markStaleParticipantsLeft(state);
+                    if (state.status === 'active') {
+                        await this.markStaleParticipantsLeft(state);
+                    }
+                });
+            } catch (error) {
+                if (!(error instanceof ConflictException)) throw error;
             }
         }));
     }
@@ -508,7 +544,7 @@ export class CallsService {
                 cameraEnabled: false,
                 leftAt: this.toIso(now),
             });
-            await this.redis.del(this.userJoinedKey(participant.userId));
+            await this.clearUserJoined(participant.userId);
         }
 
         await this.drizzle.db.update(callParticipants)
@@ -529,6 +565,7 @@ export class CallsService {
         }
 
         await this.saveActiveState(nextState);
+        this.eventEmitter.emit('call.state_changed', this.toMutationResult(nextState));
     }
 
     private async endCall(state: StoredCallState, finalStatus: CallSessionStatus, reason: string): Promise<CallMutationResult> {
@@ -654,7 +691,7 @@ export class CallsService {
 
         const state = await this.buildStateFromDatabase(callId);
         if (!state) return null;
-        if (['ringing', 'active'].includes(state.status)) await this.saveActiveState(state);
+        if (['ringing', 'active'].includes(state.status)) await this.saveInitialActiveState(state);
         return state;
     }
 
@@ -736,12 +773,15 @@ export class CallsService {
         };
     }
 
+    private async saveInitialActiveState(state: StoredCallState) {
+        await this.saveActiveState(state);
+    }
+
     private async saveActiveState(state: StoredCallState) {
         const pipeline = this.redis.multi();
         pipeline.set(this.callStateKey(state.id), JSON.stringify(state), 'EX', ACTIVE_CALL_TTL_SECONDS);
         pipeline.set(this.activeConversationKey(state.conversationId), String(state.id), 'EX', ACTIVE_CALL_TTL_SECONDS);
         pipeline.sadd(this.activeCallsKey(), String(state.id));
-        pipeline.del(this.callParticipantSetKey(state.id));
 
         for (const participant of state.participants) {
             pipeline.sadd(this.callParticipantSetKey(state.id), String(participant.userId));
@@ -754,12 +794,38 @@ export class CallsService {
 
             if (participant.status === 'joined') {
                 pipeline.set(this.userJoinedKey(participant.userId), String(state.id), 'EX', ACTIVE_CALL_TTL_SECONDS);
-            } else {
-                pipeline.del(this.userJoinedKey(participant.userId));
             }
         }
 
         await pipeline.exec();
+    }
+
+    private async saveCallState(state: StoredCallState) {
+        const pipeline = this.redis.multi();
+        pipeline.set(this.callStateKey(state.id), JSON.stringify(state), 'EX', ACTIVE_CALL_TTL_SECONDS);
+        pipeline.set(this.activeConversationKey(state.conversationId), String(state.id), 'EX', ACTIVE_CALL_TTL_SECONDS);
+        pipeline.sadd(this.activeCallsKey(), String(state.id));
+        await pipeline.exec();
+    }
+
+    private async saveParticipantState(callId: number, participant: StoredCallParticipant) {
+        const pipeline = this.redis.multi();
+        pipeline.sadd(this.callParticipantSetKey(callId), String(participant.userId));
+        pipeline.set(
+            this.callParticipantKey(callId, participant.userId),
+            JSON.stringify(participant),
+            'EX',
+            ACTIVE_CALL_TTL_SECONDS,
+        );
+        await pipeline.exec();
+    }
+
+    private async markUserJoined(userId: number, callId: number) {
+        await this.redis.set(this.userJoinedKey(userId), String(callId), 'EX', ACTIVE_CALL_TTL_SECONDS);
+    }
+
+    private async clearUserJoined(userId: number) {
+        await this.redis.del(this.userJoinedKey(userId));
     }
 
     private async saveEndedState(state: StoredCallState) {
