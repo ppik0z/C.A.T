@@ -6,8 +6,6 @@ export type SettingsTabId =
   | 'account'
   | 'notifications';
 
-export type ThemeMode = 'system' | 'light' | 'dark';
-export type AccentColor = 'ocean' | 'emerald' | 'violet' | 'rose';
 export type FontChoice = 'jakarta' | 'lexend' | 'system';
 export type MessageDensity = 'comfortable' | 'compact';
 
