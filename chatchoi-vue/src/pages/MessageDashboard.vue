@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, ref, watch } from 'vue';
 import ChatDetailsDrawer from '../components/organisms/ChatDetailsDrawer.vue';
 import CallOverlay from '../components/organisms/CallOverlay.vue';
 import ChatPanel from '../components/organisms/ChatPanel.vue';
@@ -9,9 +9,10 @@ import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
+import type { AppSection } from '../types/navigation';
 
 type MobileView = 'list' | 'chat';
-type AppSection = 'messages' | 'friends';
+const SettingsPanel = defineAsyncComponent(() => import('../components/organisms/SettingsPanel.vue'));
 
 const chatStore = useChatStore();
 const callStore = useCallStore();
@@ -46,7 +47,7 @@ const handleBackToList = () => {
 
 const handleNavigate = (section: AppSection) => {
   activeSection.value = section;
-  if (section === 'friends') {
+  if (section !== 'messages') {
     isDetailsOpen.value = false;
     isMessageSearchOpen.value = false;
     mobileView.value = 'list';
@@ -103,8 +104,12 @@ const handleOpenMessageSearch = () => {
       />
     </main>
 
-    <main v-else class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
+    <main v-else-if="activeSection === 'friends'" class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
       <FriendsPanel class="flex-1" @open-messages="handleOpenMessages" />
+    </main>
+
+    <main v-else class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
+      <SettingsPanel class="flex-1" />
     </main>
 
     <IncomingCallToastStack />
