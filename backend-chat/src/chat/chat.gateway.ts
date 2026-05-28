@@ -145,6 +145,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 senderName: payload.senderName,
                 lastMessageId: payload.id,
                 lastMessageIndex: payload.conversationIndex,
+                lastMessageType: payload.type,
             });
         });
     }

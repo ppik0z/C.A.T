@@ -26,6 +26,7 @@ interface ConversationRow {
     lastMessageIndex: number;
     lastMessageContent: string | null;
     lastMessageSenderName: string | null;
+    lastMessageType: string | null;
     unreadCount: number;
     lastSeenMessageIndex: number;
     isAdmin: boolean;
@@ -119,6 +120,7 @@ export class ConversationsService {
                 lastMessageIndex: conversations.lastMessageIndex,
                 lastMessageContent: conversations.lastMessageContent,
                 lastMessageSenderName: conversations.lastMessageSenderName,
+                lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
                 isAdmin: myMember.isAdmin,
@@ -172,6 +174,7 @@ export class ConversationsService {
                     id: conv.lastMessageId,
                     content: conv.lastMessageContent,
                     senderName: conv.lastMessageSenderName,
+                    type: conv.lastMessageType,
                 }
             };
         }));
@@ -374,6 +377,7 @@ export class ConversationsService {
                 id: summary.lastMessageId,
                 content: summary.lastMessageContent,
                 senderName: summary.lastMessageSenderName,
+                type: summary.lastMessageType,
             }
         };
     }
@@ -394,6 +398,7 @@ export class ConversationsService {
                 lastMessageIndex: conversations.lastMessageIndex,
                 lastMessageContent: conversations.lastMessageContent,
                 lastMessageSenderName: conversations.lastMessageSenderName,
+                lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
                 isAdmin: myMember.isAdmin,

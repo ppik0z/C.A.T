@@ -2,11 +2,13 @@
 import { onMounted, ref } from 'vue';
 import LoginView from './views/LoginView.vue';
 import MessageDashboard from './pages/MessageDashboard.vue';
+import { useCallStore } from './stores/call';
 import { useChatStore } from './stores/chat';
 import { useFriendsStore } from './stores/friends';
 import { initSocketService } from './services/socket.service';
 
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const friendsStore = useFriendsStore();
 const isLoggedIn = ref(false);
 
@@ -15,6 +17,7 @@ onMounted(() => {
   if (token) {
     chatStore.setIdentity(token);
     initSocketService(token);
+    void callStore.loadActiveCalls(token);
     void friendsStore.refreshAll();
     isLoggedIn.value = true;
   }

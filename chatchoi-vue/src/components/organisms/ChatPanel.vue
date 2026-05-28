@@ -1,25 +1,32 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import ActiveCallBanner from '../molecules/ActiveCallBanner.vue';
 import ChatHeader from '../molecules/ChatHeader.vue';
 import ComposerBar from '../molecules/ComposerBar.vue';
 import MessageBubble from '../molecules/MessageBubble.vue';
+import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
+import type { CallKind } from '../../types/call';
 import type { ChatMessage, Conversation } from '../../types/chat';
 import { formatMessageDateDivider, getMessageDateKey } from '../../utils/chatPresentation';
 
 interface Props {
   conversation: Conversation | null;
   detailsOpen: boolean;
+  searchOpen: boolean;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
   back: [];
+  closeSearch: [];
   toggleDetails: [];
 }>();
 
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const scrollRef = ref<HTMLElement | null>(null);
+const searchInputRef = ref<HTMLInputElement | null>(null);
 const searchText = ref('');
 const pendingScrollAnchorIndex = ref<number | null>(null);
 const pendingPrependHeight = ref<number | null>(null);
@@ -257,6 +264,21 @@ const navigateSearch = (direction: 'previous' | 'next') => {
   }
 };
 
+const closeSearch = () => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchText.value = '';
+  pendingScrollAnchorIndex.value = null;
+  if (props.conversation) {
+    chatStore.clearMessageSearch(props.conversation.id);
+  }
+  emit('closeSearch');
+};
+
+const handleStartCall = (kind: CallKind) => {
+  if (!props.conversation) return;
+  callStore.startCall(props.conversation.id, kind);
+};
+
 watch(
   () => props.conversation?.id,
   () => {
@@ -265,6 +287,22 @@ watch(
     pendingPrependHeight.value = null;
     pendingPrependAnchor.value = null;
     void nextTick(() => scrollToBottom('auto'));
+  },
+);
+
+watch(
+  () => props.searchOpen,
+  async (isOpen) => {
+    if (isOpen) {
+      await nextTick();
+      searchInputRef.value?.focus();
+      return;
+    }
+
+    if (searchText.value && props.conversation) {
+      searchText.value = '';
+      chatStore.clearMessageSearch(props.conversation.id);
+    }
   },
 );
 
@@ -326,14 +364,21 @@ onBeforeUnmount(() => {
         :conversation="props.conversation"
         :details-open="props.detailsOpen"
         @back="emit('back')"
+        @start-call="handleStartCall"
         @toggle-details="emit('toggleDetails')"
       />
 
-      <div class="px-4 sm:px-6 py-3 bg-surface-container-lowest border-b border-outline-variant">
+      <ActiveCallBanner :conversation="props.conversation" />
+
+      <div
+        v-if="props.searchOpen"
+        class="px-4 sm:px-6 py-3 bg-surface-container-lowest border-b border-outline-variant"
+      >
         <div class="flex items-center gap-2">
           <div class="flex-1 min-w-0 flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
             <span class="material-symbols-outlined text-[18px] text-secondary">search</span>
             <input
+              ref="searchInputRef"
               v-model="searchText"
               class="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-outline"
               placeholder="Tìm tin nhắn..."
@@ -357,6 +402,14 @@ onBeforeUnmount(() => {
             @click="navigateSearch('next')"
           >
             <span class="material-symbols-outlined text-[20px]">keyboard_arrow_down</span>
+          </button>
+          <button
+            class="h-9 w-9 rounded-full text-secondary hover:bg-surface-container-highest"
+            type="button"
+            aria-label="Đóng tìm kiếm"
+            @click="closeSearch"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
           <span class="w-16 text-right text-xs text-secondary">
             <template v-if="currentSearchState?.loading">...</template>

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
+import type { AppSection } from '../../types/navigation';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
-
-type AppSection = 'messages' | 'friends';
 
 interface Props {
   activeSection: AppSection;
@@ -25,7 +24,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
   { icon: 'chat', label: 'Messages', section: 'messages' },
   { icon: 'group', label: 'Friends', section: 'friends' },
   { icon: 'folder_open', label: 'Files' },
-  { icon: 'settings', label: 'Settings' },
+  { icon: 'settings', label: 'Settings', section: 'settings' },
 ];
 </script>
 

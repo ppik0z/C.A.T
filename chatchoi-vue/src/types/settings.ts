@@ -1,0 +1,26 @@
+export type SettingsTabId =
+  | 'appearance'
+  | 'language'
+  | 'general'
+  | 'privacy'
+  | 'account'
+  | 'notifications';
+
+export type ThemeMode = 'system' | 'light' | 'dark';
+export type AccentColor = 'ocean' | 'emerald' | 'violet' | 'rose';
+export type FontChoice = 'jakarta' | 'lexend' | 'system';
+export type MessageDensity = 'comfortable' | 'compact';
+
+export interface SettingsTab {
+  id: SettingsTabId;
+  icon: string;
+  label: string;
+  summary: string;
+}
+
+export interface SettingOption<TValue extends string> {
+  value: TValue;
+  label: string;
+  description?: string;
+  icon?: string;
+}
