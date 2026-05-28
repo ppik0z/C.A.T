@@ -1,7 +1,8 @@
 export type CallKind = 'audio' | 'video';
 export type CallSessionStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'cancelled';
 export type CallParticipantStatus = 'ringing' | 'joined' | 'left' | 'declined' | 'missed';
-export type CallProvider = 'stub';
+export type CallProvider = 'stub' | 'livekit';
+export type CallParticipantMediaStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
 export interface CallUserSummary {
   id: number;
@@ -20,6 +21,10 @@ export interface CallParticipant {
   leftAt: string | null;
   declinedAt: string | null;
   lastHeartbeatAt: string | null;
+  mediaStatus: CallParticipantMediaStatus;
+  mediaConnectedAt: string | null;
+  mediaDisconnectedAt: string | null;
+  mediaFailureReason: string | null;
 }
 
 export interface CallState {
@@ -59,4 +64,17 @@ export interface CallHistoryItem {
   answeredAt: string | null;
   endedAt: string | null;
   endedReason: string | null;
+}
+
+export interface CallMediaToken {
+  callId: number;
+  provider: 'livekit';
+  wsUrl: string;
+  roomName: string;
+  token: string;
+  expiresAt: string;
+  participantIdentity: `user:${number}`;
+  connectOptions: { autoSubscribe: false };
+  roomOptions: { adaptiveStream: true; dynacast: true };
+  videoPageSize: number;
 }

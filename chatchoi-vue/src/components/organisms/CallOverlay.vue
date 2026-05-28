@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import CallControlButton from '../atoms/CallControlButton.vue';
 import CallParticipantTile from '../molecules/CallParticipantTile.vue';
+import { useCallMediaStore } from '../../stores/call-media';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
 import { getConversationName, getConversationUser } from '../../utils/chatPresentation';
 
 const callStore = useCallStore();
+const callMediaStore = useCallMediaStore();
 const chatStore = useChatStore();
 
 const call = computed(() => callStore.activeOverlayCall);
@@ -30,11 +32,17 @@ const kind = computed(() => call.value?.kind ?? pending.value?.kind ?? 'audio');
 const joinedParticipants = computed(() => {
   return call.value?.participants.filter((participant) => participant.status === 'joined') ?? [];
 });
+const visibleJoinedParticipants = computed(() => {
+  const startIndex = callMediaStore.videoPageIndex * callMediaStore.videoPageSize;
+  return joinedParticipants.value.slice(startIndex, startIndex + callMediaStore.videoPageSize);
+});
 const displayedParticipants = computed(() => {
   if (!call.value) return [];
-  const joined = call.value.participants.filter((participant) => participant.status === 'joined');
   const waiting = call.value.participants.filter((participant) => participant.status !== 'joined');
-  return [...joined, ...waiting];
+  return [...visibleJoinedParticipants.value, ...waiting];
+});
+const pageCount = computed(() => {
+  return Math.max(1, Math.ceil(joinedParticipants.value.length / callMediaStore.videoPageSize));
 });
 const localParticipant = computed(() => {
   const myId = chatStore.myId;
@@ -47,14 +55,70 @@ const statusText = computed(() => {
   if (call.value.status === 'ringing') return 'Đang gọi...';
   return `${joinedParticipants.value.length} người đang tham gia`;
 });
+const mediaStatusText = computed(() => {
+  if (!call.value || call.value.provider !== 'livekit' || call.value.currentUserStatus !== 'joined') return null;
+  if (callMediaStore.connectionStatus === 'connecting') return 'Đang kết nối media...';
+  if (callMediaStore.connectionStatus === 'reconnecting') return 'Đang kết nối lại media...';
+  if (callMediaStore.connectionStatus === 'connected') return 'Media đã kết nối';
+  if (callMediaStore.connectionStatus === 'failed') return 'Không thể kết nối media';
+  return null;
+});
 
 const handleLeave = () => {
   if (call.value) {
+    void callMediaStore.disconnectForCall(call.value.id);
     callStore.leaveCall(call.value.id);
     return;
   }
   callStore.pendingOutgoing = null;
 };
+
+const handleToggleMic = () => {
+  if (!call.value) return;
+  const enabled = !localParticipant.value?.micEnabled;
+  if (call.value.provider === 'livekit' && callMediaStore.activeCallId === call.value.id) {
+    void callMediaStore.setMicEnabled(call.value.id, enabled);
+    return;
+  }
+  callStore.toggleMic(call.value.id);
+};
+
+const handleToggleCamera = () => {
+  if (!call.value) return;
+  const enabled = !localParticipant.value?.cameraEnabled;
+  if (call.value.provider === 'livekit' && callMediaStore.activeCallId === call.value.id) {
+    void callMediaStore.setCameraEnabled(call.value.id, enabled);
+    return;
+  }
+  callStore.toggleCamera(call.value.id);
+};
+
+watch(call, (nextCall, previousCall) => {
+  if (previousCall && previousCall.id !== nextCall?.id) {
+    void callMediaStore.disconnectForCall(previousCall.id, false);
+  }
+
+  if (!nextCall || nextCall.provider !== 'livekit' || nextCall.currentUserStatus !== 'joined') {
+    if (previousCall) void callMediaStore.disconnectForCall(previousCall.id, false);
+    return;
+  }
+
+  void callMediaStore.connectForCall(nextCall);
+  callMediaStore.syncVideoPage(nextCall);
+}, { immediate: true });
+
+watch(() => [
+  call.value?.id,
+  call.value?.participants.map((participant) => `${participant.userId}:${participant.status}`).join('|'),
+  callMediaStore.videoPageIndex,
+  callMediaStore.videoPageSize,
+], () => {
+  if (call.value) callMediaStore.syncVideoPage(call.value);
+});
+
+onBeforeUnmount(() => {
+  if (call.value) void callMediaStore.disconnectForCall(call.value.id, false);
+});
 </script>
 
 <template>
@@ -72,12 +136,20 @@ const handleLeave = () => {
               <p class="text-sm text-secondary truncate">
                 {{ kind === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại' }} · {{ statusText }}
               </p>
+              <p v-if="mediaStatusText" class="text-xs text-secondary truncate">{{ mediaStatusText }}</p>
             </div>
           </div>
           <span class="material-symbols-outlined text-primary text-[28px]">
             {{ kind === 'video' ? 'videocam' : 'call' }}
           </span>
         </header>
+
+        <div
+          v-if="callMediaStore.error"
+          class="border-b border-error/30 bg-error-container px-5 py-2 text-sm text-on-error-container"
+        >
+          {{ callMediaStore.error }}
+        </div>
 
         <div class="flex-1 min-h-0 overflow-y-auto bg-background/60 p-4 sm:p-6">
           <div
@@ -88,6 +160,8 @@ const handleLeave = () => {
               v-for="participant in displayedParticipants"
               :key="participant.userId"
               :participant="participant"
+              :video-track="callMediaStore.getVideoTrackForUser(participant.userId)"
+              :is-active-speaker="callMediaStore.isActiveSpeaker(participant.userId)"
             />
           </div>
 
@@ -99,21 +173,41 @@ const handleLeave = () => {
         </div>
 
         <footer class="px-5 py-4 border-t border-outline-variant bg-surface-container-lowest flex items-center justify-center gap-3">
+          <button
+            v-if="call && pageCount > 1"
+            class="h-11 w-11 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary"
+            type="button"
+            aria-label="Trang trước"
+            :disabled="callMediaStore.videoPageIndex === 0"
+            @click="callMediaStore.previousVideoPage(call)"
+          >
+            <span class="material-symbols-outlined text-[22px]">chevron_left</span>
+          </button>
           <CallControlButton
             v-if="call"
             :active="Boolean(localParticipant?.micEnabled)"
             :icon="localParticipant?.micEnabled ? 'mic' : 'mic_off'"
             label="Bật/tắt micro"
-            @click="callStore.toggleMic(call.id)"
+            @click="handleToggleMic"
           />
           <CallControlButton
             v-if="call && kind === 'video'"
             :active="Boolean(localParticipant?.cameraEnabled)"
             :icon="localParticipant?.cameraEnabled ? 'videocam' : 'videocam_off'"
             label="Bật/tắt camera"
-            @click="callStore.toggleCamera(call.id)"
+            @click="handleToggleCamera"
           />
           <CallControlButton icon="call_end" label="Rời cuộc gọi" tone="danger" @click="handleLeave" />
+          <button
+            v-if="call && pageCount > 1"
+            class="h-11 w-11 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary"
+            type="button"
+            aria-label="Trang sau"
+            :disabled="callMediaStore.videoPageIndex >= pageCount - 1"
+            @click="callMediaStore.nextVideoPage(call)"
+          >
+            <span class="material-symbols-outlined text-[22px]">chevron_right</span>
+          </button>
         </footer>
       </section>
     </div>
