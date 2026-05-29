@@ -59,27 +59,28 @@ export const useCallMediaStore = defineStore('call-media', {
         return;
       }
 
-      this.activeCallId = call.id;
+      const callId = call.id;
+      this.activeCallId = callId;
       this.error = null;
 
       try {
-        const mediaToken = await createCallMediaToken(token, call.id);
+        const mediaToken = await createCallMediaToken(token, callId);
         this.videoPageSize = mediaToken.videoPageSize;
         const store = this;
 
         await callMediaService.connect({
-          callId: call.id,
+          callId,
           kind: call.kind,
           token: mediaToken,
           callbacks: {
             onStatusChange(status) {
-              store.applyConnectionStatus(call.id, status);
+              store.applyConnectionStatus(callId, status);
             },
             onSnapshot(snapshot) {
               store.applySnapshot(snapshot);
             },
             onLocalMediaChange(state) {
-              store.applyLocalMediaState(call.id, state);
+              store.applyLocalMediaState(callId, state);
             },
             onError(message) {
               store.setError(message);
@@ -89,7 +90,7 @@ export const useCallMediaStore = defineStore('call-media', {
 
         this.syncVideoPage(call);
       } catch (error) {
-        this.applyConnectionStatus(call.id, 'failed', error instanceof Error ? error.message : 'Không thể kết nối media.');
+        this.applyConnectionStatus(callId, 'failed', error instanceof Error ? error.message : 'Không thể kết nối media.');
       }
     },
 

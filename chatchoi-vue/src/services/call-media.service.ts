@@ -40,7 +40,7 @@ class CallMediaService {
   private activeCallId: number | null = null;
   private localIdentity: string | null = null;
   private visibleVideoIdentities = new Set<string>();
-  private audioElements = new Map<string, HTMLMediaElement>();
+  private audioElements = new Map<string, { element: HTMLMediaElement; track: RemoteAudioTrack }>();
   private callbacks: ConnectCallMediaInput['callbacks'] | null = null;
   private liveKitModule: LiveKitModule | null = null;
 
@@ -64,6 +64,11 @@ class CallMediaService {
       this.syncSubscriptions();
       this.emitSnapshot();
     } catch (error) {
+      room.removeAllListeners();
+      await room.disconnect(true).catch(() => {});
+      this.room = null;
+      this.activeCallId = null;
+      this.localIdentity = null;
       this.callbacks?.onError(this.toMessage(error));
       throw error;
     }
@@ -238,18 +243,22 @@ class CallMediaService {
     element.hidden = true;
     element.dataset.callAudioTrack = trackSid;
     document.body.appendChild(element);
-    this.audioElements.set(trackSid, element);
+    this.audioElements.set(trackSid, { element, track });
   }
 
   private detachAudio(trackSid: string) {
-    const element = this.audioElements.get(trackSid);
-    if (!element) return;
-    element.remove();
+    const entry = this.audioElements.get(trackSid);
+    if (!entry) return;
+    entry.track.detach(entry.element);
+    entry.element.remove();
     this.audioElements.delete(trackSid);
   }
 
   private detachAllAudio() {
-    this.audioElements.forEach((element) => element.remove());
+    this.audioElements.forEach(({ element, track }) => {
+      track.detach(element);
+      element.remove();
+    });
     this.audioElements.clear();
   }
 

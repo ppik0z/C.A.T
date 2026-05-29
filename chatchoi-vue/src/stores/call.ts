@@ -11,7 +11,7 @@ interface PendingOutgoingCall {
 }
 
 const incomingTimers = new Map<number, ReturnType<typeof setTimeout>>();
-let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+const heartbeatTimers = new Map<number, ReturnType<typeof setInterval>>();
 let callErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
 const CALL_ERROR_TTL_MS = 3_500;
@@ -268,21 +268,28 @@ export const useCallStore = defineStore('call', {
     },
 
     startHeartbeat(callId: number) {
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
-      heartbeatTimer = setInterval(() => {
+      this.stopHeartbeat(callId);
+      heartbeatTimers.set(callId, setInterval(() => {
         const call = this.findCallById(callId);
         if (!call || call.currentUserStatus !== 'joined' || isTerminalCallStatus(call.status)) {
           this.stopHeartbeat(callId);
           return;
         }
         socket.emit('call:heartbeat', { callId });
-      }, 10_000);
+      }, 10_000));
     },
 
-    stopHeartbeat(_callId?: number) {
-      if (!heartbeatTimer) return;
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
+    stopHeartbeat(callId?: number) {
+      if (callId !== undefined) {
+        const timer = heartbeatTimers.get(callId);
+        if (timer) {
+          clearInterval(timer);
+          heartbeatTimers.delete(callId);
+        }
+        return;
+      }
+      heartbeatTimers.forEach((timer) => clearInterval(timer));
+      heartbeatTimers.clear();
     },
 
     findCallById(callId: number): CallState | null {

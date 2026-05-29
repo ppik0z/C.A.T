@@ -131,10 +131,11 @@ export class CallsService {
     async startCall(userId: number, username: string, input: { conversationId: number; kind: CallKind }): Promise<CallMutationResult> {
         const kind = this.normalizeKind(input.kind);
         const access = await this.ensureConversationMember(userId, input.conversationId);
-        const joinedCallId = await this.redis.get(this.userJoinedKey(userId));
-        if (joinedCallId) throw new BadRequestException('Bạn đang ở trong một cuộc gọi khác.');
 
         return this.callLockService.withConversationCreateLock(input.conversationId, async () => {
+            const joinedCallId = await this.redis.get(this.userJoinedKey(userId));
+            if (joinedCallId) throw new BadRequestException('Bạn đang ở trong một cuộc gọi khác.');
+
             const activeCallId = await this.redis.get(this.activeConversationKey(input.conversationId));
             if (activeCallId) throw new BadRequestException('Đoạn chat này đang có cuộc gọi.');
 
