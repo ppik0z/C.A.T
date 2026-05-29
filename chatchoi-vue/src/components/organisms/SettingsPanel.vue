@@ -276,6 +276,7 @@ const closeMobileDetail = () => {
                       <ThemePreview
                         :density="draftDensity"
                         :font="draftFont"
+                        :fontSize="draftFontSize"
                         :preset="draftPreset"
                       />
                     </CardContent>

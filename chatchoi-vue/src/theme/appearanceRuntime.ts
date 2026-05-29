@@ -47,7 +47,7 @@ const tokenCssVariables: Record<keyof ThemeColorTokens, string> = {
   onWarningContainer: '--theme-on-warning-container',
 };
 
-const fontFamilies: Record<FontChoice, string> = {
+export const fontFamilies: Record<FontChoice, string> = {
   jakarta: '"Plus Jakarta Sans", sans-serif',
   lexend: '"Lexend", sans-serif',
   system: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
@@ -56,7 +56,7 @@ const fontFamilies: Record<FontChoice, string> = {
   opensans: '"Open Sans", sans-serif',
 };
 
-const fontSizeMap: Record<FontSize, string> = {
+export const fontSizeMap: Record<FontSize, string> = {
   small: '14px',
   medium: '16px',
   large: '18px',

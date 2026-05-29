@@ -138,12 +138,12 @@
   .left-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    width: 80px;
+    width: 5rem;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .left-sidebar:hover {
-    width: 240px;
+    width: 15rem;
   }
 
   .sidebar-label {
@@ -157,7 +157,7 @@
   }
 
   .left-sidebar:hover .sidebar-label {
-    max-width: 160px;
+    max-width: 10rem;
     opacity: 1;
   }
 }
