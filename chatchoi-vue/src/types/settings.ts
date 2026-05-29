@@ -9,6 +9,8 @@ export type SettingsTabId =
 export type FontChoice = 'jakarta' | 'lexend' | 'system' | 'inter' | 'roboto' | 'opensans';
 export type FontSize = 'small' | 'medium' | 'large' | 'extra-large';
 export type MessageDensity = 'comfortable' | 'compact';
+export type LanguageChoice = 'vi' | 'en';
+export type TimeFormat = '24h' | '12h';
 
 export interface SettingsTab {
   id: SettingsTabId;
