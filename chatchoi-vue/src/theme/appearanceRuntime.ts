@@ -5,10 +5,11 @@ import {
   type ThemePreset,
   type ThemePresetId,
 } from './themePresets';
-import type { FontChoice, MessageDensity } from '@/types/settings';
+import type { FontChoice, FontSize, MessageDensity } from '@/types/settings';
 
 const storageKeyTheme = 'chatchoi.themePresetId';
 const storageKeyFont = 'chatchoi.fontChoice';
+const storageKeyFontSize = 'chatchoi.fontSize';
 const storageKeyDensity = 'chatchoi.messageDensity';
 
 const tokenCssVariables: Record<keyof ThemeColorTokens, string> = {
@@ -55,11 +56,20 @@ const fontFamilies: Record<FontChoice, string> = {
   opensans: '"Open Sans", sans-serif',
 };
 
+const fontSizeMap: Record<FontSize, string> = {
+  small: '14px',
+  medium: '16px',
+  large: '18px',
+  'extra-large': '20px',
+};
+
 const defaultFontChoice: FontChoice = 'jakarta';
+const defaultFontSize: FontSize = 'medium';
 const defaultDensity: MessageDensity = 'comfortable';
 
 let currentThemePresetId: ThemePresetId = defaultThemePresetId;
 let currentFontChoice: FontChoice = defaultFontChoice;
+let currentFontSize: FontSize = defaultFontSize;
 let currentDensity: MessageDensity = defaultDensity;
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -83,6 +93,11 @@ export const applyFontChoice = (font: FontChoice) => {
   root.style.setProperty('--font-label', font === 'jakarta' ? fontFamilies['lexend'] : (fontFamilies[font] || fontFamilies[defaultFontChoice]));
 };
 
+export const applyFontSize = (size: FontSize) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.fontSize = fontSizeMap[size] || fontSizeMap[defaultFontSize];
+};
+
 export const applyDensity = (density: MessageDensity) => {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -90,19 +105,22 @@ export const applyDensity = (density: MessageDensity) => {
 };
 
 // Set and persist functions
-export const setAppearanceRuntime = (presetId: ThemePresetId, font: FontChoice, density: MessageDensity) => {
+export const setAppearanceRuntime = (presetId: ThemePresetId, font: FontChoice, fontSize: FontSize, density: MessageDensity) => {
   const preset = resolveThemePreset(presetId);
   currentThemePresetId = preset.id;
   currentFontChoice = font;
+  currentFontSize = fontSize;
   currentDensity = density;
 
   applyThemePreset(preset);
   applyFontChoice(font);
+  applyFontSize(fontSize);
   applyDensity(density);
 
   if (canUseStorage()) {
     localStorage.setItem(storageKeyTheme, preset.id);
     localStorage.setItem(storageKeyFont, font);
+    localStorage.setItem(storageKeyFontSize, fontSize);
     localStorage.setItem(storageKeyDensity, density);
   }
 };
@@ -111,24 +129,28 @@ export const setAppearanceRuntime = (presetId: ThemePresetId, font: FontChoice, 
 export const initializeAppearance = () => {
   let storedPresetId: string | null = null;
   let storedFont: string | null = null;
+  let storedFontSize: string | null = null;
   let storedDensity: string | null = null;
 
   if (canUseStorage()) {
     storedPresetId = localStorage.getItem(storageKeyTheme);
     storedFont = localStorage.getItem(storageKeyFont);
+    storedFontSize = localStorage.getItem(storageKeyFontSize);
     storedDensity = localStorage.getItem(storageKeyDensity);
   }
 
   const presetId = storedPresetId ? resolveThemePreset(storedPresetId).id : defaultThemePresetId;
   const fontChoice = (storedFont as FontChoice) || defaultFontChoice;
+  const fontSize = (storedFontSize as FontSize) || defaultFontSize;
   const messageDensity = (storedDensity as MessageDensity) || defaultDensity;
 
-  setAppearanceRuntime(presetId, fontChoice, messageDensity);
+  setAppearanceRuntime(presetId, fontChoice, fontSize, messageDensity);
 };
 
 // Getters
 export const getCurrentAppearance = () => ({
   themePresetId: currentThemePresetId,
   fontChoice: currentFontChoice,
+  fontSize: currentFontSize,
   messageDensity: currentDensity,
 });

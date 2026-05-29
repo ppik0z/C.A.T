@@ -7,6 +7,7 @@ export type SettingsTabId =
   | 'notifications';
 
 export type FontChoice = 'jakarta' | 'lexend' | 'system' | 'inter' | 'roboto' | 'opensans';
+export type FontSize = 'small' | 'medium' | 'large' | 'extra-large';
 export type MessageDensity = 'comfortable' | 'compact';
 
 export interface SettingsTab {

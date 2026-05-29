@@ -13,6 +13,7 @@ import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/th
 import { useAppearance } from '@/theme/useAppearance';
 import type {
   FontChoice,
+  FontSize,
   MessageDensity,
   SettingOption,
   SettingsTab,
@@ -27,7 +28,7 @@ type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
 const chatStore = useChatStore();
-const { activePresetId, activeFont, activeDensity, commitAppearance } = useAppearance();
+const { activePresetId, activeFont, activeFontSize, activeDensity, commitAppearance } = useAppearance();
 
 const settingsTabs: SettingsTab[] = [
   { id: 'appearance', icon: 'palette', label: 'Appearance', summary: 'Theme, font, chat density' },
@@ -47,6 +48,13 @@ const fontOptions: Array<SettingOption<FontChoice>> = [
   { value: 'system', label: 'System', description: 'Nhanh nhất' },
 ];
 
+const fontSizeOptions: Array<SettingOption<FontSize>> = [
+  { value: 'small', label: 'Nhỏ', description: '14px' },
+  { value: 'medium', label: 'Vừa', description: '16px' },
+  { value: 'large', label: 'Lớn', description: '18px' },
+  { value: 'extra-large', label: 'Rất lớn', description: '20px' },
+];
+
 const densityOptions: Array<SettingOption<MessageDensity>> = [
   { value: 'comfortable', label: 'Comfortable', description: 'Khoảng thở rộng' },
   { value: 'compact', label: 'Compact', description: 'Hiển thị nhiều hơn' },
@@ -58,11 +66,13 @@ const isMobileDetailOpen = ref(false);
 // Draft states for Appearance
 const draftPresetId = ref<ThemePresetId>(activePresetId.value);
 const draftFont = ref<FontChoice>(activeFont.value);
+const draftFontSize = ref<FontSize>(activeFontSize.value);
 const draftDensity = ref<MessageDensity>(activeDensity.value);
 
 const syncDrafts = () => {
   draftPresetId.value = activePresetId.value;
   draftFont.value = activeFont.value;
+  draftFontSize.value = activeFontSize.value;
   draftDensity.value = activeDensity.value;
 };
 
@@ -76,13 +86,14 @@ watch(activeTab, (newTab, oldTab) => {
 const isAppearanceDirty = computed(() => {
   return draftPresetId.value !== activePresetId.value ||
          draftFont.value !== activeFont.value ||
+         draftFontSize.value !== activeFontSize.value ||
          draftDensity.value !== activeDensity.value;
 });
 
 const draftPreset = computed(() => resolveThemePreset(draftPresetId.value));
 
 const applyAppearanceChanges = () => {
-  commitAppearance(draftPresetId.value, draftFont.value, draftDensity.value);
+  commitAppearance(draftPresetId.value, draftFont.value, draftFontSize.value, draftDensity.value);
 };
 
 // Other settings
@@ -220,6 +231,22 @@ const closeMobileDetail = () => {
                             :selected="draftFont === option.value"
                             @select="draftFont = option.value"
                           />
+                        </div>
+
+                        <Separator />
+
+                        <div class="space-y-3">
+                          <p class="text-sm font-bold text-on-surface">Kích thước</p>
+                          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <SettingOptionButton
+                              v-for="option in fontSizeOptions"
+                              :key="option.value"
+                              :description="option.description"
+                              :label="option.label"
+                              :selected="draftFontSize === option.value"
+                              @select="draftFontSize = option.value"
+                            />
+                          </div>
                         </div>
 
                         <!-- Temporarily hiding density
