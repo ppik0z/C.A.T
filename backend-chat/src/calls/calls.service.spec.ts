@@ -46,8 +46,8 @@ describe('CallsService', () => {
         isGroup: true,
         kind: 'video' as const,
         status: 'active' as const,
-        provider: 'stub' as const,
-        roomName: 'stub_conv_20_10',
+        provider: 'livekit' as const,
+        roomName: 'livekit_conv_20_10',
         startedBy: {
             id: 1,
             username: 'starter',
@@ -70,6 +70,10 @@ describe('CallsService', () => {
                 leftAt: null,
                 declinedAt: null,
                 lastHeartbeatAt: new Date().toISOString(),
+                mediaStatus: 'connected' as const,
+                mediaConnectedAt: new Date(Date.now() - 4_000).toISOString(),
+                mediaDisconnectedAt: null,
+                mediaFailureReason: null,
             },
             {
                 userId: 2,
@@ -82,6 +86,10 @@ describe('CallsService', () => {
                 leftAt: null,
                 declinedAt: new Date(Date.now() - 2_000).toISOString(),
                 lastHeartbeatAt: null,
+                mediaStatus: 'idle' as const,
+                mediaConnectedAt: null,
+                mediaDisconnectedAt: null,
+                mediaFailureReason: null,
             },
         ],
     });
@@ -228,6 +236,32 @@ describe('CallsService', () => {
 
         expect(redisClient.del).toHaveBeenCalledWith('call:user:2:joined');
         expect(redisClient.del).not.toHaveBeenCalledWith('call:user:1:joined');
+        expect(eventEmitter.emit).toHaveBeenCalledWith('call.state_changed', expect.objectContaining({ callId: 10 }));
+    });
+
+    it('returns media token context only for a joined LiveKit participant', async () => {
+        jest.spyOn(service as unknown as { getAccessibleState: jest.Mock }, 'getAccessibleState').mockResolvedValue(baseState());
+
+        await expect(service.getMediaTokenContext(1, 10)).resolves.toMatchObject({
+            callId: 10,
+            conversationId: 20,
+            provider: 'livekit',
+            roomName: 'livekit_conv_20_10',
+            user: {
+                id: 1,
+                username: 'starter',
+            },
+        });
+        await expect(service.getMediaTokenContext(2, 10)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('updates media connection status for a joined participant', async () => {
+        jest.spyOn(service as unknown as { getAccessibleState: jest.Mock }, 'getAccessibleState').mockResolvedValue(baseState());
+
+        const result = await service.updateMediaConnectionStatus(1, 10, { status: 'reconnecting' });
+        const participant = result.state.participants.find((item) => item.userId === 1);
+
+        expect(participant?.mediaStatus).toBe('reconnecting');
         expect(eventEmitter.emit).toHaveBeenCalledWith('call.state_changed', expect.objectContaining({ callId: 10 }));
     });
 });
