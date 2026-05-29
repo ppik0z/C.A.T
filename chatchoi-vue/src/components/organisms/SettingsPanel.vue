@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -9,8 +9,8 @@ import SettingOptionButton from '@/components/molecules/SettingOptionButton.vue'
 import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
 import { useChatStore } from '@/stores/chat';
-import { themePresets, type ThemePresetId } from '@/theme/themePresets';
-import { useThemePreference } from '@/theme/themePreference';
+import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
+import { useAppearance } from '@/theme/useAppearance';
 import type {
   FontChoice,
   MessageDensity,
@@ -27,7 +27,7 @@ type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
 const chatStore = useChatStore();
-const { activePreset, activePresetId, setThemePreset } = useThemePreference();
+const { activePresetId, activeFont, activeDensity, commitAppearance } = useAppearance();
 
 const settingsTabs: SettingsTab[] = [
   { id: 'appearance', icon: 'palette', label: 'Appearance', summary: 'Theme, font, chat density' },
@@ -41,6 +41,9 @@ const settingsTabs: SettingsTab[] = [
 const fontOptions: Array<SettingOption<FontChoice>> = [
   { value: 'jakarta', label: 'Plus Jakarta', description: 'Gọn, hiện đại' },
   { value: 'lexend', label: 'Lexend', description: 'Rõ chữ, dễ đọc' },
+  { value: 'inter', label: 'Inter', description: 'Phổ biến, rõ ràng' },
+  { value: 'roboto', label: 'Roboto', description: 'Cổ điển' },
+  { value: 'opensans', label: 'Open Sans', description: 'Dễ nhìn' },
   { value: 'system', label: 'System', description: 'Nhanh nhất' },
 ];
 
@@ -51,8 +54,38 @@ const densityOptions: Array<SettingOption<MessageDensity>> = [
 
 const activeTab = ref<SettingsTabId>('appearance');
 const isMobileDetailOpen = ref(false);
-const fontChoice = ref<FontChoice>('jakarta');
-const messageDensity = ref<MessageDensity>('comfortable');
+
+// Draft states for Appearance
+const draftPresetId = ref<ThemePresetId>(activePresetId.value);
+const draftFont = ref<FontChoice>(activeFont.value);
+const draftDensity = ref<MessageDensity>(activeDensity.value);
+
+const syncDrafts = () => {
+  draftPresetId.value = activePresetId.value;
+  draftFont.value = activeFont.value;
+  draftDensity.value = activeDensity.value;
+};
+
+// Discard drafts when switching tabs
+watch(activeTab, (newTab, oldTab) => {
+  if (oldTab === 'appearance') {
+    syncDrafts();
+  }
+});
+
+const isAppearanceDirty = computed(() => {
+  return draftPresetId.value !== activePresetId.value ||
+         draftFont.value !== activeFont.value ||
+         draftDensity.value !== activeDensity.value;
+});
+
+const draftPreset = computed(() => resolveThemePreset(draftPresetId.value));
+
+const applyAppearanceChanges = () => {
+  commitAppearance(draftPresetId.value, draftFont.value, draftDensity.value);
+};
+
+// Other settings
 const language = ref<LanguageChoice>('vi');
 const timeFormat = ref<TimeFormat>('24h');
 const startupView = ref<StartupView>('messages');
@@ -79,10 +112,6 @@ const selectTab = (tabId: SettingsTabId) => {
 
 const closeMobileDetail = () => {
   isMobileDetailOpen.value = false;
-};
-
-const handleThemePresetSelected = (presetId: ThemePresetId) => {
-  setThemePreset(presetId);
 };
 </script>
 
@@ -154,15 +183,15 @@ const handleThemePresetSelected = (presetId: ThemePresetId) => {
                           <button
                             v-for="preset in themePresets"
                             :key="preset.id"
-                            :aria-pressed="activePresetId === preset.id"
+                            :aria-pressed="draftPresetId === preset.id"
                             :class="[
                               'rounded-lg border p-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]',
-                              activePresetId === preset.id
+                              draftPresetId === preset.id
                                 ? 'border-primary bg-primary-container/30 shadow-sm'
                                 : 'border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low',
                             ]"
                             type="button"
-                            @click="handleThemePresetSelected(preset.id)"
+                            @click="draftPresetId = preset.id"
                           >
                             <div class="mb-3 flex gap-1">
                               <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.primary }" />
@@ -178,8 +207,8 @@ const handleThemePresetSelected = (presetId: ThemePresetId) => {
 
                     <Card>
                       <CardHeader>
-                        <CardTitle>Typography & density</CardTitle>
-                        <CardDescription>Tối ưu cảm giác đọc và số lượng tin nhắn trên màn hình.</CardDescription>
+                        <CardTitle>Typography</CardTitle>
+                        <CardDescription>Tối ưu cảm giác đọc bằng các phông chữ phổ biến.</CardDescription>
                       </CardHeader>
                       <CardContent class="space-y-4">
                         <div class="grid gap-2 sm:grid-cols-3">
@@ -188,11 +217,12 @@ const handleThemePresetSelected = (presetId: ThemePresetId) => {
                             :key="option.value"
                             :description="option.description"
                             :label="option.label"
-                            :selected="fontChoice === option.value"
-                            @select="fontChoice = option.value"
+                            :selected="draftFont === option.value"
+                            @select="draftFont = option.value"
                           />
                         </div>
 
+                        <!-- Temporarily hiding density
                         <Separator />
 
                         <div class="grid gap-2 sm:grid-cols-2">
@@ -201,10 +231,11 @@ const handleThemePresetSelected = (presetId: ThemePresetId) => {
                             :key="option.value"
                             :description="option.description"
                             :label="option.label"
-                            :selected="messageDensity === option.value"
-                            @select="messageDensity = option.value"
+                            :selected="draftDensity === option.value"
+                            @select="draftDensity = option.value"
                           />
                         </div>
+                        -->
                       </CardContent>
                     </Card>
                   </div>
@@ -216,13 +247,29 @@ const handleThemePresetSelected = (presetId: ThemePresetId) => {
                     </CardHeader>
                     <CardContent>
                       <ThemePreview
-                        :density="messageDensity"
-                        :font="fontChoice"
-                        :preset="activePreset"
+                        :density="draftDensity"
+                        :font="draftFont"
+                        :preset="draftPreset"
                       />
                     </CardContent>
                   </Card>
                 </div>
+                  <Transition
+                    enter-active-class="transition duration-200 ease-out"
+                    enter-from-class="translate-y-4 opacity-0"
+                    enter-to-class="translate-y-0 opacity-100"
+                    leave-active-class="transition duration-150 ease-in"
+                    leave-from-class="translate-y-0 opacity-100"
+                    leave-to-class="translate-y-4 opacity-0"
+                  >
+                    <div v-if="isAppearanceDirty" class="sticky bottom-4 z-10 mx-auto mt-4 max-w-fit rounded-xl border border-outline-variant bg-surface-container p-3 shadow-lg flex items-center gap-4">
+                      <span class="text-sm font-semibold text-on-surface">You have unsaved changes!</span>
+                      <div class="flex items-center gap-2">
+                        <Button variant="ghost" @click="syncDrafts">Reset</Button>
+                        <Button @click="applyAppearanceChanges">Apply changes</Button>
+                      </div>
+                    </div>
+                  </Transition>
               </template>
 
               <template v-else-if="activeTab === 'language'">
