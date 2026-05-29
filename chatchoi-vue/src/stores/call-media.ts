@@ -15,7 +15,7 @@ import { useCallStore } from './call';
 const getToken = () => localStorage.getItem('accessToken');
 const toParticipantIdentity = (userId: number): `user:${number}` => `user:${userId}`;
 
-const mediaStatusEventByStatus: Record<Exclude<CallMediaConnectionStatus, 'idle'>, string> = {
+const mediaStatusEventByStatus: Record<Exclude<CallMediaConnectionStatus, 'idle' | 'taken_over'>, string> = {
   connecting: 'call:media_connecting',
   connected: 'call:media_connected',
   reconnecting: 'call:media_reconnecting',
@@ -46,11 +46,22 @@ export const useCallMediaStore = defineStore('call-media', {
   },
 
   actions: {
-    async connectForCall(call: CallState) {
+    async connectForCall(call: CallState, forceConnect = false) {
       if (call.provider !== 'livekit' || call.currentUserStatus !== 'joined') return;
       if (this.activeCallId === call.id && ['connecting', 'connected', 'reconnecting'].includes(this.connectionStatus)) {
         this.syncVideoPage(call);
         return;
+      }
+
+      // Pre-connection check: media đang active ở tab/thiết bị khác?
+      if (!forceConnect) {
+        const myParticipant = this.getCurrentParticipant(call.id)
+          ?? call.participants.find((p) => p.userId === useCallStore().getCurrentUserId());
+        if (myParticipant && ['connecting', 'connected', 'reconnecting'].includes(myParticipant.mediaStatus)) {
+          this.activeCallId = call.id;
+          this.connectionStatus = 'taken_over';
+          return;
+        }
       }
 
       const token = getToken();
@@ -157,7 +168,7 @@ export const useCallMediaStore = defineStore('call-media', {
       if (this.connectionStatus === status && status !== 'failed') return;
 
       this.connectionStatus = status;
-      if (status === 'idle') return;
+      if (status === 'idle' || status === 'taken_over') return;
 
       const event = mediaStatusEventByStatus[status];
       socket.emit(event, { callId, failureReason });

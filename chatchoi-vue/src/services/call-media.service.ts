@@ -8,7 +8,7 @@ import type {
 } from 'livekit-client';
 import type { CallKind, CallMediaToken } from '../types/call';
 
-export type CallMediaConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
+export type CallMediaConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed' | 'taken_over';
 export type CallVideoTrack = LocalVideoTrack | RemoteVideoTrack;
 type LiveKitModule = typeof import('livekit-client');
 
@@ -127,9 +127,13 @@ class CallMediaService {
       this.syncSubscriptions();
       this.emitSnapshot();
     });
-    room.on(liveKit.RoomEvent.Disconnected, () => {
+    room.on(liveKit.RoomEvent.Disconnected, (reason?: liveKit.DisconnectReason) => {
       this.detachAllAudio();
-      this.setStatus('disconnected');
+      if (reason === liveKit.DisconnectReason.DUPLICATE_IDENTITY) {
+        this.setStatus('taken_over');
+      } else {
+        this.setStatus('disconnected');
+      }
       this.emitSnapshot();
     });
     room.on(liveKit.RoomEvent.ParticipantConnected, () => {
