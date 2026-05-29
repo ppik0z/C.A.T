@@ -21,9 +21,9 @@ const sizeClass = computed(() => {
 <template>
   <span
     :class="[
-      'inline-flex rounded-full border-2 border-white shadow-sm',
+      'inline-flex rounded-full border-2 border-surface-container-lowest shadow-sm',
       sizeClass,
-      props.isOnline ? 'bg-emerald-500 ring-2 ring-emerald-500/20' : 'bg-surface-container-high border-outline-variant',
+      props.isOnline ? 'bg-success ring-2 ring-success/20' : 'bg-surface-container-high border-outline-variant',
     ]"
     :aria-label="props.isOnline ? 'Online' : 'Offline'"
   />

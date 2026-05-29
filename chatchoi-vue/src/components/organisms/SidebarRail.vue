@@ -45,7 +45,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
           <span class="material-symbols-outlined !text-[22px]">{{ item.icon }}</span>
           <span
             v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
+            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error text-[10px] leading-4 text-center font-bold font-body"
           >
             {{ Math.min(friendsStore.pendingCount, 99) }}
           </span>
@@ -86,7 +86,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
             <span class="material-symbols-outlined !text-[24px]">{{ item.icon }}</span>
             <span
               v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
+              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error text-[10px] leading-4 text-center font-bold font-body"
             >
               {{ Math.min(friendsStore.pendingCount, 99) }}
             </span>
@@ -119,7 +119,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         </div>
         <div class="sidebar-label flex flex-col">
           <span class="font-semibold text-on-surface leading-tight">{{ chatStore.myUserName ?? 'User' }}</span>
-          <span class="text-[10px] text-emerald-600 font-semibold">Online</span>
+          <span class="text-[10px] text-success font-semibold">Online</span>
         </div>
       </div>
     </div>
