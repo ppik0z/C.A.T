@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useChatStore } from '../stores/chat';
 import { useFriendsStore } from '../stores/friends';
 import { initSocketService } from '../services/socket.service';
@@ -47,35 +49,30 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-bg-light dark:bg-bg-dark p-6 transition-colors duration-300">
-    <div class="w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-2xl shadow-soft">
+  <div class="min-h-screen flex items-center justify-center bg-background p-6 text-on-background transition-colors duration-300">
+    <div class="w-full max-w-md rounded-lg border border-outline-variant bg-surface-container-lowest p-8 shadow-lg">
       <div class="text-center mb-8">
         <h1 class="text-3xl font-bold text-primary mb-2">CHATCHOI</h1>
-        <p class="text-slate-500 dark:text-slate-400 text-sm">Đăng nhập để bắt đầu kết nối</p>
+        <p class="text-on-surface-variant text-sm">Đăng nhập để bắt đầu kết nối</p>
       </div>
 
       <div class="space-y-4">
         <div>
-          <label class="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Username</label>
-          <input v-model="username" type="text" 
-                 class="w-full px-4 py-3 rounded-xl bg-bg-light dark:bg-bg-dark border border-transparent focus:border-primary focus:outline-none transition-all dark:text-white"
-                 placeholder="Tên đăng nhập của bồ...">
+          <label class="block text-xs font-bold text-on-surface-variant uppercase mb-1 ml-1">Username</label>
+          <Input v-model="username" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" placeholder="Tên đăng nhập của bồ..." />
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Password</label>
-          <input v-model="password" type="password" 
-                 class="w-full px-4 py-3 rounded-xl bg-bg-light dark:bg-bg-dark border border-transparent focus:border-primary focus:outline-none transition-all dark:text-white"
-                 placeholder="••••••••">
+          <label class="block text-xs font-bold text-on-surface-variant uppercase mb-1 ml-1">Password</label>
+          <Input v-model="password" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" placeholder="••••••••" type="password" />
         </div>
 
-        <button @click="handleLogin" :disabled="isLoading"
-                class="w-full py-3 bg-primary hover:bg-blue-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50">
+        <Button class="h-12 w-full rounded-xl text-base" :disabled="isLoading" type="button" @click="handleLogin">
           {{ isLoading ? 'ĐANG XỬ LÝ...' : 'ĐĂNG NHẬP' }}
-        </button>
+        </Button>
       </div>
 
-      <p class="mt-6 text-center text-xs text-slate-400">
+      <p class="mt-6 text-center text-xs text-on-surface-variant">
         Chưa có tài khoản? <span class="text-primary cursor-pointer hover:underline">Đăng ký ngay</span>
       </p>
     </div>

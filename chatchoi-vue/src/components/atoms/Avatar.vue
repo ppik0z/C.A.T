@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { Avatar as UiAvatar } from '@/components/ui/avatar';
 import OnlineStatusDot from './OnlineStatusDot.vue';
-import { getUserInitials } from '../../utils/chatPresentation';
 
 interface Props {
   name: string;
@@ -30,15 +30,7 @@ const statusSize = computed(() => (props.size === 'xl' ? 'lg' : props.size === '
 
 <template>
   <div class="relative inline-flex shrink-0">
-    <div
-      :class="[
-        'rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold border-2 border-white shadow-sm overflow-hidden',
-        sizeClass,
-      ]"
-    >
-      <img v-if="props.avatarUrl" :alt="props.name" :src="props.avatarUrl" class="w-full h-full object-cover" />
-      <span v-else>{{ getUserInitials(props.name) }}</span>
-    </div>
+    <UiAvatar :alt="props.name" :class="sizeClass" :src="props.avatarUrl" />
 
     <OnlineStatusDot
       v-if="props.showStatus"

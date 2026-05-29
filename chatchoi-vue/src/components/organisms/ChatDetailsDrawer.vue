@@ -11,6 +11,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   close: [];
+  openMessageSearch: [];
 }>();
 </script>
 
@@ -28,7 +29,10 @@ const emit = defineEmits<{
           <IconButton icon="close" label="Close details" @click="emit('close')" />
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto thin-scrollbar">
-          <ChatDetailsContent :conversation="props.conversation" />
+          <ChatDetailsContent
+            :conversation="props.conversation"
+            @open-message-search="emit('openMessageSearch')"
+          />
         </div>
       </aside>
     </Transition>

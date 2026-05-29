@@ -39,6 +39,16 @@ const getFooterStatusText = (message: ChatMessage): string => {
 
 <template>
   <div
+    v-if="getMessageType(props.message) === 'call_event'"
+    class="mx-auto max-w-[min(90%,28rem)] animate-slide-in rounded-full bg-surface-container-high px-4 py-2 text-center text-xs sm:text-sm font-semibold text-on-surface-variant flex items-center justify-center gap-2"
+  >
+    <span class="material-symbols-outlined text-[18px] text-primary">call</span>
+    <span class="truncate">{{ props.message.content }}</span>
+    <span class="text-secondary font-medium">{{ formatMessageTime(props.message.createdAt) }}</span>
+  </div>
+
+  <div
+    v-else
     :class="[
       'flex gap-3 sm:gap-4 max-w-[min(82%,42rem)] animate-slide-in',
       props.isOwn ? 'flex-row-reverse ml-auto' : 'mr-auto',

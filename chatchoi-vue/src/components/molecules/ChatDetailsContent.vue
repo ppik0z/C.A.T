@@ -11,6 +11,10 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   compact: false,
 });
+
+const emit = defineEmits<{
+  openMessageSearch: [];
+}>();
 </script>
 
 <template>
@@ -18,10 +22,12 @@ const props = withDefaults(defineProps<Props>(), {
     v-if="props.conversation?.isGroup"
     :compact="props.compact"
     :conversation="props.conversation"
+    @open-message-search="emit('openMessageSearch')"
   />
   <DirectChatDetailsContent
     v-else
     :compact="props.compact"
     :conversation="props.conversation"
+    @open-message-search="emit('openMessageSearch')"
   />
 </template>

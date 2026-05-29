@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import TextInput from '../atoms/TextInput.vue';
 import ConversationItem from '../molecules/ConversationItem.vue';
 import GroupCreateModal from '../molecules/GroupCreateModal.vue';
+import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
 import { fetchConversations } from '../../services/conversation.service';
 import { getConversationName } from '../../utils/chatPresentation';
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
+const callStore = useCallStore();
 const searchTerm = ref('');
 const activeFilter = ref<ConversationFilter>('all');
 const isCreateGroupOpen = ref(false);
@@ -57,6 +59,7 @@ onMounted(async () => {
 
 const handleSelect = (conversationId: number) => {
   chatStore.selectConversation(conversationId);
+  callStore.requestConversationActiveCall(conversationId);
   emit('selected');
 };
 

@@ -69,6 +69,10 @@ const mergeMessages = (messages: ChatMessage[], incoming: ChatMessage[]): ChatMe
         });
 };
 
+const sortSearchResults = (results: MessageSearchResult[]): MessageSearchResult[] => {
+    return [...results].sort((a, b) => a.conversationIndex - b.conversationIndex);
+};
+
 const defaultSearchState = (): MessageSearchState => ({
     keyword: '',
     results: [],
@@ -341,16 +345,18 @@ export const useChatStore = defineStore('chat', {
             const currentKeyword = this.messageSearchStateByConversationId[conversationId]?.keyword.trim();
             if (currentKeyword && currentKeyword !== keyword.trim()) return;
 
+            const sortedResults = sortSearchResults(results);
+            const activeResultIndex = sortedResults.length > 0 ? sortedResults.length - 1 : -1;
             this.messageSearchStateByConversationId[conversationId] = {
                 keyword,
-                results,
-                activeResultIndex: results.length > 0 ? 0 : -1,
+                results: sortedResults,
+                activeResultIndex,
                 loading: false,
                 error: null,
             };
 
-            if (results[0]) {
-                this.loadMessagesAround(conversationId, results[0].conversationIndex);
+            if (activeResultIndex >= 0) {
+                this.loadMessagesAround(conversationId, sortedResults[activeResultIndex].conversationIndex);
             }
         },
 
@@ -363,20 +369,28 @@ export const useChatStore = defineStore('chat', {
             };
         },
 
+        clearMessageSearch(conversationId: number) {
+            this.messageSearchStateByConversationId[conversationId] = defaultSearchState();
+            if (this.messageWindowModeByConversationId[conversationId] === 'search') {
+                this.loadLatestMessages(conversationId);
+            }
+        },
+
         navigateSearchResult(conversationId: number, direction: 'previous' | 'next') {
             const state = this.messageSearchStateByConversationId[conversationId];
-            if (!state || state.results.length === 0) return;
+            if (!state || state.results.length === 0) return null;
 
             const delta = direction === 'next' ? 1 : -1;
             const nextIndex = Math.min(Math.max(state.activeResultIndex + delta, 0), state.results.length - 1);
             const result = state.results[nextIndex];
-            if (!result) return;
+            if (!result) return null;
 
             this.messageSearchStateByConversationId[conversationId] = {
                 ...state,
                 activeResultIndex: nextIndex,
             };
             this.loadMessagesAround(conversationId, result.conversationIndex);
+            return result;
         },
 
         // Xóa số lượng tin nhắn chưa đọc của một phòng
@@ -748,11 +762,15 @@ export const useChatStore = defineStore('chat', {
             const index = this.conversations.findIndex(c => c.id === data.conversationId);
             if (index !== -1) {
                 const conv = this.conversations[index];
-                conv.lastMessageContent = (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
+                const isCallEvent = data.lastMessageType === 'call_event';
+                conv.lastMessageContent = isCallEvent
+                    ? data.lastMessageContent
+                    : (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
                 conv.lastMessage = {
                     id: data.lastMessageId,
                     content: data.lastMessageContent,
                     senderName: data.senderName,
+                    type: data.lastMessageType,
                 };
                 conv.lastMessageIndex = data.lastMessageIndex;
 

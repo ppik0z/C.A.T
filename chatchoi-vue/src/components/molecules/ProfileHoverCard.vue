@@ -67,7 +67,7 @@ const closeCard = () => {
 <template>
   <div
     ref="anchorRef"
-    class="relative inline-flex"
+    class="relative inline-flex shrink-0 self-start items-start"
     @focusin="openCard"
     @focusout="closeCard"
     @mouseenter="openCard"
