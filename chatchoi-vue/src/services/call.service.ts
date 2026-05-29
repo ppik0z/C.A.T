@@ -1,5 +1,5 @@
 import { apiBaseUrl } from '../config/api';
-import type { CallHistoryItem, CallState } from '../types/call';
+import type { CallHistoryItem, CallMediaToken, CallState } from '../types/call';
 
 const authHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
@@ -47,4 +47,13 @@ export const fetchCallHistory = async (
   });
 
   return parseResponse<CallHistoryItem[]>(response, 'Không thể tải lịch sử cuộc gọi');
+};
+
+export const createCallMediaToken = async (token: string, callId: number): Promise<CallMediaToken> => {
+  const response = await fetch(`${apiBaseUrl}/calls/${callId}/media-token`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  return parseResponse<CallMediaToken>(response, 'Không thể tạo token media cho cuộc gọi');
 };

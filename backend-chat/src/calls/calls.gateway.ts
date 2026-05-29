@@ -9,7 +9,7 @@ import { ConflictException, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Server } from 'socket.io';
 import { OnEvent } from '@nestjs/event-emitter';
-import { CallsService, type CallKind, type CallMutationResult } from './calls.service';
+import { CallsService, type CallKind, type CallMutationResult, type CallParticipantMediaStatus } from './calls.service';
 import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
 import type { AuthenticatedSocket } from '../common/interfaces/request-with-user.interface';
@@ -30,6 +30,10 @@ interface ConversationCallPayload {
 interface UpdateMediaPayload extends CallIdPayload {
     micEnabled: boolean;
     cameraEnabled: boolean;
+}
+
+interface UpdateMediaConnectionPayload extends CallIdPayload {
+    failureReason?: string | null;
 }
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
@@ -156,6 +160,36 @@ export class CallsGateway {
         }
     }
 
+    @SkipThrottle()
+    @SubscribeMessage('call:media_connecting')
+    async mediaConnecting(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
+        return this.updateMediaConnectionStatus(client, data.callId, 'connecting');
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('call:media_connected')
+    async mediaConnected(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
+        return this.updateMediaConnectionStatus(client, data.callId, 'connected');
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('call:media_reconnecting')
+    async mediaReconnecting(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
+        return this.updateMediaConnectionStatus(client, data.callId, 'reconnecting');
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('call:media_disconnected')
+    async mediaDisconnected(@MessageBody() data: CallIdPayload, @ConnectedSocket() client: AuthenticatedSocket) {
+        return this.updateMediaConnectionStatus(client, data.callId, 'disconnected');
+    }
+
+    @SkipThrottle()
+    @SubscribeMessage('call:media_failed')
+    async mediaFailed(@MessageBody() data: UpdateMediaConnectionPayload, @ConnectedSocket() client: AuthenticatedSocket) {
+        return this.updateMediaConnectionStatus(client, data.callId, 'failed', data.failureReason);
+    }
+
     private async emitCallMutation(result: CallMutationResult, includeRingingEvent = false) {
         if (result.ended) {
             await this.emitPublicStateToUsers('call:ended', result.memberIds, result.callId);
@@ -174,6 +208,24 @@ export class CallsGateway {
             const state = await this.callsService.getPublicCallState(callId, userId);
             this.server.to(`user_${userId}`).emit(event, state);
         }));
+    }
+
+    private async updateMediaConnectionStatus(
+        client: AuthenticatedSocket,
+        callId: number,
+        status: CallParticipantMediaStatus,
+        failureReason?: string | null,
+    ) {
+        try {
+            await this.callsService.updateMediaConnectionStatus(client.user.userId, callId, { status, failureReason });
+            return { status: 'ack' };
+        } catch (error) {
+            if (error instanceof ConflictException) {
+                return { status: 'busy' };
+            }
+
+            return this.emitCallError(client, error);
+        }
     }
 
     private emitCallError(client: AuthenticatedSocket, error: unknown) {

@@ -18,7 +18,8 @@ import { CallLockService } from './call-lock.service';
 export type CallKind = 'audio' | 'video';
 export type CallSessionStatus = 'ringing' | 'active' | 'ended' | 'missed' | 'cancelled';
 export type CallParticipantStatus = 'ringing' | 'joined' | 'left' | 'declined' | 'missed';
-export type CallProvider = 'stub';
+export type CallProvider = 'stub' | 'livekit';
+export type CallParticipantMediaStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'failed';
 
 export interface CallUserSummary {
     id: number;
@@ -37,6 +38,10 @@ export interface StoredCallParticipant {
     leftAt: string | null;
     declinedAt: string | null;
     lastHeartbeatAt: string | null;
+    mediaStatus: CallParticipantMediaStatus;
+    mediaConnectedAt: string | null;
+    mediaDisconnectedAt: string | null;
+    mediaFailureReason: string | null;
 }
 
 export interface StoredCallState {
@@ -83,6 +88,15 @@ export interface CallHistoryItem {
     endedReason: string | null;
 }
 
+export interface CallMediaTokenContext {
+    callId: number;
+    conversationId: number;
+    provider: CallProvider;
+    roomName: string;
+    kind: CallKind;
+    user: CallUserSummary;
+}
+
 interface ConversationMemberForCall {
     userId: number;
     username: string;
@@ -98,6 +112,7 @@ const RINGING_TTL_MS = 60_000;
 const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 60_000;
 const ACTIVE_CALL_TTL_SECONDS = 24 * 60 * 60;
 const ENDED_CALL_TTL_SECONDS = 120;
+const DEFAULT_CALL_PROVIDER: CallProvider = 'livekit';
 
 @Injectable()
 export class CallsService {
@@ -134,7 +149,7 @@ export class CallsService {
             if (members.length < 2) throw new BadRequestException('Cần ít nhất 2 thành viên để gọi.');
 
             const now = new Date();
-            const roomName = `stub_conv_${input.conversationId}_${now.getTime()}`;
+            const roomName = `${DEFAULT_CALL_PROVIDER}_conv_${input.conversationId}_${now.getTime()}`;
             const ringExpiresAt = new Date(now.getTime() + RINGING_TTL_MS);
 
             const callId = await this.drizzle.db.transaction(async (tx) => {
@@ -143,7 +158,7 @@ export class CallsService {
                     startedByUserId: userId,
                     kind,
                     status: 'ringing',
-                    provider: 'stub',
+                    provider: DEFAULT_CALL_PROVIDER,
                     roomName,
                     startedAt: now,
                 });
@@ -156,6 +171,7 @@ export class CallsService {
                     cameraEnabled: member.userId === userId && kind === 'video',
                     joinedAt: member.userId === userId ? now : null,
                     lastHeartbeatAt: member.userId === userId ? now : null,
+                    mediaStatus: 'idle',
                 })));
 
                 return newCall.insertId;
@@ -167,7 +183,7 @@ export class CallsService {
                 isGroup: access.isGroup,
                 kind,
                 status: 'ringing',
-                provider: 'stub',
+                provider: DEFAULT_CALL_PROVIDER,
                 roomName,
                 startedBy: {
                     id: userId,
@@ -190,6 +206,10 @@ export class CallsService {
                     leftAt: null,
                     declinedAt: null,
                     lastHeartbeatAt: member.userId === userId ? this.toIso(now) : null,
+                    mediaStatus: 'idle',
+                    mediaConnectedAt: null,
+                    mediaDisconnectedAt: null,
+                    mediaFailureReason: null,
                 })),
             };
 
@@ -235,6 +255,10 @@ export class CallsService {
             leftAt: null,
             declinedAt: null,
             lastHeartbeatAt: this.toIso(now),
+            mediaStatus: 'idle',
+            mediaConnectedAt: null,
+            mediaDisconnectedAt: null,
+            mediaFailureReason: null,
         });
 
         nextState.status = nextStatus;
@@ -251,6 +275,10 @@ export class CallsService {
                     leftAt: null,
                     declinedAt: null,
                     lastHeartbeatAt: now,
+                    mediaStatus: 'idle',
+                    mediaConnectedAt: null,
+                    mediaDisconnectedAt: null,
+                    mediaFailureReason: null,
                 })
                 .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
@@ -287,6 +315,8 @@ export class CallsService {
             micEnabled: false,
             cameraEnabled: false,
             declinedAt: this.toIso(now),
+            mediaStatus: 'idle',
+            mediaFailureReason: null,
         });
 
         await this.drizzle.db.update(callParticipants)
@@ -295,6 +325,8 @@ export class CallsService {
                 micEnabled: false,
                 cameraEnabled: false,
                 declinedAt: now,
+                mediaStatus: 'idle',
+                mediaFailureReason: null,
             })
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
@@ -336,6 +368,9 @@ export class CallsService {
             cameraEnabled: false,
             leftAt: participant.status === 'joined' ? this.toIso(now) : participant.leftAt,
             declinedAt: participant.status === 'joined' ? participant.declinedAt : this.toIso(now),
+            mediaStatus: participant.status === 'joined' ? 'disconnected' : 'idle',
+            mediaDisconnectedAt: participant.status === 'joined' ? this.toIso(now) : participant.mediaDisconnectedAt,
+            mediaFailureReason: null,
         });
 
         await this.drizzle.db.update(callParticipants)
@@ -345,6 +380,9 @@ export class CallsService {
                 cameraEnabled: false,
                 leftAt: participant.status === 'joined' ? now : participant.leftAt ? new Date(participant.leftAt) : null,
                 declinedAt: participant.status === 'joined' ? participant.declinedAt ? new Date(participant.declinedAt) : null : now,
+                mediaStatus: participant.status === 'joined' ? 'disconnected' : 'idle',
+                mediaDisconnectedAt: participant.status === 'joined' ? now : participant.mediaDisconnectedAt ? new Date(participant.mediaDisconnectedAt) : null,
+                mediaFailureReason: null,
             })
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
@@ -357,6 +395,15 @@ export class CallsService {
 
         await this.saveActiveState(nextState);
         const result = this.toMutationResult(nextState);
+        if (participant.status === 'joined') {
+            this.eventEmitter.emit('call.participant_left', {
+                callId,
+                conversationId: state.conversationId,
+                provider: state.provider,
+                roomName: state.roomName,
+                userId,
+            });
+        }
         this.eventEmitter.emit('call.state_changed', result);
         return result;
     }
@@ -420,6 +467,55 @@ export class CallsService {
         return this.toMutationResult(nextState);
     }
 
+    async updateMediaConnectionStatus(
+        userId: number,
+        callId: number,
+        input: { status: CallParticipantMediaStatus; failureReason?: string | null },
+    ): Promise<CallMutationResult> {
+        return this.callLockService.withCallLock(callId, async () => {
+            const state = await this.getAccessibleState(userId, callId);
+            this.ensureCallIsActiveOrRinging(state);
+
+            const participant = this.findParticipant(state, userId);
+            if (!participant || participant.status !== 'joined') {
+                throw new BadRequestException('Bạn cần tham gia cuộc gọi trước khi cập nhật kết nối media.');
+            }
+
+            const now = new Date();
+            const status = this.normalizeMediaStatus(input.status);
+            const isConnected = status === 'connected';
+            const isDisconnected = status === 'disconnected' || status === 'failed';
+            const failureReason = status === 'failed'
+                ? this.normalizeMediaFailureReason(input.failureReason)
+                : null;
+            const nextMediaConnectedAt = isConnected ? participant.mediaConnectedAt ?? this.toIso(now) : participant.mediaConnectedAt;
+            const nextMediaDisconnectedAt = isDisconnected ? this.toIso(now) : participant.mediaDisconnectedAt;
+            const mediaConnectedAt = nextMediaConnectedAt ? new Date(nextMediaConnectedAt) : null;
+            const mediaDisconnectedAt = nextMediaDisconnectedAt ? new Date(nextMediaDisconnectedAt) : null;
+
+            const nextState = this.mapParticipant(state, userId, {
+                mediaStatus: status,
+                mediaConnectedAt: nextMediaConnectedAt,
+                mediaDisconnectedAt: nextMediaDisconnectedAt,
+                mediaFailureReason: failureReason,
+            });
+
+            await this.drizzle.db.update(callParticipants)
+                .set({
+                    mediaStatus: status,
+                    mediaConnectedAt,
+                    mediaDisconnectedAt,
+                    mediaFailureReason: failureReason,
+                })
+                .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
+
+            await this.saveActiveState(nextState);
+            const result = this.toMutationResult(nextState);
+            this.eventEmitter.emit('call.state_changed', result);
+            return result;
+        });
+    }
+
     async getActiveCallsForUser(userId: number): Promise<PublicCallState[]> {
         const conversationIds = await this.getUserConversationIds(userId);
         const states = await Promise.all(conversationIds.map(async (conversationId) => {
@@ -440,6 +536,33 @@ export class CallsService {
     async getPublicCallState(callId: number, userId: number): Promise<PublicCallState> {
         const state = await this.getAccessibleState(userId, callId);
         return this.toPublicState(state, userId);
+    }
+
+    async getMediaTokenContext(userId: number, callId: number): Promise<CallMediaTokenContext> {
+        const state = await this.getAccessibleState(userId, callId);
+        this.ensureCallIsJoinable(state);
+
+        const participant = this.findParticipant(state, userId);
+        if (!participant || participant.status !== 'joined') {
+            throw new BadRequestException('Bạn cần tham gia cuộc gọi trước khi kết nối media.');
+        }
+
+        if (state.provider !== 'livekit') {
+            throw new BadRequestException('Cuộc gọi này chưa hỗ trợ media streaming.');
+        }
+
+        return {
+            callId: state.id,
+            conversationId: state.conversationId,
+            provider: state.provider,
+            roomName: state.roomName,
+            kind: state.kind,
+            user: {
+                id: participant.userId,
+                username: participant.username,
+                avatar: participant.avatar,
+            },
+        };
     }
 
     async getCallHistory(userId: number, input: { conversationId?: number; limit?: number; beforeId?: number }): Promise<CallHistoryItem[]> {
@@ -543,6 +666,9 @@ export class CallsService {
                 micEnabled: false,
                 cameraEnabled: false,
                 leftAt: this.toIso(now),
+                mediaStatus: 'disconnected',
+                mediaDisconnectedAt: this.toIso(now),
+                mediaFailureReason: null,
             });
             await this.clearUserJoined(participant.userId);
         }
@@ -553,6 +679,9 @@ export class CallsService {
                 micEnabled: false,
                 cameraEnabled: false,
                 leftAt: now,
+                mediaStatus: 'disconnected',
+                mediaDisconnectedAt: now,
+                mediaFailureReason: null,
             })
             .where(and(
                 eq(callParticipants.callSessionId, state.id),
@@ -565,6 +694,15 @@ export class CallsService {
         }
 
         await this.saveActiveState(nextState);
+        for (const participant of staleParticipants) {
+            this.eventEmitter.emit('call.participant_left', {
+                callId: state.id,
+                conversationId: state.conversationId,
+                provider: state.provider,
+                roomName: state.roomName,
+                userId: participant.userId,
+            });
+        }
         this.eventEmitter.emit('call.state_changed', this.toMutationResult(nextState));
     }
 
@@ -580,6 +718,9 @@ export class CallsService {
                     micEnabled: false,
                     cameraEnabled: false,
                     leftAt: participant.leftAt ?? this.toIso(now),
+                    mediaStatus: 'disconnected' as const,
+                    mediaDisconnectedAt: participant.mediaDisconnectedAt ?? this.toIso(now),
+                    mediaFailureReason: null,
                 };
             }
 
@@ -589,6 +730,8 @@ export class CallsService {
                     status: 'missed' as const,
                     micEnabled: false,
                     cameraEnabled: false,
+                    mediaStatus: 'idle' as const,
+                    mediaFailureReason: null,
                 };
             }
 
@@ -596,6 +739,8 @@ export class CallsService {
                 ...participant,
                 micEnabled: false,
                 cameraEnabled: false,
+                mediaStatus: participant.status === 'declined' ? 'idle' as const : participant.mediaStatus,
+                mediaFailureReason: null,
             };
         });
 
@@ -623,6 +768,9 @@ export class CallsService {
                     micEnabled: false,
                     cameraEnabled: false,
                     leftAt: now,
+                    mediaStatus: 'disconnected',
+                    mediaDisconnectedAt: now,
+                    mediaFailureReason: null,
                 })
                 .where(and(eq(callParticipants.callSessionId, state.id), eq(callParticipants.status, 'joined')));
 
@@ -631,6 +779,8 @@ export class CallsService {
                     status: 'missed',
                     micEnabled: false,
                     cameraEnabled: false,
+                    mediaStatus: 'idle',
+                    mediaFailureReason: null,
                 })
                 .where(and(eq(callParticipants.callSessionId, state.id), eq(callParticipants.status, 'ringing')));
         });
@@ -733,6 +883,10 @@ export class CallsService {
                 leftAt: callParticipants.leftAt,
                 declinedAt: callParticipants.declinedAt,
                 lastHeartbeatAt: callParticipants.lastHeartbeatAt,
+                mediaStatus: callParticipants.mediaStatus,
+                mediaConnectedAt: callParticipants.mediaConnectedAt,
+                mediaDisconnectedAt: callParticipants.mediaDisconnectedAt,
+                mediaFailureReason: callParticipants.mediaFailureReason,
             })
             .from(callParticipants)
             .innerJoin(users, eq(callParticipants.userId, users.id))
@@ -744,7 +898,7 @@ export class CallsService {
             isGroup: call.isGroup,
             kind: this.normalizeKind(call.kind),
             status: this.normalizeSessionStatus(call.status),
-            provider: 'stub',
+            provider: this.normalizeProvider(call.provider),
             roomName: call.roomName,
             startedBy: {
                 id: call.startedByUserId,
@@ -769,6 +923,10 @@ export class CallsService {
                 leftAt: this.toIsoOrNull(participant.leftAt),
                 declinedAt: this.toIsoOrNull(participant.declinedAt),
                 lastHeartbeatAt: this.toIsoOrNull(participant.lastHeartbeatAt),
+                mediaStatus: this.normalizeMediaStatus(participant.mediaStatus),
+                mediaConnectedAt: this.toIsoOrNull(participant.mediaConnectedAt),
+                mediaDisconnectedAt: this.toIsoOrNull(participant.mediaDisconnectedAt),
+                mediaFailureReason: participant.mediaFailureReason,
             })),
         };
     }
@@ -975,11 +1133,29 @@ export class CallsService {
         return 'ended';
     }
 
+    private normalizeProvider(value: string): CallProvider {
+        if (value === 'livekit' || value === 'stub') return value;
+        return 'stub';
+    }
+
     private normalizeParticipantStatus(value: string): CallParticipantStatus {
         if (['ringing', 'joined', 'left', 'declined', 'missed'].includes(value)) {
             return value as CallParticipantStatus;
         }
         return 'left';
+    }
+
+    private normalizeMediaStatus(value: string): CallParticipantMediaStatus {
+        if (['idle', 'connecting', 'connected', 'reconnecting', 'disconnected', 'failed'].includes(value)) {
+            return value as CallParticipantMediaStatus;
+        }
+
+        return 'idle';
+    }
+
+    private normalizeMediaFailureReason(value: string | null | undefined) {
+        if (!value) return null;
+        return value.slice(0, 191);
     }
 
     private normalizeHistoryLimit(limit: number | undefined) {

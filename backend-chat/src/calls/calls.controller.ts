@@ -1,12 +1,16 @@
-import { Controller, Get, Param, ParseIntPipe, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CallsService } from './calls.service';
+import { CallMediaTokenService } from './call-media-token.service';
 import type { RequestWithUser } from '../common/interfaces/request-with-user.interface';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('calls')
 export class CallsController {
-    constructor(private readonly callsService: CallsService) { }
+    constructor(
+        private readonly callsService: CallsService,
+        private readonly callMediaTokenService: CallMediaTokenService,
+    ) { }
 
     @Get('active')
     async getActiveCalls(@Request() req: RequestWithUser) {
@@ -19,6 +23,14 @@ export class CallsController {
         @Request() req: RequestWithUser,
     ) {
         return this.callsService.getActiveCallForConversation(req.user.userId, conversationId);
+    }
+
+    @Post(':callId/media-token')
+    async createMediaToken(
+        @Param('callId', ParseIntPipe) callId: number,
+        @Request() req: RequestWithUser,
+    ) {
+        return this.callMediaTokenService.createToken(req.user.userId, callId);
     }
 
     @Get('history')
