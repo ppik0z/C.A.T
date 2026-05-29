@@ -111,17 +111,17 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         <span class="sidebar-label font-semibold">Logout</span>
       </button>
 
-      <div class="flex items-center gap-4 w-full">
-        <div class="min-w-12 flex items-center justify-center">
+      <button @click="emit('navigate', 'account')" class="flex items-center gap-4 w-full text-left rounded-xl hover:bg-surface-container-high transition-all p-2 -mx-2" type="button">
+        <div class="min-w-10 flex items-center justify-center">
           <div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold border-2 border-primary-container">
             {{ chatStore.myUserName?.[0]?.toUpperCase() ?? chatStore.myId ?? 'U' }}
           </div>
         </div>
-        <div class="sidebar-label flex flex-col">
-          <span class="font-semibold text-on-surface leading-tight">{{ chatStore.myUserName ?? 'User' }}</span>
+        <div class="sidebar-label flex flex-col overflow-hidden">
+          <span class="font-semibold text-on-surface leading-tight truncate w-full">{{ chatStore.myUserName ?? 'User' }}</span>
           <span class="text-[0.625rem] text-success font-semibold">Online</span>
         </div>
-      </div>
+      </button>
     </div>
   </aside>
 </template>

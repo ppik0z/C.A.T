@@ -18,8 +18,34 @@ export const users = mysqlTable('users', {
   username: varchar('username', { length: 191 }).notNull().unique(),
   password: varchar('password', { length: 255 }).notNull(),
   avatar: varchar('avatar', { length: 255 }),
+  email: varchar('email', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  isEmailVerified: boolean('isEmailVerified').notNull().default(false),
   refreshToken: text('refreshToken'),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+});
+
+// ─── UserProfiles ─────────────────────────────────────────────────────────────
+export const userProfiles = mysqlTable('user_profiles', {
+  id: int('id').autoincrement().primaryKey(),
+  userId: int('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  displayName: varchar('displayName', { length: 255 }),
+  bio: text('bio'),
+  banner: varchar('banner', { length: 255 }),
+  customStatus: varchar('customStatus', { length: 255 }),
+  dateOfBirth: datetime('dateOfBirth'),
+  updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+});
+
+// ─── UserSettings ─────────────────────────────────────────────────────────────
+export const userSettings = mysqlTable('user_settings', {
+  id: int('id').autoincrement().primaryKey(),
+  userId: int('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  theme: varchar('theme', { length: 20 }).notNull().default('system'), // 'light', 'dark', 'system'
+  language: varchar('language', { length: 10 }).notNull().default('en'),
+  notificationSound: boolean('notificationSound').notNull().default(true),
+  status: varchar('status', { length: 20 }).notNull().default('online'), // 'online', 'idle', 'dnd', 'invisible'
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
 
@@ -166,7 +192,7 @@ export const callParticipants = mysqlTable(
 );
 
 // ─── Relations ────────────────────────────────────────────────
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many, one }) => ({
   sentMessages: many(messages),
   memberships: many(conversationMembers),
   messageStatuses: many(messageStatuses),
@@ -175,11 +201,21 @@ export const usersRelations = relations(users, ({ many }) => ({
   friendOf: many(friendships, { relationName: 'FriendOfUser' }),
   startedCalls: many(callSessions),
   callParticipations: many(callParticipants),
+  profile: one(userProfiles, { fields: [users.id], references: [userProfiles.userId] }),
+  settings: one(userSettings, { fields: [users.id], references: [userSettings.userId] }),
 }));
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
   user: one(users, { fields: [friendships.userId], references: [users.id], relationName: 'UserFriends' }),
   friend: one(users, { fields: [friendships.friendId], references: [users.id], relationName: 'FriendOfUser' }),
+}));
+
+export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
+  user: one(users, { fields: [userProfiles.userId], references: [users.id] }),
+}));
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+  user: one(users, { fields: [userSettings.userId], references: [users.id] }),
 }));
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({

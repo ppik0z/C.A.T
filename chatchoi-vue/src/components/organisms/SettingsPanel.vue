@@ -8,6 +8,7 @@ import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import SettingOptionButton from '@/components/molecules/SettingOptionButton.vue';
 import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
+import AccountTab from '@/components/organisms/AccountTab.vue';
 import { useChatStore } from '@/stores/chat';
 import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
 import { useAppearance } from '@/theme/useAppearance';
@@ -66,7 +67,17 @@ const fontSizeOptions = computed<Array<SettingOption<FontSize>>>(() => [
 
 // densityOptions temporarily removed as it's not used
 
-const activeTab = ref<SettingsTabId>('appearance');
+const props = defineProps<{
+  initialTab?: SettingsTabId;
+}>();
+
+const activeTab = ref<SettingsTabId>(props.initialTab ?? 'appearance');
+
+watch(() => props.initialTab, (newVal) => {
+  if (newVal) {
+    activeTab.value = newVal;
+  }
+});
 const isMobileDetailOpen = ref(false);
 
 // Draft states for Appearance
@@ -459,43 +470,7 @@ const closeMobileDetail = () => {
               </template>
 
               <template v-else-if="activeTab === 'account'">
-                <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                  <Card>
-                    <CardContent class="pt-5">
-                      <div class="flex flex-col items-center text-center">
-                        <div class="flex size-20 items-center justify-center rounded-lg bg-secondary-container text-2xl font-extrabold text-on-secondary-container">
-                          {{ userInitial }}
-                        </div>
-                        <h3 class="mt-4 max-w-full truncate text-lg font-extrabold text-on-surface">{{ userName }}</h3>
-                        <p class="text-sm font-semibold text-on-surface-variant">{{ $t('settings.account.badge') }}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{{ $t('settings.account.title') }}</CardTitle>
-                      <CardDescription>{{ $t('settings.account.description') }}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <PreferenceRow icon="person" :title="$t('settings.account.displayName.title')" :description="$t('settings.account.displayName.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.displayName.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="lock" :title="$t('settings.account.password.title')" :description="$t('settings.account.password.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.password.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="devices" :title="$t('settings.account.sessions.title')" :description="$t('settings.account.sessions.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.sessions.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="logout" :title="$t('settings.account.logout.title')" :description="$t('settings.account.logout.description')">
-                        <Button disabled type="button" variant="destructive">{{ $t('settings.account.logout.action') }}</Button>
-                      </PreferenceRow>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AccountTab />
               </template>
 
               <template v-else>
