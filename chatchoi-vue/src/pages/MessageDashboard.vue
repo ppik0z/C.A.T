@@ -7,6 +7,7 @@ import ConversationPanel from '../components/organisms/ConversationPanel.vue';
 import FriendsPanel from '../components/organisms/FriendsPanel.vue';
 import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
+import CallMiniPlayer from '../components/molecules/CallMiniPlayer.vue';
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
 import type { AppSection } from '../types/navigation';
@@ -114,6 +115,7 @@ const handleOpenMessageSearch = () => {
 
     <IncomingCallToastStack />
     <CallOverlay />
+    <CallMiniPlayer />
 
     <button
       v-if="callStore.callError"
