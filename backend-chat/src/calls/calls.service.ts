@@ -109,7 +109,7 @@ interface ConversationAccess {
 }
 
 const RINGING_TTL_MS = 60_000;
-const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 60_000;
+const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 45_000;
 const ACTIVE_CALL_TTL_SECONDS = 24 * 60 * 60;
 const ENDED_CALL_TTL_SECONDS = 120;
 const DEFAULT_CALL_PROVIDER: CallProvider = 'livekit';

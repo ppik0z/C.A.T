@@ -14,7 +14,10 @@ const chatStore = useChatStore();
 
 const call = computed(() => callStore.activeOverlayCall);
 const pending = computed(() => callStore.pendingOutgoing);
-const isVisible = computed(() => Boolean(call.value || pending.value));
+const isVisible = computed(() => {
+  if (pending.value && !call.value) return true;
+  return Boolean(call.value) && callStore.isCallExpanded;
+});
 
 const conversation = computed(() => {
   const conversationId = call.value?.conversationId ?? pending.value?.conversationId;
@@ -85,6 +88,11 @@ const handleToggleMic = () => {
   callStore.toggleMic(call.value.id);
 };
 
+
+const handleMinimize = () => {
+  callStore.isCallExpanded = false;
+};
+
 const handleToggleCamera = () => {
   if (!call.value || isTakenOver.value) return;
   const enabled = !localParticipant.value?.cameraEnabled;
@@ -147,9 +155,20 @@ onBeforeUnmount(() => {
               <p v-if="mediaStatusText" class="text-xs text-secondary truncate">{{ mediaStatusText }}</p>
             </div>
           </div>
-          <span class="material-symbols-outlined text-primary text-[28px]">
-            {{ kind === 'video' ? 'videocam' : 'call' }}
-          </span>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="call"
+              class="h-9 w-9 rounded-full text-on-surface-variant hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary flex items-center justify-center"
+              type="button"
+              aria-label="Thu nhỏ"
+              @click="handleMinimize"
+            >
+              <span class="material-symbols-outlined text-[20px]">picture_in_picture_alt</span>
+            </button>
+            <span class="material-symbols-outlined text-primary text-[28px]">
+              {{ kind === 'video' ? 'videocam' : 'call' }}
+            </span>
+          </div>
         </header>
 
         <div
@@ -209,7 +228,7 @@ onBeforeUnmount(() => {
             @click="handleToggleMic"
           />
           <CallControlButton
-            v-if="call && kind === 'video'"
+            v-if="call"
             :active="Boolean(localParticipant?.cameraEnabled)"
             :icon="localParticipant?.cameraEnabled ? 'videocam' : 'videocam_off'"
             label="Bật/tắt camera"

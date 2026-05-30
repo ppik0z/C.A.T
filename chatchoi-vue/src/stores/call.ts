@@ -33,6 +33,7 @@ export const useCallStore = defineStore('call', {
     overlayCallId: null as number | null,
     pendingOutgoing: null as PendingOutgoingCall | null,
     callError: null as string | null,
+    isCallExpanded: true,
   }),
 
   getters: {
@@ -169,6 +170,7 @@ export const useCallStore = defineStore('call', {
 
       if (call.currentUserStatus === 'joined') {
         this.pendingOutgoing = null;
+        if (!this.overlayCallId) this.isCallExpanded = true;
         this.overlayCallId = call.id;
         this.startHeartbeat(call.id);
         return;

@@ -37,6 +37,7 @@ const handlePrimaryAction = () => {
   }
   if (call.value.currentUserStatus === 'joined') {
     callStore.overlayCallId = call.value.id;
+    callStore.isCallExpanded = true;
     return;
   }
   callStore.joinCall(call.value.id);
