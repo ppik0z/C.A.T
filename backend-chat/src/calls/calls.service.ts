@@ -109,7 +109,7 @@ interface ConversationAccess {
 }
 
 const RINGING_TTL_MS = 60_000;
-const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 60_000;
+const PARTICIPANT_HEARTBEAT_TIMEOUT_MS = 45_000;
 const ACTIVE_CALL_TTL_SECONDS = 24 * 60 * 60;
 const ENDED_CALL_TTL_SECONDS = 120;
 const DEFAULT_CALL_PROVIDER: CallProvider = 'livekit';
@@ -131,10 +131,11 @@ export class CallsService {
     async startCall(userId: number, username: string, input: { conversationId: number; kind: CallKind }): Promise<CallMutationResult> {
         const kind = this.normalizeKind(input.kind);
         const access = await this.ensureConversationMember(userId, input.conversationId);
-        const joinedCallId = await this.redis.get(this.userJoinedKey(userId));
-        if (joinedCallId) throw new BadRequestException('Bạn đang ở trong một cuộc gọi khác.');
 
         return this.callLockService.withConversationCreateLock(input.conversationId, async () => {
+            const joinedCallId = await this.redis.get(this.userJoinedKey(userId));
+            if (joinedCallId) throw new BadRequestException('Bạn đang ở trong một cuộc gọi khác.');
+
             const activeCallId = await this.redis.get(this.activeConversationKey(input.conversationId));
             if (activeCallId) throw new BadRequestException('Đoạn chat này đang có cuộc gọi.');
 
