@@ -16,6 +16,7 @@ import { relations } from 'drizzle-orm';
 export const users = mysqlTable('users', {
   id: int('id').autoincrement().primaryKey(),
   username: varchar('username', { length: 191 }).notNull().unique(),
+  displayName: varchar('displayName', { length: 255 }),
   password: varchar('password', { length: 255 }).notNull(),
   avatar: varchar('avatar', { length: 255 }),
   email: varchar('email', { length: 255 }),
@@ -30,7 +31,6 @@ export const users = mysqlTable('users', {
 export const userProfiles = mysqlTable('user_profiles', {
   id: int('id').autoincrement().primaryKey(),
   userId: int('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
-  displayName: varchar('displayName', { length: 255 }),
   bio: text('bio'),
   banner: varchar('banner', { length: 255 }),
   customStatus: varchar('customStatus', { length: 255 }),

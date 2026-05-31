@@ -26,6 +26,7 @@ export class WsJwtGuard implements CanActivate {
       (client as AuthenticatedSocket).user = {
         userId: payload.userId,
         username: payload.username,
+        displayName: payload.displayName ?? null,
       };
 
       return true;

@@ -3,6 +3,7 @@ export type RelationshipStatus = 'none' | 'incoming_pending' | 'outgoing_pending
 export interface FriendUser {
   id: number;
   username: string;
+  displayName?: string | null;
   avatar: string | null;
   isOnline?: boolean;
   relationshipStatus?: RelationshipStatus;

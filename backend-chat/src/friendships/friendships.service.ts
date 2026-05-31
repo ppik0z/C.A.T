@@ -11,6 +11,7 @@ export type FriendRequestListType = 'incoming' | 'outgoing';
 export interface FriendUserDto {
     id: number;
     username: string;
+    displayName: string | null;
     avatar: string | null;
     isOnline?: boolean;
     relationshipStatus?: RelationshipStatus;
@@ -21,6 +22,7 @@ export interface FriendUserDto {
 interface UserRow {
     id: number;
     username: string;
+    displayName: string | null;
     avatar: string | null;
     createdAt?: Date;
 }
@@ -50,12 +52,16 @@ export class FriendshipsService {
             .select({
                 id: users.id,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
             })
             .from(users)
             .where(
                 and(
-                    like(users.username, `%${normalizedQuery}%`),
+                    or(
+                        like(users.username, `%${normalizedQuery}%`),
+                        like(users.displayName, `%${normalizedQuery}%`),
+                    ),
                     ne(users.id, currentUserId)
                 )
             )
@@ -69,6 +75,7 @@ export class FriendshipsService {
             .select({
                 id: users.id,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
                 createdAt: users.createdAt,
             })
@@ -92,6 +99,7 @@ export class FriendshipsService {
             .select({
                 id: users.id,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
             })
             .from(friendships)
@@ -252,6 +260,7 @@ export class FriendshipsService {
             .select({
                 id: users.id,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
                 requestedAt: friendships.createdAt,
             })
@@ -312,6 +321,7 @@ export class FriendshipsService {
             return {
                 id: targetUser.id,
                 username: targetUser.username,
+                displayName: targetUser.displayName,
                 avatar: targetUser.avatar,
                 relationshipStatus: this.getRelationshipStatus(currentUserId, relationship),
                 requestedAt: relationship?.status === 'pending' ? relationship.createdAt : undefined,

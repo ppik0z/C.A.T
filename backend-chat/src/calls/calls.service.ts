@@ -24,12 +24,14 @@ export type CallParticipantMediaStatus = 'idle' | 'connecting' | 'connected' | '
 export interface CallUserSummary {
     id: number;
     username: string;
+    displayName: string | null;
     avatar: string | null;
 }
 
 export interface StoredCallParticipant {
     userId: number;
     username: string;
+    displayName: string | null;
     avatar: string | null;
     status: CallParticipantStatus;
     micEnabled: boolean;
@@ -82,6 +84,7 @@ export interface CallHistoryItem {
     status: CallSessionStatus;
     startedByUserId: number;
     startedByUsername: string;
+    startedByDisplayName: string | null;
     startedAt: Date;
     answeredAt: Date | null;
     endedAt: Date | null;
@@ -100,6 +103,7 @@ export interface CallMediaTokenContext {
 interface ConversationMemberForCall {
     userId: number;
     username: string;
+    displayName: string | null;
     avatar: string | null;
 }
 
@@ -128,7 +132,7 @@ export class CallsService {
         this.redis = this.redisService.getOrThrow();
     }
 
-    async startCall(userId: number, username: string, input: { conversationId: number; kind: CallKind }): Promise<CallMutationResult> {
+    async startCall(userId: number, username: string, input: { conversationId: number; kind: CallKind }, displayName: string | null = null): Promise<CallMutationResult> {
         const kind = this.normalizeKind(input.kind);
         const access = await this.ensureConversationMember(userId, input.conversationId);
 
@@ -189,6 +193,7 @@ export class CallsService {
                 startedBy: {
                     id: userId,
                     username,
+                    displayName,
                     avatar: members.find((member) => member.userId === userId)?.avatar ?? null,
                 },
                 startedAt: this.toIso(now),
@@ -199,6 +204,7 @@ export class CallsService {
                 participants: members.map((member) => ({
                     userId: member.userId,
                     username: member.username,
+                    displayName: member.displayName,
                     avatar: member.avatar,
                     status: member.userId === userId ? 'joined' : 'ringing',
                     micEnabled: member.userId === userId,
@@ -561,6 +567,7 @@ export class CallsService {
             user: {
                 id: participant.userId,
                 username: participant.username,
+                displayName: participant.displayName,
                 avatar: participant.avatar,
             },
         };
@@ -595,6 +602,7 @@ export class CallsService {
                 status: callSessions.status,
                 startedByUserId: callSessions.startedByUserId,
                 startedByUsername: users.username,
+                startedByDisplayName: users.displayName,
                 startedAt: callSessions.startedAt,
                 answeredAt: callSessions.answeredAt,
                 endedAt: callSessions.endedAt,
@@ -613,6 +621,7 @@ export class CallsService {
             status: this.normalizeSessionStatus(row.status),
             startedByUserId: row.startedByUserId,
             startedByUsername: row.startedByUsername,
+            startedByDisplayName: row.startedByDisplayName,
             startedAt: row.startedAt,
             answeredAt: row.answeredAt,
             endedAt: row.endedAt,
@@ -858,6 +867,7 @@ export class CallsService {
                 roomName: callSessions.roomName,
                 startedByUserId: callSessions.startedByUserId,
                 startedByUsername: users.username,
+                startedByDisplayName: users.displayName,
                 startedByAvatar: users.avatar,
                 startedAt: callSessions.startedAt,
                 answeredAt: callSessions.answeredAt,
@@ -876,6 +886,7 @@ export class CallsService {
             .select({
                 userId: callParticipants.userId,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
                 status: callParticipants.status,
                 micEnabled: callParticipants.micEnabled,
@@ -904,6 +915,7 @@ export class CallsService {
             startedBy: {
                 id: call.startedByUserId,
                 username: call.startedByUsername,
+                displayName: call.startedByDisplayName,
                 avatar: call.startedByAvatar,
             },
             startedAt: this.toIso(call.startedAt),
@@ -916,6 +928,7 @@ export class CallsService {
             participants: participants.map((participant) => ({
                 userId: participant.userId,
                 username: participant.username,
+                displayName: participant.displayName,
                 avatar: participant.avatar,
                 status: this.normalizeParticipantStatus(participant.status),
                 micEnabled: Boolean(participant.micEnabled),
@@ -1026,6 +1039,7 @@ export class CallsService {
                 userId: conversationMembers.userId,
                 memberUsername: conversationMembers.username,
                 username: users.username,
+                displayName: users.displayName,
                 avatar: users.avatar,
             })
             .from(conversationMembers)
@@ -1035,6 +1049,7 @@ export class CallsService {
         return rows.map((row) => ({
             userId: row.userId,
             username: row.username ?? row.memberUsername ?? `User #${row.userId}`,
+            displayName: row.displayName,
             avatar: row.avatar,
         }));
     }

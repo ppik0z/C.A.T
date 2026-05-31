@@ -5,7 +5,7 @@ export const getConversationName = (conversation: Conversation | null): string =
 
   return conversation.isGroup
     ? conversation.name ?? `Nhóm #${conversation.id}`
-    : conversation.friend?.username ?? `Chat #${conversation.id}`;
+    : (conversation.friend?.displayName || conversation.friend?.username) ?? `Chat #${conversation.id}`;
 };
 
 export const getConversationInitials = (conversation: Conversation | null): string => {

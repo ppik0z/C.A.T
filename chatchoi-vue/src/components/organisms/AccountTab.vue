@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import { useAccountStore } from '@/stores/account';
 import { useChatStore } from '@/stores/chat';
+import { resolveDisplayName, getUserInitial } from '@/utils/userPresentation';
 import { useI18n } from 'vue-i18n';
 
 const accountStore = useAccountStore();
@@ -22,9 +23,9 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 
 const userName = computed(() => chatStore.myUserName ?? 'User');
-const userInitial = computed(() => userName.value[0]?.toUpperCase() ?? 'U');
+const userInitial = computed(() => getUserInitial({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
 const userAvatar = computed(() => chatStore.myAvatar || null);
-const displayName = computed(() => accountStore.profile?.displayName || userName.value);
+const displayName = computed(() => resolveDisplayName({ displayName: accountStore.profile?.displayName || chatStore.myDisplayName, username: chatStore.myUserName }));
 
 onMounted(async () => {
   await accountStore.fetchAccount();

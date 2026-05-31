@@ -309,7 +309,7 @@ export class MessagesService {
             where: eq(messages.conversationId, conversationId),
             with: {
                 sender: {
-                    columns: { id: true, username: true, avatar: true }
+                    columns: { id: true, username: true, displayName: true, avatar: true }
                 }
             },
             orderBy: (messages, { desc }) => [desc(messages.createdAt)],
@@ -362,7 +362,7 @@ export class MessagesService {
             ),
             with: {
                 sender: {
-                    columns: { id: true, username: true }
+                    columns: { id: true, username: true, displayName: true }
                 }
             },
             orderBy: (messages, { desc }) => [desc(messages.conversationIndex)],
@@ -374,7 +374,7 @@ export class MessagesService {
             conversationIndex: message.conversationIndex,
             content: message.content ?? '',
             type: message.type,
-            senderName: message.sender?.username ?? `User #${message.senderId}`,
+            senderName: message.sender?.displayName ?? message.sender?.username ?? `User #${message.senderId}`,
             createdAt: message.createdAt,
         }));
     }
@@ -449,7 +449,7 @@ export class MessagesService {
             where,
             with: {
                 sender: {
-                    columns: { id: true, username: true, avatar: true }
+                    columns: { id: true, username: true, displayName: true, avatar: true }
                 }
             },
             orderBy: mode === 'after' || mode === 'from'

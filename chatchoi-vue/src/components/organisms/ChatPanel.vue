@@ -9,6 +9,7 @@ import { useChatStore } from '../../stores/chat';
 import type { CallKind } from '../../types/call';
 import type { ChatMessage, Conversation } from '../../types/chat';
 import { formatMessageDateDivider, getMessageDateKey } from '../../utils/chatPresentation';
+import { resolveDisplayName } from '../../utils/userPresentation';
 
 interface Props {
   conversation: Conversation | null;
@@ -109,7 +110,7 @@ const typingLabel = computed(() => {
   if (!props.conversation) return '';
   const users = chatStore.typingUsersByConversationId[props.conversation.id] ?? [];
   if (users.length === 0) return '';
-  if (users.length === 1) return `${users[0].username} đang soạn tin...`;
+  if (users.length === 1) return `${resolveDisplayName(users[0])} đang soạn tin...`;
   return `${users.length} người đang soạn tin...`;
 });
 

@@ -169,7 +169,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             senderId,
             data.conversationId,
             data.content ?? '',
-            client.user.username,
+            client.user.displayName || client.user.username,
             data.clientTempId,
             {
                 type: data.type,
@@ -291,6 +291,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId: data.conversationId,
             userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             lastSeenMessageIndex: data.lastMessageIndex,
         });
 
@@ -315,6 +316,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId: data.conversationId,
             userId: client.user.userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             isTyping: true,
         });
 
@@ -339,6 +341,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId,
             userId: client.user.userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             isTyping: false,
         });
     }

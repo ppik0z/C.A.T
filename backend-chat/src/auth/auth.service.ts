@@ -69,14 +69,14 @@ export class AuthService {
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác!');
     }
 
-    const tokens = await this.getTokens(user.id, user.username);
+    const tokens = await this.getTokens(user.id, user.username, user.displayName);
 
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return {
       message: 'Đăng nhập thành công!',
       ...tokens,
-      user: { id: user.id, username: user.username },
+      user: { id: user.id, username: user.username, displayName: user.displayName },
     };
   }
 
@@ -90,16 +90,16 @@ export class AuthService {
   }
 
   // --- HÀM GET TOKENS ---
-  async getTokens(userId: number, username: string) {
+  async getTokens(userId: number, username: string, displayName: string | null) {
     const [accessToken, refreshToken] = await Promise.all([
       // Access Token
       this.jwtService.signAsync(
-        { userId, username },
+        { userId, username, displayName },
         { secret: process.env.JWT_SECRET, expiresIn: '7d' },
       ),
       // Refresh Token
       this.jwtService.signAsync(
-        { userId, username },
+        { userId, username, displayName },
         { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
       ),
     ]);
@@ -145,7 +145,7 @@ export class AuthService {
       throw new UnauthorizedException('Token không hợp lệ hoặc đã được sử dụng.');
     }
 
-    const tokens = await this.getTokens(user.id, user.username);
+    const tokens = await this.getTokens(user.id, user.username, user.displayName);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;

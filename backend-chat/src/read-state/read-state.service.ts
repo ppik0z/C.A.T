@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { DrizzleService } from '../database/drizzle.service';
 import Redis from 'ioredis';
-import { conversationMembers } from '../database/schema';
+import { conversationMembers, users } from '../database/schema';
 import { and, eq } from 'drizzle-orm';
 
 @Injectable()
@@ -38,9 +38,11 @@ export class ReadStateService {
             .select({
                 userId: conversationMembers.userId,
                 username: conversationMembers.username,
+                displayName: users.displayName,
                 lastSeenMessageIndex: conversationMembers.lastSeenMessageIndex,
             })
             .from(conversationMembers)
+            .leftJoin(users, eq(conversationMembers.userId, users.id))
             .where(eq(conversationMembers.conversationId, conversationId));
 
         return Promise.all(members.map(async (member) => {
@@ -48,6 +50,7 @@ export class ReadStateService {
             return {
                 userId: member.userId,
                 username: member.username,
+                displayName: member.displayName,
                 lastSeenMessageIndex: cachedIndex ? parseInt(cachedIndex, 10) : member.lastSeenMessageIndex,
             };
         }));

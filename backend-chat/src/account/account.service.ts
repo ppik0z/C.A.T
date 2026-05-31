@@ -32,23 +32,26 @@ export class AccountService {
   async updateProfile(userId: number, data: UpdateProfileDto) {
     const { displayName, bio, customStatus, email, phone } = data;
 
-    if (email !== undefined || phone !== undefined) {
-      const updateData: Partial<typeof users.$inferInsert> = {};
-      if (email !== undefined) updateData.email = email;
-      if (phone !== undefined) updateData.phone = phone;
-      await this.drizzle.db.update(users).set(updateData).where(eq(users.id, userId));
+    // Cập nhật các trường thuộc bảng users (displayName, email, phone)
+    const userData: Partial<typeof users.$inferInsert> = {};
+    if (displayName !== undefined) userData.displayName = displayName;
+    if (email !== undefined) userData.email = email;
+    if (phone !== undefined) userData.phone = phone;
+
+    if (Object.keys(userData).length > 0) {
+      await this.drizzle.db.update(users).set(userData).where(eq(users.id, userId));
     }
 
-    const existingProfile = await this.drizzle.db.query.userProfiles.findFirst({
-      where: eq(userProfiles.userId, userId),
-    });
-
+    // Cập nhật các trường thuộc bảng user_profiles (bio, customStatus)
     const profileData: Partial<typeof userProfiles.$inferInsert> = {};
-    if (displayName !== undefined) profileData.displayName = displayName;
     if (bio !== undefined) profileData.bio = bio;
     if (customStatus !== undefined) profileData.customStatus = customStatus;
 
     if (Object.keys(profileData).length > 0) {
+      const existingProfile = await this.drizzle.db.query.userProfiles.findFirst({
+        where: eq(userProfiles.userId, userId),
+      });
+
       if (existingProfile) {
         await this.drizzle.db.update(userProfiles).set(profileData).where(eq(userProfiles.userId, userId));
       } else {

@@ -10,6 +10,7 @@ import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
 import AccountTab from '@/components/organisms/AccountTab.vue';
 import { useChatStore } from '@/stores/chat';
+import { resolveDisplayName, getUserInitial } from '@/utils/userPresentation';
 import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
 import { useAppearance } from '@/theme/useAppearance';
 import { useLocalization } from '@/i18n/useLocalization';
@@ -144,8 +145,8 @@ const quietHours = ref(false);
 const notificationLevel = ref<NotificationLevel>('mentions');
 
 const activeTabMeta = computed(() => settingsTabs.value.find((tab: SettingsTab) => tab.id === activeTab.value) ?? settingsTabs.value[0]);
-const userName = computed(() => chatStore.myUserName ?? 'User');
-const userInitial = computed(() => userName.value[0]?.toUpperCase() ?? 'U');
+const userName = computed(() => resolveDisplayName({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
+const userInitial = computed(() => getUserInitial({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
 
 const selectTab = (tabId: SettingsTabId) => {
   activeTab.value = tabId;

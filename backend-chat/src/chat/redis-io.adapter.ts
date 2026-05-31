@@ -48,6 +48,7 @@ export class AuthIoAdapter extends IoAdapter {
                     (socket as AuthenticatedSocket).user = {
                         userId: payload.userId,
                         username: payload.username,
+                        displayName: payload.displayName ?? null,
                     };
                     next();
                 })

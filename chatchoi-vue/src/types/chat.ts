@@ -1,11 +1,13 @@
 export interface JwtIdentity {
   userId: number;
   username: string;
+  displayName?: string | null;
 }
 
 export interface ChatUser {
   id: number;
   username: string;
+  displayName?: string | null;
   avatar: string | null;
 }
 
@@ -13,6 +15,7 @@ export interface ConversationMember {
   id: number;
   userId: number;
   username: string;
+  displayName?: string | null;
   nickname: string | null;
   avatar: string | null;
   isAdmin: boolean;
@@ -51,6 +54,7 @@ export interface ChatMessage {
   sender?: {
     id: number;
     username: string;
+    displayName?: string | null;
   };
 }
 
@@ -103,6 +107,7 @@ export interface MessageStatusSnapshot {
 export interface MemberReadState {
   userId: number;
   username: string | null;
+  displayName?: string | null;
   lastSeenMessageIndex: number;
 }
 
@@ -124,12 +129,14 @@ export interface TypingStateUpdate {
   conversationId: number;
   userId: number;
   username: string;
+  displayName?: string | null;
   isTyping: boolean;
 }
 
 export interface TypingUser {
   userId: number;
   username: string;
+  displayName?: string | null;
 }
 
 export interface MessagePageInfo {

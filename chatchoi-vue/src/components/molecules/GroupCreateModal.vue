@@ -4,6 +4,7 @@ import Avatar from '../atoms/Avatar.vue';
 import TextInput from '../atoms/TextInput.vue';
 import { createGroupConversation } from '../../services/conversation.service';
 import { useFriendsStore } from '../../stores/friends';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 import type { Conversation } from '../../types/chat';
 import type { FriendUser } from '../../types/friends';
 
@@ -126,7 +127,7 @@ const createGroup = async () => {
             type="button"
             @click="toggleUser(user)"
           >
-            <span>{{ user.username }}</span>
+            <span>{{ resolveDisplayName(user) }}</span>
             <span class="material-symbols-outlined !text-[16px]">close</span>
           </button>
         </div>
@@ -146,7 +147,8 @@ const createGroup = async () => {
             <div class="flex items-center gap-3 min-w-0">
               <Avatar :avatar-url="user.avatar" :name="user.username" />
               <div class="min-w-0">
-                <p class="font-semibold text-on-surface truncate">{{ user.username }}</p>
+                <p class="font-semibold text-on-surface truncate">{{ resolveDisplayName(user) }}</p>
+                <p v-if="user.username" class="text-xs text-on-surface-variant/70 truncate">{{ formatUsername(user.username) }}</p>
                 <p class="text-xs text-on-surface-variant">{{ user.relationshipStatus === 'friends' ? 'Bạn bè' : 'Tìm kiếm' }}</p>
               </div>
             </div>

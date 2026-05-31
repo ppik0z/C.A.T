@@ -112,6 +112,7 @@ export const useChatStore = defineStore('chat', {
         isConnected: false,
         conversations: [] as Conversation[],
         myUserName: null as string | null,
+        myDisplayName: null as string | null,
     }),
 
     getters: {
@@ -127,6 +128,7 @@ export const useChatStore = defineStore('chat', {
                 const decoded = jwtDecode<JwtIdentity>(token);
                 this.myId = decoded.userId; // Lấy userId từ Token
                 this.myUserName = decoded.username;
+                this.myDisplayName = decoded.displayName ?? null;
                 console.log("Định danh thành công, ID: ", this.myId);
             } catch (error) {
                 console.error("Token lỏ!");
@@ -437,8 +439,8 @@ export const useChatStore = defineStore('chat', {
                 content: content.trim(),
                 createdAt: new Date(),
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -484,8 +486,8 @@ export const useChatStore = defineStore('chat', {
                 uploadProgress: 0,
                 compressionProgress: 0,
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -591,8 +593,8 @@ export const useChatStore = defineStore('chat', {
                 createdAt: new Date(),
                 fileUrl: gifUrl.trim(),
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -860,7 +862,7 @@ export const useChatStore = defineStore('chat', {
                 return;
             }
 
-            const nextUser = { userId: update.userId, username: update.username };
+            const nextUser = { userId: update.userId, username: update.username, displayName: update.displayName };
             this.typingUsersByConversationId[update.conversationId] = existingIndex === -1
                 ? [...users, nextUser]
                 : users.map((item, index) => index === existingIndex ? nextUser : item);

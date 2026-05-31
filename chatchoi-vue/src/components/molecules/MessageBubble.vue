@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ChatMessage } from '../../types/chat';
 import { formatFileSize, formatMessageTime } from '../../utils/chatPresentation';
+import { resolveDisplayName } from '../../utils/userPresentation';
 
 interface Props {
   message: ChatMessage;
@@ -14,7 +15,8 @@ const emit = defineEmits<{
 }>();
 
 const getSenderName = (message: ChatMessage) => {
-  return message.sender?.username ?? message.senderName ?? 'Unknown';
+  const resolved = resolveDisplayName(message.sender);
+  return resolved !== 'Unknown' ? resolved : message.senderName ?? 'Unknown';
 };
 
 const getMessageType = (message: ChatMessage) => message.type ?? 'text';
