@@ -4,6 +4,7 @@ import Avatar from '../atoms/Avatar.vue';
 
 interface Props {
   name: string;
+  username?: string;
   avatarUrl?: string | null;
   isOnline?: boolean;
   showStatus?: boolean;
@@ -95,6 +96,7 @@ const closeCard = () => {
           />
           <div class="min-w-0">
             <p class="font-bold text-on-surface truncate">{{ props.name }}</p>
+            <p v-if="props.username" class="text-xs text-on-surface-variant/70 truncate">{{ props.username }}</p>
             <p class="text-xs font-semibold text-secondary">{{ props.statusLabel }}</p>
           </div>
         </div>

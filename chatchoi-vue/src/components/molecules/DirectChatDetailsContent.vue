@@ -2,6 +2,7 @@
 import Avatar from '../atoms/Avatar.vue';
 import type { Conversation } from '../../types/chat';
 import { getConversationKindLabel, getConversationName, getConversationUser } from '../../utils/chatPresentation';
+import { formatUsername } from '../../utils/userPresentation';
 
 interface Props {
   conversation: Conversation | null;
@@ -43,6 +44,9 @@ const settingItems = [
       />
 
       <h3 :class="['font-bold text-on-surface text-center', props.compact ? 'text-lg' : 'text-xl']">{{ getConversationName(props.conversation) }}</h3>
+      <p v-if="getConversationUser(props.conversation)?.username" class="text-xs font-semibold text-on-surface-variant/70 mt-0.5">
+        {{ formatUsername(getConversationUser(props.conversation)?.username) }}
+      </p>
       <p class="text-sm font-semibold text-secondary mt-1">{{ props.conversation?.isOnline ? 'Online' : 'Offline' }}</p>
       <p :class="['text-xs font-semibold uppercase text-on-surface-variant', props.compact ? 'mt-1' : 'mt-2']">{{ getConversationKindLabel(props.conversation) }}</p>
 

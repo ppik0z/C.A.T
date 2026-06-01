@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import { useAccountStore } from '@/stores/account';
 import { useChatStore } from '@/stores/chat';
-import { resolveDisplayName, getUserInitial } from '@/utils/userPresentation';
+import { resolveDisplayName, getUserInitial, formatUsername } from '@/utils/userPresentation';
 import { useI18n } from 'vue-i18n';
 
 const accountStore = useAccountStore();
@@ -91,6 +91,9 @@ const handleSave = async () => {
           <h3 class="mt-4 max-w-full truncate text-lg font-extrabold text-on-surface">
             {{ isEditing ? draftProfile.displayName : displayName }}
           </h3>
+          <p class="text-xs font-semibold text-on-surface-variant/70">
+            {{ formatUsername(userName) }}
+          </p>
           <p class="text-sm font-semibold text-on-surface-variant">
             {{ isEditing ? draftProfile.customStatus : (accountStore.profile?.customStatus || 'Online') }}
           </p>
