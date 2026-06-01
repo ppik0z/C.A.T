@@ -7,26 +7,57 @@ import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 import 'multer';
 import { UpdateProfileDto, UpdateSettingsDto, UpdatePasswordDto } from './dto/account.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ProfilesService } from '../profiles/profiles.service';
 
 @Injectable()
 export class AccountService {
-  constructor(private readonly drizzle: DrizzleService) {
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly profilesService: ProfilesService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     cloudinary.config({ secure: true });
   }
 
   async getMe(userId: number) {
-    const user = await this.drizzle.db.query.users.findFirst({
-      where: eq(users.id, userId),
-      with: {
-        profile: true,
-        settings: true,
-      },
-    });
+    const [user, publicProfile, settings] = await Promise.all([
+      this.drizzle.db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: {
+          email: true,
+          phone: true,
+          isEmailVerified: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.profilesService.getPublicProfile(userId),
+      this.drizzle.db.query.userSettings.findFirst({
+        where: eq(userSettings.userId, userId),
+        columns: {
+          id: true,
+          userId: true,
+          theme: true,
+          language: true,
+          notificationSound: true,
+          status: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
 
     if (!user) throw new NotFoundException('User not found');
 
-    const { password: _password, refreshToken: _refreshToken, ...safeUser } = user;
-    return safeUser;
+    return {
+      ...publicProfile,
+      email: user.email,
+      phone: user.phone,
+      isEmailVerified: user.isEmailVerified,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      settings: settings ?? null,
+    };
   }
 
   async updateProfile(userId: number, data: UpdateProfileDto) {
@@ -62,6 +93,7 @@ export class AccountService {
       }
     }
 
+    await this.emitPublicProfileUpdated(userId);
     return this.getMe(userId);
   }
 
@@ -108,6 +140,7 @@ export class AccountService {
 
     const avatarUrl = result.secure_url;
     await this.drizzle.db.update(users).set({ avatar: avatarUrl }).where(eq(users.id, userId));
+    await this.emitPublicProfileUpdated(userId);
     return this.getMe(userId);
   }
 
@@ -125,5 +158,10 @@ export class AccountService {
     await this.drizzle.db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
 
     return { message: 'Password updated successfully' };
+  }
+
+  private async emitPublicProfileUpdated(userId: number) {
+    const profile = await this.profilesService.getPublicProfile(userId);
+    this.eventEmitter.emit('user.profile.updated', profile);
   }
 }
