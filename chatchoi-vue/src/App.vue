@@ -6,10 +6,12 @@ import { useCallStore } from './stores/call';
 import { useChatStore } from './stores/chat';
 import { useFriendsStore } from './stores/friends';
 import { initSocketService } from './services/socket.service';
+import { useAccountStore } from './stores/account';
 
 const chatStore = useChatStore();
 const callStore = useCallStore();
 const friendsStore = useFriendsStore();
+const accountStore = useAccountStore();
 const isLoggedIn = ref(false);
 
 onMounted(() => {
@@ -19,6 +21,7 @@ onMounted(() => {
     initSocketService(token);
     void callStore.loadActiveCalls(token);
     void friendsStore.refreshAll();
+    void accountStore.fetchAccount();
     isLoggedIn.value = true;
   }
 });

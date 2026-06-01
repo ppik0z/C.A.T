@@ -11,6 +11,7 @@ import {
   sendFriendRequest,
 } from '../services/friends.service';
 import type { FriendRequest, FriendUser } from '../types/friends';
+import type { PublicUserProfile } from '../types/account';
 
 const getToken = () => localStorage.getItem('accessToken');
 
@@ -34,6 +35,18 @@ export const useFriendsStore = defineStore('friends', {
   },
 
   actions: {
+    applyUserProfileUpdate(profile: PublicUserProfile) {
+      const patchUser = (user: FriendUser) => user.id === profile.id
+        ? { ...user, username: profile.username, displayName: profile.displayName, avatar: profile.avatar }
+        : user;
+
+      this.friends = this.friends.map(patchUser);
+      this.incomingRequests = this.incomingRequests.map(patchUser);
+      this.outgoingRequests = this.outgoingRequests.map(patchUser);
+      this.suggestions = this.suggestions.map(patchUser);
+      this.searchResults = this.searchResults.map(patchUser);
+    },
+
     async refreshAll() {
       const token = getToken();
       if (!token) return;

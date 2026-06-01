@@ -1,5 +1,5 @@
 /** Returns display name with fallback to username */
-export function resolveDisplayName(user: { displayName?: string | null; username?: string } | null | undefined): string {
+export function resolveDisplayName(user: { displayName?: string | null; username?: string | null } | null | undefined): string {
   if (!user) return 'Unknown';
   return user.displayName?.trim() || user.username || 'Unknown';
 }
@@ -10,6 +10,6 @@ export function formatUsername(username: string | null | undefined): string {
 }
 
 /** Returns first character initial for avatar */
-export function getUserInitial(user: { displayName?: string | null; username?: string } | null | undefined): string {
+export function getUserInitial(user: { displayName?: string | null; username?: string | null } | null | undefined): string {
   return resolveDisplayName(user)[0]?.toUpperCase() ?? 'U';
 }

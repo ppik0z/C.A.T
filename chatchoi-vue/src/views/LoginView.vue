@@ -6,9 +6,11 @@ import { useChatStore } from '../stores/chat';
 import { useFriendsStore } from '../stores/friends';
 import { initSocketService } from '../services/socket.service';
 import { apiBaseUrl } from '../config/api';
+import { useAccountStore } from '../stores/account';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
+const accountStore = useAccountStore();
 const username = ref('');
 const password = ref('');
 const isLoading = ref(false);
@@ -35,6 +37,7 @@ const handleLogin = async () => {
       chatStore.setIdentity(data.accessToken);
       initSocketService(data.accessToken);
       void friendsStore.refreshAll();
+      void accountStore.fetchAccount();
       
       alert("Đăng nhập thành công!");
     } else {

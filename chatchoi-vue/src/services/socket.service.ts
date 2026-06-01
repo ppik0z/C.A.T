@@ -2,6 +2,9 @@ import { socket } from "../socket";
 import { useCallStore } from "../stores/call";
 import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
+import { useProfilesStore } from "../stores/profiles";
+import { useAccountStore } from "../stores/account";
+import type { PublicUserProfile } from "../types/account";
 import type { ActiveCallsPayload, CallErrorPayload, CallState } from "../types/call";
 import type {
     ChatMessage,
@@ -18,6 +21,8 @@ export const initSocketService = (token: string) => {
     const chatStore = useChatStore();
     const callStore = useCallStore();
     const friendsStore = useFriendsStore();
+    const profilesStore = useProfilesStore();
+    const accountStore = useAccountStore();
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
     socket.auth = { token };
@@ -86,6 +91,15 @@ export const initSocketService = (token: string) => {
     socket.on("user_status_changed", (data: { userId: number, status: string }) => {
         console.log(`User ${data.userId} đang ${data.status}`);
         chatStore.updateUserStatus(data.userId, data.status);
+    });
+
+    socket.on("user_profile_updated", (profile: PublicUserProfile) => {
+        profilesStore.applyProfile(profile);
+        chatStore.applyUserProfileUpdate(profile);
+        friendsStore.applyUserProfileUpdate(profile);
+        if (profile.id === chatStore.myId) {
+            void accountStore.fetchAccount();
+        }
     });
 
     socket.on("update_conversation_list", (data: ConversationListUpdate) => {

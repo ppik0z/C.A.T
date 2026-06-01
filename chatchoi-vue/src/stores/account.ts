@@ -1,74 +1,83 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
-import type { UserProfile, UserSettings, UpdateProfileRequest } from '../types/account';
+import { computed, ref } from 'vue';
+import { fetchAccountMe, patchAccountProfile, uploadAccountAvatar } from '../services/account.service';
+import type { AccountMe, UpdateProfileRequest } from '../types/account';
+import { useChatStore } from './chat';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const getToken = () => localStorage.getItem('accessToken');
 
 export const useAccountStore = defineStore('account', () => {
-  const profile = ref<UserProfile | null>(null);
-  const settings = ref<UserSettings | null>(null);
+  const me = ref<AccountMe | null>(null);
   const isLoading = ref(false);
+  const isSaving = ref(false);
+  const error = ref<string | null>(null);
+  const settings = computed(() => me.value?.settings ?? null);
+
+  const applyAccount = (account: AccountMe) => {
+    me.value = account;
+    useChatStore().applyCurrentUserProfile(account);
+  };
 
   const fetchAccount = async () => {
+    const token = getToken();
+    if (!token) return null;
+
     isLoading.value = true;
+    error.value = null;
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-      const res = await fetch(`${API_BASE}/account/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        profile.value = data.profile || {};
-        settings.value = data.settings || {};
-      }
-    } catch (err) {
-      console.error('Failed to fetch account', err);
+      const account = await fetchAccountMe(token);
+      applyAccount(account);
+      return account;
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Không thể tải thông tin tài khoản';
+      throw caught;
     } finally {
       isLoading.value = false;
     }
   };
 
-  const updateProfile = async (data: UpdateProfileRequest) => {
-    const token = localStorage.getItem('accessToken');
-    const res = await fetch(`${API_BASE}/account/profile`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      const result = await res.json();
-      profile.value = result.profile || {};
-      return result;
+  const updateProfile = async (input: UpdateProfileRequest) => {
+    const token = getToken();
+    if (!token) throw new Error('Bạn cần đăng nhập để cập nhật hồ sơ');
+
+    isSaving.value = true;
+    error.value = null;
+    try {
+      const account = await patchAccountProfile(token, input);
+      applyAccount(account);
+      return account;
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Không thể cập nhật hồ sơ';
+      throw caught;
+    } finally {
+      isSaving.value = false;
     }
-    throw new Error('Update failed');
   };
 
   const updateAvatar = async (file: File) => {
-    const token = localStorage.getItem('accessToken');
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(`${API_BASE}/account/avatar`, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-    if (res.ok) {
-      await fetchAccount(); // Refresh
-      return true;
+    const token = getToken();
+    if (!token) throw new Error('Bạn cần đăng nhập để cập nhật ảnh đại diện');
+
+    isSaving.value = true;
+    error.value = null;
+    try {
+      const account = await uploadAccountAvatar(token, file);
+      applyAccount(account);
+      return account;
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Không thể cập nhật ảnh đại diện';
+      throw caught;
+    } finally {
+      isSaving.value = false;
     }
-    throw new Error('Avatar update failed');
   };
 
   return {
-    profile,
+    me,
     settings,
     isLoading,
+    isSaving,
+    error,
     fetchAccount,
     updateProfile,
     updateAvatar,

@@ -24,6 +24,7 @@ import type {
     TypingStateUpdate,
     TypingUser,
 } from '../types/chat';
+import type { PublicUserProfile, PublicUserSummary } from '../types/account';
 
 const PREFETCH_DELAY_MS = 250;
 const CONVERSATION_DETAIL_TTL_MS = 60_000;
@@ -113,6 +114,7 @@ export const useChatStore = defineStore('chat', {
         conversations: [] as Conversation[],
         myUserName: null as string | null,
         myDisplayName: null as string | null,
+        myAvatar: null as string | null,
     }),
 
     getters: {
@@ -133,6 +135,41 @@ export const useChatStore = defineStore('chat', {
             } catch (error) {
                 console.error("Token lỏ!");
             }
+        },
+
+        applyCurrentUserProfile(profile: PublicUserSummary) {
+            if (this.myId !== null && profile.id !== this.myId) return;
+            this.myId = profile.id;
+            this.myUserName = profile.username;
+            this.myDisplayName = profile.displayName;
+            this.myAvatar = profile.avatar;
+        },
+
+        applyUserProfileUpdate(profile: PublicUserProfile) {
+            if (profile.id === this.myId) {
+                this.applyCurrentUserProfile(profile);
+            }
+
+            this.conversations.forEach((conversation) => {
+                if (!conversation.isGroup && conversation.friend?.id === profile.id) {
+                    conversation.friend = {
+                        ...conversation.friend,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatar: profile.avatar,
+                    };
+                }
+            });
+
+            Object.values(this.conversationDetailsById).forEach((detail) => {
+                detail.members?.forEach((member) => {
+                    if (member.userId === profile.id) {
+                        member.username = profile.username;
+                        member.displayName = profile.displayName;
+                        member.avatar = profile.avatar;
+                    }
+                });
+            });
         },
 
         setMessagesForConversation(
@@ -449,7 +486,6 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
-                senderName: this.myUserName,
                 type: 'text',
                 content: content.trim(),
                 clientTempId,
@@ -603,7 +639,6 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
-                senderName: this.myUserName,
                 type: 'gif',
                 content: caption.trim(),
                 fileUrl: gifUrl.trim(),
