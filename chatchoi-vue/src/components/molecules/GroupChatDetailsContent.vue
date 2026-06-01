@@ -44,8 +44,6 @@ const filteredMembers = computed(() => {
   );
 });
 
-const token = () => localStorage.getItem('accessToken');
-
 const resetForms = () => {
   error.value = null;
   isEditingGroup.value = false;
@@ -79,11 +77,8 @@ const startEdit = () => {
 };
 
 const saveGroup = async () => {
-  const accessToken = token();
-  if (!accessToken) return;
-
   try {
-    const updated = await updateConversation(accessToken, props.conversation.id, {
+    const updated = await updateConversation(props.conversation.id, {
       name: editName.value.trim(),
       avatarGroup: editAvatar.value.trim() || null,
     });
@@ -95,15 +90,12 @@ const saveGroup = async () => {
 };
 
 const removeMember = async (member: ConversationMember) => {
-  const accessToken = token();
-  if (!accessToken) return;
-
   const isSelf = member.userId === chatStore.myId;
   const confirmed = window.confirm(isSelf ? 'Rời khỏi nhóm này?' : `Xoá ${resolveDisplayName(member)} khỏi nhóm?`);
   if (!confirmed) return;
 
   try {
-    await removeConversationMember(accessToken, props.conversation.id, member.userId);
+    await removeConversationMember(props.conversation.id, member.userId);
     if (isSelf) {
       chatStore.removeConversation(props.conversation.id);
       return;

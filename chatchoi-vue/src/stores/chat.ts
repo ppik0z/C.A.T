@@ -25,6 +25,7 @@ import type {
     TypingUser,
 } from '../types/chat';
 import type { PublicUserProfile, PublicUserSummary } from '../types/account';
+import { getAccessToken } from '../services/session.runtime';
 
 const PREFETCH_DELAY_MS = 250;
 const CONVERSATION_DETAIL_TTL_MS = 60_000;
@@ -129,12 +130,18 @@ export const useChatStore = defineStore('chat', {
             try {
                 const decoded = jwtDecode<JwtIdentity>(token);
                 this.myId = decoded.userId; // Lấy userId từ Token
-                this.myUserName = decoded.username;
-                this.myDisplayName = decoded.displayName ?? null;
+                if (decoded.username) this.myUserName = decoded.username;
+                if (decoded.displayName !== undefined) this.myDisplayName = decoded.displayName;
                 console.log("Định danh thành công, ID: ", this.myId);
             } catch (error) {
                 console.error("Token lỏ!");
             }
+        },
+
+        resetSession() {
+            this.$reset();
+            typingExpiryTimers.forEach((timer) => clearTimeout(timer));
+            typingExpiryTimers.clear();
         },
 
         applyCurrentUserProfile(profile: PublicUserSummary) {
@@ -500,7 +507,7 @@ export const useChatStore = defineStore('chat', {
         async sendMediaMessage(file: File, caption = '') {
             if (!this.currentConversationId || !this.myUserName) return;
 
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!token) throw new Error('Bạn cần đăng nhập để gửi file.');
             if (file.size > MAX_MEDIA_FILE_BYTES) throw new Error('File tối đa 10 MB.');
 
@@ -535,18 +542,18 @@ export const useChatStore = defineStore('chat', {
             });
             this.pushMessage(optimisticMessage);
             this.stopTyping(conversationId);
-            await this.uploadPendingMedia(clientTempId, token);
+            await this.uploadPendingMedia(clientTempId);
         },
 
         async retryMediaMessage(clientTempId: string) {
             const pendingUpload = pendingMediaUploads.get(clientTempId);
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!pendingUpload || !token) return;
 
-            await this.uploadPendingMedia(clientTempId, token);
+            await this.uploadPendingMedia(clientTempId);
         },
 
-        async uploadPendingMedia(clientTempId: string, token: string) {
+        async uploadPendingMedia(clientTempId: string) {
             const pendingUpload = pendingMediaUploads.get(clientTempId);
             if (!pendingUpload) return;
 
@@ -595,7 +602,7 @@ export const useChatStore = defineStore('chat', {
                     uploadProgress: 0,
                 });
 
-                const response = await uploadMediaMessage(token, {
+                const response = await uploadMediaMessage({
                     conversationId: pendingUpload.conversationId,
                     file: uploadFile,
                     caption: pendingUpload.caption,
@@ -723,11 +730,8 @@ export const useChatStore = defineStore('chat', {
                 return this.conversationDetailPromisesById[conversationId];
             }
 
-            const token = localStorage.getItem('accessToken');
-            if (!token) throw new Error('Bạn cần đăng nhập để tải thông tin đoạn chat.');
-
             this.conversationDetailLoadStateById[conversationId] = 'loading';
-            const request = fetchConversationDetail(token, conversationId)
+            const request = fetchConversationDetail(conversationId)
                 .then((detail) => {
                     this.upsertConversationDetail(detail);
                     return detail;

@@ -21,16 +21,17 @@ export const useProfilesStore = defineStore('profiles', {
       delete this.fetchedAtByUserId[userId];
     },
 
+    clear() {
+      this.$reset();
+    },
+
     async loadProfile(userId: number, force = false) {
       const cached = this.profilesByUserId[userId];
       const fetchedAt = this.fetchedAtByUserId[userId] ?? 0;
       if (!force && cached && Date.now() - fetchedAt < PROFILE_TTL_MS) return cached;
       if (!force && this.requestsByUserId[userId]) return this.requestsByUserId[userId];
 
-      const token = localStorage.getItem('accessToken');
-      if (!token) throw new Error('Bạn cần đăng nhập để tải hồ sơ người dùng');
-
-      const request = fetchPublicProfile(token, userId)
+      const request = fetchPublicProfile(userId)
         .then((profile) => {
           this.applyProfile(profile);
           return profile;

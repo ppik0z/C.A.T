@@ -1,6 +1,6 @@
 export interface JwtIdentity {
   userId: number;
-  username: string;
+  username?: string;
   displayName?: string | null;
 }
 

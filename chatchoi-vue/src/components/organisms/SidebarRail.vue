@@ -4,10 +4,12 @@ import { useFriendsStore } from '../../stores/friends';
 import { resolveDisplayName, getUserInitial } from '../../utils/userPresentation';
 import type { AppSection } from '../../types/navigation';
 import { useAccountStore } from '../../stores/account';
+import { useAuthStore } from '../../stores/auth';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
 const accountStore = useAccountStore();
+const authStore = useAuthStore();
 
 interface Props {
   activeSection: AppSection;
@@ -18,10 +20,7 @@ const emit = defineEmits<{
   navigate: [section: AppSection];
 }>();
 
-const handleLogout = () => {
-  localStorage.removeItem('accessToken');
-  window.location.reload();
-};
+const handleLogout = () => void authStore.logout();
 
 const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
   { icon: 'chat', label: 'Messages', section: 'messages' },

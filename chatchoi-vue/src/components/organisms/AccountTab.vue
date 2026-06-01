@@ -7,8 +7,10 @@ import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import { useAccountStore } from '@/stores/account';
 import { resolveDisplayName, formatUsername } from '@/utils/userPresentation';
 import ProfileCardContent from '@/components/molecules/ProfileCardContent.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const accountStore = useAccountStore();
+const authStore = useAuthStore();
 
 const isEditing = ref(false);
 const draftProfile = ref({
@@ -113,7 +115,7 @@ const handleSave = async () => {
           </PreferenceRow>
           <Separator />
           <PreferenceRow icon="logout" :title="$t('settings.account.logout.title')" :description="$t('settings.account.logout.description')">
-            <Button disabled type="button" variant="destructive">{{ $t('settings.account.logout.action') }}</Button>
+            <Button type="button" variant="destructive" @click="authStore.logout()">{{ $t('settings.account.logout.action') }}</Button>
           </PreferenceRow>
         </template>
         

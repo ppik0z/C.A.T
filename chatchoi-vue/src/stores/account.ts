@@ -4,8 +4,6 @@ import { fetchAccountMe, patchAccountProfile, uploadAccountAvatar } from '../ser
 import type { AccountMe, UpdateProfileRequest } from '../types/account';
 import { useChatStore } from './chat';
 
-const getToken = () => localStorage.getItem('accessToken');
-
 export const useAccountStore = defineStore('account', () => {
   const me = ref<AccountMe | null>(null);
   const isLoading = ref(false);
@@ -19,13 +17,10 @@ export const useAccountStore = defineStore('account', () => {
   };
 
   const fetchAccount = async () => {
-    const token = getToken();
-    if (!token) return null;
-
     isLoading.value = true;
     error.value = null;
     try {
-      const account = await fetchAccountMe(token);
+      const account = await fetchAccountMe();
       applyAccount(account);
       return account;
     } catch (caught) {
@@ -37,13 +32,10 @@ export const useAccountStore = defineStore('account', () => {
   };
 
   const updateProfile = async (input: UpdateProfileRequest) => {
-    const token = getToken();
-    if (!token) throw new Error('Bạn cần đăng nhập để cập nhật hồ sơ');
-
     isSaving.value = true;
     error.value = null;
     try {
-      const account = await patchAccountProfile(token, input);
+      const account = await patchAccountProfile(input);
       applyAccount(account);
       return account;
     } catch (caught) {
@@ -55,13 +47,10 @@ export const useAccountStore = defineStore('account', () => {
   };
 
   const updateAvatar = async (file: File) => {
-    const token = getToken();
-    if (!token) throw new Error('Bạn cần đăng nhập để cập nhật ảnh đại diện');
-
     isSaving.value = true;
     error.value = null;
     try {
-      const account = await uploadAccountAvatar(token, file);
+      const account = await uploadAccountAvatar(file);
       applyAccount(account);
       return account;
     } catch (caught) {
@@ -70,6 +59,11 @@ export const useAccountStore = defineStore('account', () => {
     } finally {
       isSaving.value = false;
     }
+  };
+
+  const clear = () => {
+    me.value = null;
+    error.value = null;
   };
 
   return {
@@ -81,5 +75,6 @@ export const useAccountStore = defineStore('account', () => {
     fetchAccount,
     updateProfile,
     updateAvatar,
+    clear,
   };
 });

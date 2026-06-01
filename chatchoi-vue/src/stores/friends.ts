@@ -13,8 +13,6 @@ import {
 import type { FriendRequest, FriendUser } from '../types/friends';
 import type { PublicUserProfile } from '../types/account';
 
-const getToken = () => localStorage.getItem('accessToken');
-
 export const useFriendsStore = defineStore('friends', {
   state: () => ({
     friends: [] as FriendUser[],
@@ -48,8 +46,6 @@ export const useFriendsStore = defineStore('friends', {
     },
 
     async refreshAll() {
-      const token = getToken();
-      if (!token) return;
       if (this.refreshPromise) return this.refreshPromise;
 
       this.isLoading = true;
@@ -58,10 +54,10 @@ export const useFriendsStore = defineStore('friends', {
       this.refreshPromise = (async () => {
         try {
           const [friends, incomingRequests, outgoingRequests, suggestions] = await Promise.all([
-            fetchFriends(token),
-            fetchFriendRequests(token, 'incoming'),
-            fetchFriendRequests(token, 'outgoing'),
-            fetchFriendSuggestions(token),
+            fetchFriends(),
+            fetchFriendRequests('incoming'),
+            fetchFriendRequests('outgoing'),
+            fetchFriendSuggestions(),
           ]);
 
           this.friends = friends;
@@ -81,9 +77,6 @@ export const useFriendsStore = defineStore('friends', {
     },
 
     async search(query: string) {
-      const token = getToken();
-      if (!token) return;
-
       const normalizedQuery = query.trim();
       if (!normalizedQuery) {
         this.searchResults = [];
@@ -91,39 +84,36 @@ export const useFriendsStore = defineStore('friends', {
       }
 
       try {
-        this.searchResults = await searchFriends(token, normalizedQuery);
+        this.searchResults = await searchFriends(normalizedQuery);
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Không thể tìm kiếm người dùng';
       }
     },
 
     async sendRequest(userId: number) {
-      await this.runMutation((token) => sendFriendRequest(token, userId));
+      await this.runMutation(() => sendFriendRequest(userId));
     },
 
     async cancelRequest(userId: number) {
-      await this.runMutation((token) => cancelFriendRequest(token, userId));
+      await this.runMutation(() => cancelFriendRequest(userId));
     },
 
     async acceptRequest(userId: number) {
-      await this.runMutation((token) => acceptFriendRequest(token, userId));
+      await this.runMutation(() => acceptFriendRequest(userId));
     },
 
     async rejectRequest(userId: number) {
-      await this.runMutation((token) => rejectFriendRequest(token, userId));
+      await this.runMutation(() => rejectFriendRequest(userId));
     },
 
     async removeFriend(userId: number) {
-      await this.runMutation((token) => removeFriendRequest(token, userId));
+      await this.runMutation(() => removeFriendRequest(userId));
     },
 
-    async runMutation(action: (token: string) => Promise<void>) {
-      const token = getToken();
-      if (!token) return;
-
+    async runMutation(action: () => Promise<void>) {
       this.error = null;
       try {
-        await action(token);
+        await action();
         await this.refreshAll();
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Không thể cập nhật bạn bè';

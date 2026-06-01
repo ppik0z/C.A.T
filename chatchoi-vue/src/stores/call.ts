@@ -54,9 +54,16 @@ export const useCallStore = defineStore('call', {
   },
 
   actions: {
-    async loadActiveCalls(token: string) {
+    resetSession() {
+      this.stopHeartbeat();
+      incomingTimers.forEach((timer) => clearTimeout(timer));
+      incomingTimers.clear();
+      this.$reset();
+    },
+
+    async loadActiveCalls() {
       try {
-        const calls = await fetchActiveCallsRequest(token);
+        const calls = await fetchActiveCallsRequest();
         this.applyActiveSync(calls);
       } catch (error) {
         this.setCallError(error instanceof Error ? error.message : 'Không thể đồng bộ cuộc gọi.');

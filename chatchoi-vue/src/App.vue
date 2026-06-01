@@ -1,37 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import LoginView from './views/LoginView.vue';
 import MessageDashboard from './pages/MessageDashboard.vue';
-import { useCallStore } from './stores/call';
-import { useChatStore } from './stores/chat';
-import { useFriendsStore } from './stores/friends';
-import { initSocketService } from './services/socket.service';
-import { useAccountStore } from './stores/account';
+import { useAuthStore } from './stores/auth';
 
-const chatStore = useChatStore();
-const callStore = useCallStore();
-const friendsStore = useFriendsStore();
-const accountStore = useAccountStore();
-const isLoggedIn = ref(false);
+const authStore = useAuthStore();
+const isLoggedIn = computed(() => authStore.status === 'authenticated');
 
 onMounted(() => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    chatStore.setIdentity(token);
-    initSocketService(token);
-    void callStore.loadActiveCalls(token);
-    void friendsStore.refreshAll();
-    void accountStore.fetchAccount();
-    isLoggedIn.value = true;
-  }
-});
-
-chatStore.$subscribe((_, state) => {
-  if (state.myId) isLoggedIn.value = true;
+  void authStore.bootstrap();
 });
 </script>
 
 <template>
-  <LoginView v-if="!isLoggedIn" />
+  <div v-if="authStore.status === 'unknown' || authStore.status === 'refreshing'" class="flex min-h-screen items-center justify-center bg-background text-on-background">
+    <p class="text-sm font-semibold text-on-surface-variant">Đang khôi phục phiên đăng nhập...</p>
+  </div>
+  <LoginView v-else-if="!isLoggedIn" />
   <MessageDashboard v-else />
 </template>

@@ -76,14 +76,13 @@ const toggleUser = (user: FriendUser) => {
 };
 
 const submit = async () => {
-  const token = localStorage.getItem('accessToken');
-  if (!token || selectedIds.value.length === 0 || isSubmitting.value) return;
+  if (selectedIds.value.length === 0 || isSubmitting.value) return;
 
   isSubmitting.value = true;
   error.value = null;
 
   try {
-    const updated = await addConversationMembers(token, props.conversationId, selectedIds.value);
+    const updated = await addConversationMembers(props.conversationId, selectedIds.value);
     chatStore.upsertConversationDetail(updated);
     emit('added');
     emit('close');

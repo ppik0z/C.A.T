@@ -17,22 +17,42 @@ import type {
     TypingStateUpdate,
 } from "../types/chat";
 
-export const initSocketService = (token: string) => {
+let listenersRegistered = false;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+export const connectSocket = (token: string) => {
+    registerSocketListeners();
+    socket.auth = { token };
+    if (socket.connected) {
+        socket.disconnect();
+    }
+    socket.connect();
+};
+
+export const disconnectSocket = () => {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+    socket.disconnect();
+};
+
+export const initSocketService = connectSocket;
+
+const registerSocketListeners = () => {
+    if (listenersRegistered) return;
+    listenersRegistered = true;
     const chatStore = useChatStore();
     const callStore = useCallStore();
     const friendsStore = useFriendsStore();
     const profilesStore = useProfilesStore();
     const accountStore = useAccountStore();
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-
-    socket.auth = { token };
-    socket.connect();
-
     socket.on("connect", () => {
         chatStore.isConnected = true;
         console.log("Đã kết nối!");
 
         // Heartbeat, interval 15s
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
             if (socket.connected) {
                 socket.emit("heartbeat");

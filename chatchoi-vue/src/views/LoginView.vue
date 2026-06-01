@@ -1,50 +1,48 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useChatStore } from '../stores/chat';
-import { useFriendsStore } from '../stores/friends';
-import { initSocketService } from '../services/socket.service';
-import { apiBaseUrl } from '../config/api';
-import { useAccountStore } from '../stores/account';
+import { useAuthStore } from '../stores/auth';
 
-const chatStore = useChatStore();
-const friendsStore = useFriendsStore();
-const accountStore = useAccountStore();
+type AuthMode = 'login' | 'register';
+
+const authStore = useAuthStore();
+const mode = ref<AuthMode>('login');
 const username = ref('');
+const displayName = ref('');
 const password = ref('');
+const confirmPassword = ref('');
 const isLoading = ref(false);
+const localError = ref<string | null>(null);
+const error = computed(() => localError.value ?? authStore.error);
 
-const handleLogin = async () => {
+const switchMode = (nextMode: AuthMode) => {
+  mode.value = nextMode;
+  localError.value = null;
+  password.value = '';
+  confirmPassword.value = '';
+};
+
+const submit = async () => {
+  localError.value = null;
+  if (mode.value === 'register' && password.value !== confirmPassword.value) {
+    localError.value = 'Mật khẩu xác nhận không khớp.';
+    return;
+  }
+
   isLoading.value = true;
   try {
-    const response = await fetch(`${apiBaseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.value, password: password.value })
-    });
-
-    const data = await response.json();
-
-    if (data.accessToken) {
-      // 1. Lưu cả hai token vào máy
-      localStorage.setItem('accessToken', data.accessToken);
-      if (data.refreshToken) {
-        localStorage.setItem('refreshToken', data.refreshToken);
-      }
-      
-      // 2. Định danh và kết nối Socket
-      chatStore.setIdentity(data.accessToken);
-      initSocketService(data.accessToken);
-      void friendsStore.refreshAll();
-      void accountStore.fetchAccount();
-      
-      alert("Đăng nhập thành công!");
-    } else {
-      alert("Sai tài khoản hoặc mật khẩu!");
+    if (mode.value === 'login') {
+      await authStore.login({ username: username.value, password: password.value });
+      return;
     }
-  } catch (error) {
-    console.error("Lỗi kết nối:", error);
+    await authStore.register({
+      username: username.value,
+      displayName: displayName.value.trim() || undefined,
+      password: password.value,
+    });
+  } catch {
+    // Store exposes the server-safe error message.
   } finally {
     isLoading.value = false;
   }
@@ -52,32 +50,49 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-background p-6 text-on-background transition-colors duration-300">
-    <div class="w-full max-w-md rounded-lg border border-outline-variant bg-surface-container-lowest p-8 shadow-lg">
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-primary mb-2">CHATCHOI</h1>
-        <p class="text-on-surface-variant text-sm">Đăng nhập để bắt đầu kết nối</p>
+  <main class="min-h-screen flex items-center justify-center bg-background p-6 text-on-background transition-colors duration-300">
+    <section class="w-full max-w-md rounded-xl border border-outline-variant bg-surface-container-lowest p-6 shadow-lg sm:p-8" aria-labelledby="auth-title">
+      <div class="text-center mb-6">
+        <h1 id="auth-title" class="text-3xl font-bold text-primary mb-2">CHATCHOI</h1>
+        <p class="text-on-surface-variant text-sm">Kết nối và trò chuyện theo cách của bạn</p>
       </div>
 
-      <div class="space-y-4">
+      <div class="mb-6 grid grid-cols-2 rounded-lg bg-surface-container-low p-1" role="tablist" aria-label="Tài khoản">
+        <button :aria-selected="mode === 'login'" :class="['rounded-md px-3 py-2 text-sm font-bold transition-colors', mode === 'login' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant']" role="tab" type="button" @click="switchMode('login')">
+          Đăng nhập
+        </button>
+        <button :aria-selected="mode === 'register'" :class="['rounded-md px-3 py-2 text-sm font-bold transition-colors', mode === 'register' ? 'bg-surface-container-lowest text-primary shadow-sm' : 'text-on-surface-variant']" role="tab" type="button" @click="switchMode('register')">
+          Đăng ký
+        </button>
+      </div>
+
+      <form class="space-y-4" @submit.prevent="submit">
         <div>
-          <label class="block text-xs font-bold text-on-surface-variant uppercase mb-1 ml-1">Username</label>
-          <Input v-model="username" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" placeholder="Tên đăng nhập của bồ..." />
+          <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="username">Username</label>
+          <Input id="username" v-model="username" autocomplete="username" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" required />
+        </div>
+
+        <div v-if="mode === 'register'">
+          <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="display-name">Tên hiển thị</label>
+          <Input id="display-name" v-model="displayName" autocomplete="name" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" maxlength="64" placeholder="Không bắt buộc" />
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-on-surface-variant uppercase mb-1 ml-1">Password</label>
-          <Input v-model="password" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" placeholder="••••••••" type="password" />
+          <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="password">Mật khẩu</label>
+          <Input id="password" v-model="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="8" required type="password" />
         </div>
 
-        <Button class="h-12 w-full rounded-xl text-base" :disabled="isLoading" type="button" @click="handleLogin">
-          {{ isLoading ? 'ĐANG XỬ LÝ...' : 'ĐĂNG NHẬP' }}
+        <div v-if="mode === 'register'">
+          <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="confirm-password">Xác nhận mật khẩu</label>
+          <Input id="confirm-password" v-model="confirmPassword" autocomplete="new-password" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="8" required type="password" />
+        </div>
+
+        <p v-if="error" class="rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error" role="alert">{{ error }}</p>
+
+        <Button class="h-12 w-full rounded-xl text-base" :disabled="isLoading" type="submit">
+          {{ isLoading ? 'ĐANG XỬ LÝ...' : mode === 'login' ? 'ĐĂNG NHẬP' : 'TẠO TÀI KHOẢN' }}
         </Button>
-      </div>
-
-      <p class="mt-6 text-center text-xs text-on-surface-variant">
-        Chưa có tài khoản? <span class="text-primary cursor-pointer hover:underline">Đăng ký ngay</span>
-      </p>
-    </div>
-  </div>
+      </form>
+    </section>
+  </main>
 </template>

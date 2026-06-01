@@ -75,14 +75,13 @@ const toggleUser = (user: FriendUser) => {
 };
 
 const createGroup = async () => {
-  const token = localStorage.getItem('accessToken');
-  if (!token || !canSubmit.value) return;
+  if (!canSubmit.value) return;
 
   isSubmitting.value = true;
   error.value = null;
 
   try {
-    const conversation = await createGroupConversation(token, {
+    const conversation = await createGroupConversation({
       name: groupName.value.trim(),
       avatarGroup: avatarGroup.value.trim() || null,
       memberIds: selectedIds.value,
