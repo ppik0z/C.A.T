@@ -29,7 +29,7 @@ const statusSize = computed(() => (props.size === 'xl' ? 'lg' : props.size === '
 </script>
 
 <template>
-  <div class="relative inline-flex shrink-0">
+  <div class="relative inline-flex shrink-0 rounded-full">
     <UiAvatar :alt="props.name" :class="sizeClass" :src="props.avatarUrl" />
 
     <OnlineStatusDot

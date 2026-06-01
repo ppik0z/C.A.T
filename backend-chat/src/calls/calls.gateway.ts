@@ -80,7 +80,7 @@ export class CallsGateway implements OnGatewayDisconnect {
     @SubscribeMessage('call:start')
     async startCall(@MessageBody() data: StartCallPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            await this.callsService.startCall(client.user.userId, client.user.username, data);
+            await this.callsService.startCall(client.user.userId, client.user.username, data, client.user.displayName);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);

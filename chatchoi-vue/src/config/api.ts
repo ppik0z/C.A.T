@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = 'http://localhost:3000';
+const DEVELOPMENT_API_PROXY_PATH = '/api';
 
 const normalizeBaseUrl = (value: unknown): string => {
   if (typeof value !== 'string') return DEFAULT_API_BASE_URL;
@@ -9,4 +10,6 @@ const normalizeBaseUrl = (value: unknown): string => {
   return trimmedValue.replace(/\/+$/, '');
 };
 
-export const apiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
+export const upstreamApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL);
+export const apiBaseUrl = import.meta.env.DEV ? DEVELOPMENT_API_PROXY_PATH : upstreamApiBaseUrl;
+export const socketBaseUrl = upstreamApiBaseUrl;

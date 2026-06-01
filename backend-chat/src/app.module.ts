@@ -21,6 +21,8 @@ import { ReadStateModule } from './read-state/read-state.module';
 import { CallsModule } from './calls/calls.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { AccountModule } from './account/account.module';
+import { ProfilesModule } from './profiles/profiles.module';
 
 @Module({
   imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule, ScheduleModule.forRoot(),
@@ -43,6 +45,8 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
       },
     }),
     PresenceModule,
+    ProfilesModule,
+    AccountModule,
   ],
   controllers: [AppController],
   providers: [

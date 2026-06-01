@@ -11,8 +11,7 @@ import {
   sendFriendRequest,
 } from '../services/friends.service';
 import type { FriendRequest, FriendUser } from '../types/friends';
-
-const getToken = () => localStorage.getItem('accessToken');
+import type { PublicUserProfile } from '../types/account';
 
 export const useFriendsStore = defineStore('friends', {
   state: () => ({
@@ -34,9 +33,19 @@ export const useFriendsStore = defineStore('friends', {
   },
 
   actions: {
+    applyUserProfileUpdate(profile: PublicUserProfile) {
+      const patchUser = (user: FriendUser) => user.id === profile.id
+        ? { ...user, username: profile.username, displayName: profile.displayName, avatar: profile.avatar }
+        : user;
+
+      this.friends = this.friends.map(patchUser);
+      this.incomingRequests = this.incomingRequests.map(patchUser);
+      this.outgoingRequests = this.outgoingRequests.map(patchUser);
+      this.suggestions = this.suggestions.map(patchUser);
+      this.searchResults = this.searchResults.map(patchUser);
+    },
+
     async refreshAll() {
-      const token = getToken();
-      if (!token) return;
       if (this.refreshPromise) return this.refreshPromise;
 
       this.isLoading = true;
@@ -45,10 +54,10 @@ export const useFriendsStore = defineStore('friends', {
       this.refreshPromise = (async () => {
         try {
           const [friends, incomingRequests, outgoingRequests, suggestions] = await Promise.all([
-            fetchFriends(token),
-            fetchFriendRequests(token, 'incoming'),
-            fetchFriendRequests(token, 'outgoing'),
-            fetchFriendSuggestions(token),
+            fetchFriends(),
+            fetchFriendRequests('incoming'),
+            fetchFriendRequests('outgoing'),
+            fetchFriendSuggestions(),
           ]);
 
           this.friends = friends;
@@ -68,9 +77,6 @@ export const useFriendsStore = defineStore('friends', {
     },
 
     async search(query: string) {
-      const token = getToken();
-      if (!token) return;
-
       const normalizedQuery = query.trim();
       if (!normalizedQuery) {
         this.searchResults = [];
@@ -78,39 +84,36 @@ export const useFriendsStore = defineStore('friends', {
       }
 
       try {
-        this.searchResults = await searchFriends(token, normalizedQuery);
+        this.searchResults = await searchFriends(normalizedQuery);
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Không thể tìm kiếm người dùng';
       }
     },
 
     async sendRequest(userId: number) {
-      await this.runMutation((token) => sendFriendRequest(token, userId));
+      await this.runMutation(() => sendFriendRequest(userId));
     },
 
     async cancelRequest(userId: number) {
-      await this.runMutation((token) => cancelFriendRequest(token, userId));
+      await this.runMutation(() => cancelFriendRequest(userId));
     },
 
     async acceptRequest(userId: number) {
-      await this.runMutation((token) => acceptFriendRequest(token, userId));
+      await this.runMutation(() => acceptFriendRequest(userId));
     },
 
     async rejectRequest(userId: number) {
-      await this.runMutation((token) => rejectFriendRequest(token, userId));
+      await this.runMutation(() => rejectFriendRequest(userId));
     },
 
     async removeFriend(userId: number) {
-      await this.runMutation((token) => removeFriendRequest(token, userId));
+      await this.runMutation(() => removeFriendRequest(userId));
     },
 
-    async runMutation(action: (token: string) => Promise<void>) {
-      const token = getToken();
-      if (!token) return;
-
+    async runMutation(action: () => Promise<void>) {
       this.error = null;
       try {
-        await action(token);
+        await action();
         await this.refreshAll();
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Không thể cập nhật bạn bè';

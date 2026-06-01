@@ -24,6 +24,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { ConversationsService } from '../conversations/conversations.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
+import type { PublicUserProfileDto, PublicUserSummaryDto } from '../profiles/profiles.service';
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
@@ -127,10 +128,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         conversationIndex: number;
         createdAt: Date;
         clientTempId?: string;
+        sender: PublicUserSummaryDto;
     }) {
         this.server.to(`conv_${payload.conversationId}`).emit('new_message', {
             ...payload,
-            sender: { id: payload.senderId, username: payload.senderName },
+            sender: payload.sender,
         });
 
         const members = await this.drizzle.db
@@ -160,7 +162,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content?: string, senderName: string, clientTempId?: string, type?: 'text' | 'gif', fileUrl?: string },
+        @MessageBody() data: { conversationId: number; content?: string, clientTempId?: string, type?: 'text' | 'gif', fileUrl?: string },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const senderId = client.user.userId;
@@ -169,7 +171,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             senderId,
             data.conversationId,
             data.content ?? '',
-            client.user.username,
             data.clientTempId,
             {
                 type: data.type,
@@ -178,6 +179,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 clientTempId: data.clientTempId,
             },
         );
+    }
+
+    @OnEvent('user.profile.updated')
+    handleUserProfileUpdated(profile: PublicUserProfileDto) {
+        this.server.emit('user_profile_updated', profile);
     }
 
     @SubscribeMessage('load_messages')
@@ -291,6 +297,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId: data.conversationId,
             userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             lastSeenMessageIndex: data.lastMessageIndex,
         });
 
@@ -315,6 +322,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId: data.conversationId,
             userId: client.user.userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             isTyping: true,
         });
 
@@ -339,6 +347,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
             conversationId,
             userId: client.user.userId,
             username: client.user.username,
+            displayName: client.user.displayName,
             isTyping: false,
         });
     }

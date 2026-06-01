@@ -7,12 +7,14 @@ export type CallParticipantMediaStatus = 'idle' | 'connecting' | 'connected' | '
 export interface CallUserSummary {
   id: number;
   username: string;
+  displayName?: string | null;
   avatar: string | null;
 }
 
 export interface CallParticipant {
   userId: number;
   username: string;
+  displayName?: string | null;
   avatar: string | null;
   status: CallParticipantStatus;
   micEnabled: boolean;

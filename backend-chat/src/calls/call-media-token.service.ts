@@ -32,7 +32,7 @@ export class CallMediaTokenService {
         const token = await this.mediaProvider.createParticipantToken({
             roomName: context.roomName,
             identity: participantIdentity,
-            name: context.user.username,
+            name: context.user.displayName || context.user.username,
             ttlSeconds: this.ttlSeconds,
         });
         const clientConfig = this.mediaProvider.getClientConfig();

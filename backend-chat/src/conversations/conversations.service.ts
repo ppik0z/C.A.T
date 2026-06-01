@@ -33,6 +33,7 @@ interface ConversationRow {
     memberCount: number;
     friendId: number | null;
     friendUsername: string | null;
+    friendDisplayName: string | null;
     friendAvatar: string | null;
 }
 
@@ -40,6 +41,7 @@ interface GroupMemberRow {
     id: number;
     userId: number;
     username: string | null;
+    displayName: string | null;
     nickname: string | null;
     isAdmin: boolean;
     joinedAt: Date;
@@ -127,6 +129,7 @@ export class ConversationsService {
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
                 friendUsername: users.username,
+                friendDisplayName: users.displayName,
                 friendAvatar: users.avatar,
             })
             .from(conversations)
@@ -168,6 +171,7 @@ export class ConversationsService {
                 friend: conv.friendId ? {
                     id: conv.friendId,
                     username: conv.friendUsername,
+                    displayName: conv.friendDisplayName,
                     avatar: conv.friendAvatar,
                 } : null,
                 lastMessage: {
@@ -371,6 +375,7 @@ export class ConversationsService {
             friend: summary.friendId ? {
                 id: summary.friendId,
                 username: summary.friendUsername,
+                displayName: summary.friendDisplayName,
                 avatar: summary.friendAvatar,
             } : null,
             lastMessage: {
@@ -405,6 +410,7 @@ export class ConversationsService {
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
                 friendUsername: users.username,
+                friendDisplayName: users.displayName,
                 friendAvatar: users.avatar,
             })
             .from(conversations)
@@ -426,7 +432,8 @@ export class ConversationsService {
             .select({
                 id: conversationMembers.id,
                 userId: conversationMembers.userId,
-                username: conversationMembers.username,
+                username: users.username,
+                displayName: users.displayName,
                 nickname: conversationMembers.nickname,
                 isAdmin: conversationMembers.isAdmin,
                 joinedAt: conversationMembers.joinedAt,
@@ -441,6 +448,7 @@ export class ConversationsService {
             id: member.id,
             userId: member.userId,
             username: member.username ?? `User #${member.userId}`,
+            displayName: member.displayName,
             nickname: member.nickname,
             isAdmin: member.isAdmin,
             joinedAt: member.joinedAt,

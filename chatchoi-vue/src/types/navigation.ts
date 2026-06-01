@@ -1,1 +1,1 @@
-export type AppSection = 'messages' | 'friends' | 'settings';
+export type AppSection = 'messages' | 'friends' | 'settings' | 'account';

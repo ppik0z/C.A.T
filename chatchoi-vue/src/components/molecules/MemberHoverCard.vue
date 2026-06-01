@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ProfileHoverCard from './ProfileHoverCard.vue';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 import type { ConversationMember } from '../../types/chat';
 
 interface Props {
@@ -18,13 +19,15 @@ const description = computed(() => props.member.nickname || 'Member profile');
 
 <template>
   <ProfileHoverCard
+    :user-id="props.member.userId"
     :avatar-url="props.member.avatar"
     :description="description"
     :eyebrow="roleLabel"
     :is-online="props.member.isOnline"
-    :name="props.member.username"
+    :name="resolveDisplayName(props.member)"
     :placement="props.placement"
     :status-label="props.member.isOnline ? 'Online' : 'Offline'"
+    :username="formatUsername(props.member.username)"
     z-index-class="z-[130]"
   >
     <slot />

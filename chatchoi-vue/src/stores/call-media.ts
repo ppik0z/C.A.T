@@ -11,8 +11,8 @@ import {
 } from '../services/call-media.service';
 import type { CallState } from '../types/call';
 import { useCallStore } from './call';
+import { getAccessToken } from '../services/session.runtime';
 
-const getToken = () => localStorage.getItem('accessToken');
 const toParticipantIdentity = (userId: number): `user:${number}` => `user:${userId}`;
 
 const mediaStatusEventByStatus: Record<Exclude<CallMediaConnectionStatus, 'idle' | 'taken_over'>, string> = {
@@ -64,7 +64,7 @@ export const useCallMediaStore = defineStore('call-media', {
         }
       }
 
-      const token = getToken();
+      const token = getAccessToken();
       if (!token) {
         this.setError('Bạn cần đăng nhập để kết nối media.');
         return;
@@ -75,7 +75,7 @@ export const useCallMediaStore = defineStore('call-media', {
       this.error = null;
 
       try {
-        const mediaToken = await createCallMediaToken(token, callId);
+        const mediaToken = await createCallMediaToken(callId);
         this.videoPageSize = mediaToken.videoPageSize;
         const store = this;
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
+import { resolveDisplayName } from '../../utils/userPresentation';
 import type { CallParticipant } from '../../types/call';
 import type { CallVideoTrack } from '../../services/call-media.service';
 
@@ -58,7 +59,7 @@ onBeforeUnmount(detachCurrentTrack);
 
     <div class="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-black/50 px-3 py-2 text-white backdrop-blur-sm">
       <div class="min-w-0">
-        <p class="font-semibold truncate max-w-44">{{ props.participant.username }}</p>
+        <p class="font-semibold truncate max-w-44">{{ resolveDisplayName(props.participant) }}</p>
         <p class="text-xs text-white/75">
           <template v-if="props.participant.mediaStatus === 'connecting'">Đang kết nối media</template>
           <template v-else-if="props.participant.mediaStatus === 'reconnecting'">Đang kết nối lại</template>

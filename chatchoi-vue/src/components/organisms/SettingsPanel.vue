@@ -8,7 +8,9 @@ import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import SettingOptionButton from '@/components/molecules/SettingOptionButton.vue';
 import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
+import AccountTab from '@/components/organisms/AccountTab.vue';
 import { useChatStore } from '@/stores/chat';
+import { resolveDisplayName } from '@/utils/userPresentation';
 import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
 import { useAppearance } from '@/theme/useAppearance';
 import { useLocalization } from '@/i18n/useLocalization';
@@ -24,6 +26,8 @@ import type {
   SettingsTabId,
   TimeFormat,
 } from '@/types/settings';
+import { useAccountStore } from '@/stores/account';
+import Avatar from '@/components/atoms/Avatar.vue';
 
 type StartupView = 'messages' | 'friends';
 type SidebarMode = 'hover' | 'icons';
@@ -31,6 +35,7 @@ type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
 const chatStore = useChatStore();
+const accountStore = useAccountStore();
 const { activePresetId, activeFont, activeFontSize, activeDensity, commitAppearance } = useAppearance();
 const { activeLanguage, activeTimeFormat, activeTimezone, commitLocalization } = useLocalization();
 
@@ -66,7 +71,17 @@ const fontSizeOptions = computed<Array<SettingOption<FontSize>>>(() => [
 
 // densityOptions temporarily removed as it's not used
 
-const activeTab = ref<SettingsTabId>('appearance');
+const props = defineProps<{
+  initialTab?: SettingsTabId;
+}>();
+
+const activeTab = ref<SettingsTabId>(props.initialTab ?? 'appearance');
+
+watch(() => props.initialTab, (newVal) => {
+  if (newVal) {
+    activeTab.value = newVal;
+  }
+});
 const isMobileDetailOpen = ref(false);
 
 // Draft states for Appearance
@@ -133,8 +148,7 @@ const quietHours = ref(false);
 const notificationLevel = ref<NotificationLevel>('mentions');
 
 const activeTabMeta = computed(() => settingsTabs.value.find((tab: SettingsTab) => tab.id === activeTab.value) ?? settingsTabs.value[0]);
-const userName = computed(() => chatStore.myUserName ?? 'User');
-const userInitial = computed(() => userName.value[0]?.toUpperCase() ?? 'U');
+const userName = computed(() => resolveDisplayName(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
 
 const selectTab = (tabId: SettingsTabId) => {
   activeTab.value = tabId;
@@ -159,9 +173,7 @@ const closeMobileDetail = () => {
           <p class="text-xs font-bold uppercase tracking-[0.14em] text-on-surface-variant">{{ $t('settings.header.appTitle') }}</p>
           <h2 class="mt-1 text-2xl font-extrabold leading-8 text-primary">{{ $t('settings.header.title') }}</h2>
           <div class="mt-4 flex items-center gap-3 rounded-lg bg-surface-container-lowest p-3">
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary-container text-sm font-extrabold text-on-secondary-container">
-              {{ userInitial }}
-            </div>
+            <Avatar :avatar-url="accountStore.me?.avatar" :name="userName" />
             <div class="min-w-0">
               <p class="truncate text-sm font-bold text-on-surface">{{ userName }}</p>
               <p class="truncate text-xs font-semibold text-success">{{ $t('settings.header.online') }}</p>
@@ -459,43 +471,7 @@ const closeMobileDetail = () => {
               </template>
 
               <template v-else-if="activeTab === 'account'">
-                <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                  <Card>
-                    <CardContent class="pt-5">
-                      <div class="flex flex-col items-center text-center">
-                        <div class="flex size-20 items-center justify-center rounded-lg bg-secondary-container text-2xl font-extrabold text-on-secondary-container">
-                          {{ userInitial }}
-                        </div>
-                        <h3 class="mt-4 max-w-full truncate text-lg font-extrabold text-on-surface">{{ userName }}</h3>
-                        <p class="text-sm font-semibold text-on-surface-variant">{{ $t('settings.account.badge') }}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{{ $t('settings.account.title') }}</CardTitle>
-                      <CardDescription>{{ $t('settings.account.description') }}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <PreferenceRow icon="person" :title="$t('settings.account.displayName.title')" :description="$t('settings.account.displayName.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.displayName.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="lock" :title="$t('settings.account.password.title')" :description="$t('settings.account.password.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.password.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="devices" :title="$t('settings.account.sessions.title')" :description="$t('settings.account.sessions.description')">
-                        <Button disabled type="button" variant="outline">{{ $t('settings.account.sessions.action') }}</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="logout" :title="$t('settings.account.logout.title')" :description="$t('settings.account.logout.description')">
-                        <Button disabled type="button" variant="destructive">{{ $t('settings.account.logout.action') }}</Button>
-                      </PreferenceRow>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AccountTab />
               </template>
 
               <template v-else>

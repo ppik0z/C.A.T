@@ -51,11 +51,8 @@ onMounted(() => {
 });
 
 const handleMessage = async (friendId: number) => {
-  const token = localStorage.getItem('accessToken');
-  if (!token) return;
-
-  const conversation = await accessDirectConversation(token, friendId);
-  const conversations = await fetchConversations(token);
+  const conversation = await accessDirectConversation(friendId);
+  const conversations = await fetchConversations();
   chatStore.setConversations(conversations);
   chatStore.selectConversation(conversation.id);
   emit('openMessages');

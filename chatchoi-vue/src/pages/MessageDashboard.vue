@@ -109,8 +109,8 @@ const handleOpenMessageSearch = () => {
       <FriendsPanel class="flex-1" @open-messages="handleOpenMessages" />
     </main>
 
-    <main v-else class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
-      <SettingsPanel class="flex-1" />
+    <main v-else-if="activeSection === 'settings' || activeSection === 'account'" class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
+      <SettingsPanel class="flex-1" :initial-tab="activeSection === 'account' ? 'account' : 'appearance'" />
     </main>
 
     <IncomingCallToastStack />
