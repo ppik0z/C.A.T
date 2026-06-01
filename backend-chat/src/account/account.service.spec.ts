@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { ProfilesService } from '../profiles/profiles.service';
+import { AuthSessionService } from '../auth/auth-session.service';
+import { PasswordHasherService } from '../auth/password-hasher.service';
 import { AccountService } from './account.service';
 
 describe('AccountService', () => {
@@ -46,6 +48,14 @@ describe('AccountService', () => {
               presence: 'online',
             }),
           },
+        },
+        {
+          provide: AuthSessionService,
+          useValue: { revokeAllForUser: jest.fn() },
+        },
+        {
+          provide: PasswordHasherService,
+          useValue: { hash: jest.fn(), verify: jest.fn() },
         },
         {
           provide: EventEmitter2,

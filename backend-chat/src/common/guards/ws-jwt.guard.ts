@@ -21,13 +21,10 @@ export class WsJwtGuard implements CanActivate {
         throw new WsException('Token không tồn tại!');
       }
 
-      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
-
-      (client as AuthenticatedSocket).user = {
-        userId: payload.userId,
-        username: payload.username,
-        displayName: payload.displayName ?? null,
-      };
+      await this.jwtService.verifyAsync<JwtPayload>(token);
+      if (!(client as AuthenticatedSocket).user) {
+        throw new WsException('Không tìm thấy định danh socket.');
+      }
 
       return true;
     } catch (err: unknown) {

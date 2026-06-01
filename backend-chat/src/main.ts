@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { AuthIoAdapter } from './chat/redis-io.adapter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { resolveCorsOrigin } from './auth/auth-origin.policy';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -19,7 +20,10 @@ async function bootstrap() {
     transform: true,
   }));
 
-  app.enableCors();
+  app.enableCors({
+    origin: resolveCorsOrigin,
+    credentials: true,
+  });
 
   const config = new DocumentBuilder()
     .setTitle('CHATCHOI API')

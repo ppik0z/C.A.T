@@ -49,6 +49,26 @@ export const userSettings = mysqlTable('user_settings', {
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
 
+// ─── AuthSessions ────────────────────────────────────────────────────────────
+export const authSessions = mysqlTable(
+  'auth_sessions',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    refreshTokenHash: varchar('refreshTokenHash', { length: 64 }).notNull(),
+    userAgent: varchar('userAgent', { length: 255 }),
+    expiresAt: datetime('expiresAt').notNull(),
+    lastUsedAt: datetime('lastUsedAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: datetime('revokedAt'),
+    createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    index('idx_auth_sessions_user').on(t.userId),
+    index('idx_auth_sessions_expiry').on(t.expiresAt),
+  ],
+);
+
 // ─── Friendships ──────────────────────────────────────────────────────────────
 export const friendships = mysqlTable(
   'friendships',
@@ -203,6 +223,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   callParticipations: many(callParticipants),
   profile: one(userProfiles, { fields: [users.id], references: [userProfiles.userId] }),
   settings: one(userSettings, { fields: [users.id], references: [userSettings.userId] }),
+  authSessions: many(authSessions),
 }));
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
@@ -216,6 +237,10 @@ export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
 
 export const userSettingsRelations = relations(userSettings, ({ one }) => ({
   user: one(users, { fields: [userSettings.userId], references: [users.id] }),
+}));
+
+export const authSessionsRelations = relations(authSessions, ({ one }) => ({
+  user: one(users, { fields: [authSessions.userId], references: [users.id] }),
 }));
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({

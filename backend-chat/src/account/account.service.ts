@@ -2,13 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { DrizzleService } from '../database/drizzle.service';
 import { users, userProfiles, userSettings } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import * as bcrypt from 'bcrypt';
 import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
 import { Readable } from 'stream';
 import 'multer';
 import { UpdateProfileDto, UpdateSettingsDto, UpdatePasswordDto } from './dto/account.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProfilesService } from '../profiles/profiles.service';
+import { AuthSessionService } from '../auth/auth-session.service';
+import { PasswordHasherService } from '../auth/password-hasher.service';
 
 @Injectable()
 export class AccountService {
@@ -16,6 +17,8 @@ export class AccountService {
     private readonly drizzle: DrizzleService,
     private readonly profilesService: ProfilesService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly sessions: AuthSessionService,
+    private readonly passwordHasher: PasswordHasherService,
   ) {
     cloudinary.config({ secure: true });
   }
@@ -151,11 +154,12 @@ export class AccountService {
     const user = await this.drizzle.db.query.users.findFirst({ where: eq(users.id, userId) });
     if (!user) throw new NotFoundException('User not found');
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    const isMatch = await this.passwordHasher.verify(currentPassword, user.password);
     if (!isMatch) throw new BadRequestException('Incorrect current password');
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await this.passwordHasher.hash(newPassword);
     await this.drizzle.db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
+    await this.sessions.revokeAllForUser(userId);
 
     return { message: 'Password updated successfully' };
   }

@@ -1,153 +1,112 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
-import { users } from '../database/schema';
+import { users, userProfiles, userSettings } from '../database/schema';
 import { eq } from 'drizzle-orm';
-import * as bcrypt from 'bcrypt';
-import { RegisterDto, LoginDto } from './dto/create-auth.dto';
+import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { JwtService } from '@nestjs/jwt';
-import { JwtPayload } from '../common/index';
+import { AuthSessionService } from './auth-session.service';
+import { PasswordHasherService } from './password-hasher.service';
+
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+
+export interface AuthResult {
+  accessToken: string;
+  expiresInSeconds: number;
+  refreshToken: string;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private drizzle: DrizzleService,
     private jwtService: JwtService,
+    private readonly sessions: AuthSessionService,
+    private readonly passwordHasher: PasswordHasherService,
   ) { }
 
-  // --- HÀM REGISTER ---
-  async register(data: RegisterDto) {
+  async register(data: RegisterDto, userAgent?: string): Promise<AuthResult> {
     const db = this.drizzle.db;
+    const username = this.normalizeUsername(data.username);
 
     const [existing] = await db
-      .select()
+      .select({ id: users.id })
       .from(users)
-      .where(eq(users.username, data.username))
+      .where(eq(users.username, username))
       .limit(1);
 
     if (existing) {
       throw new ConflictException('Tên đăng nhập đã tồn tại!');
     }
 
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-
-    await db.insert(users).values({
-      username: data.username,
-      password: hashedPassword,
-      avatar: data.avatar ?? null,
+    const hashedPassword = await this.passwordHasher.hash(data.password);
+    const userId = await db.transaction(async (tx) => {
+      const [newUser] = await tx.insert(users).values({
+        username,
+        displayName: data.displayName?.trim() || null,
+        password: hashedPassword,
+      });
+      await Promise.all([
+        tx.insert(userProfiles).values({ userId: newUser.insertId }),
+        tx.insert(userSettings).values({ userId: newUser.insertId }),
+      ]);
+      return newUser.insertId;
     });
 
-    const [newUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.username, data.username))
-      .limit(1);
-
-    const result = {
-      id: newUser.id,
-      username: newUser.username,
-      avatar: newUser.avatar,
-      refreshToken: newUser.refreshToken,
-      createdAt: newUser.createdAt,
-    };
-    return {
-      message: 'Đăng ký thành công!',
-      user: result,
-    };
+    return this.createAuthenticatedSession(userId, userAgent);
   }
 
-  // --- HÀM LOGIN ---
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, userAgent?: string): Promise<AuthResult> {
     const { username, password } = loginDto;
 
     const [user] = await this.drizzle.db
       .select()
       .from(users)
-      .where(eq(users.username, username))
+      .where(eq(users.username, this.normalizeUsername(username)))
       .limit(1);
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (!user || !(await this.passwordHasher.verify(password, user.password))) {
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác!');
     }
 
-    const tokens = await this.getTokens(user.id, user.username, user.displayName);
+    return this.createAuthenticatedSession(user.id, userAgent);
+  }
 
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
+  async logout(refreshToken: string | null) {
+    await this.sessions.revokeSerialized(refreshToken);
+  }
 
+  async logoutAll(userId: number) {
+    await this.sessions.revokeAllForUser(userId);
+  }
+
+  async refreshTokens(refreshToken: string | null): Promise<AuthResult> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Phiên đăng nhập không tồn tại.');
+    }
+    const rotated = await this.sessions.rotate(refreshToken);
     return {
-      message: 'Đăng nhập thành công!',
-      ...tokens,
-      user: { id: user.id, username: user.username, displayName: user.displayName },
+      accessToken: await this.issueAccessToken(rotated.userId),
+      expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS,
+      refreshToken: rotated.refreshToken,
     };
   }
 
-  // --- HÀM LOGOUT ---
-  async logout(userId: number) {
-    await this.drizzle.db
-      .update(users)
-      .set({ refreshToken: null })
-      .where(eq(users.id, userId));
-    return { message: 'Đăng xuất thành công!' };
-  }
-
-  // --- HÀM GET TOKENS ---
-  async getTokens(userId: number, username: string, displayName: string | null) {
+  private async createAuthenticatedSession(userId: number, userAgent?: string): Promise<AuthResult> {
     const [accessToken, refreshToken] = await Promise.all([
-      // Access Token
-      this.jwtService.signAsync(
-        { userId, username, displayName },
-        { secret: process.env.JWT_SECRET, expiresIn: '7d' },
-      ),
-      // Refresh Token
-      this.jwtService.signAsync(
-        { userId, username, displayName },
-        { secret: process.env.JWT_REFRESH_SECRET, expiresIn: '30d' },
-      ),
+      this.issueAccessToken(userId),
+      this.sessions.create(userId, userAgent),
     ]);
-
-    return { accessToken, refreshToken };
+    return { accessToken, expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS, refreshToken };
   }
 
-  // --- HÀM UPDATE REFRESH TOKEN ---
-  async updateRefreshToken(userId: number, refreshToken: string) {
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    await this.drizzle.db
-      .update(users)
-      .set({ refreshToken: hashedToken })
-      .where(eq(users.id, userId));
+  private issueAccessToken(userId: number) {
+    return this.jwtService.signAsync(
+      { userId },
+      { secret: process.env.JWT_SECRET, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
+    );
   }
 
-  // --- HÀM REFRESH TOKEN ---
-  async refreshTokens(refreshToken: string) {
-    let payload: JwtPayload;
-
-    // xác thực TOKEN
-    try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
-      });
-    } catch {
-      throw new UnauthorizedException('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
-    }
-
-    // logic database
-    const [user] = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.id, payload.userId))
-      .limit(1);
-
-    if (!user || !user.refreshToken) {
-      throw new UnauthorizedException('Tài khoản không tồn tại hoặc đã đăng xuất.');
-    }
-
-    const isMatch = await bcrypt.compare(refreshToken, user.refreshToken);
-    if (!isMatch) {
-      throw new UnauthorizedException('Token không hợp lệ hoặc đã được sử dụng.');
-    }
-
-    const tokens = await this.getTokens(user.id, user.username, user.displayName);
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
-
-    return tokens;
+  private normalizeUsername(username: string) {
+    return username.trim().toLowerCase();
   }
 }
