@@ -37,7 +37,7 @@ export class ReadStateService {
         const members = await this.drizzle.db
             .select({
                 userId: conversationMembers.userId,
-                username: conversationMembers.username,
+                username: users.username,
                 displayName: users.displayName,
                 lastSeenMessageIndex: conversationMembers.lastSeenMessageIndex,
             })

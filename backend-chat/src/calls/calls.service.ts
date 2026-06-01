@@ -809,7 +809,6 @@ export class CallsService {
         await this.messagesService.createCallEventMessage({
             conversationId: state.conversationId,
             senderId: state.startedBy.id,
-            senderName: state.startedBy.username,
             content,
         });
     }
@@ -1037,7 +1036,6 @@ export class CallsService {
         const rows = await this.drizzle.db
             .select({
                 userId: conversationMembers.userId,
-                memberUsername: conversationMembers.username,
                 username: users.username,
                 displayName: users.displayName,
                 avatar: users.avatar,
@@ -1048,7 +1046,7 @@ export class CallsService {
 
         return rows.map((row) => ({
             userId: row.userId,
-            username: row.username ?? row.memberUsername ?? `User #${row.userId}`,
+            username: row.username,
             displayName: row.displayName,
             avatar: row.avatar,
         }));

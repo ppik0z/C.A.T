@@ -5,6 +5,9 @@ import { createClient } from 'redis';
 import { JwtService } from '@nestjs/jwt';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import type { JwtPayload, AuthenticatedSocket } from '../common';
+import { DrizzleService } from '../database/drizzle.service';
+import { users } from '../database/schema';
+import { eq } from 'drizzle-orm';
 
 export class AuthIoAdapter extends IoAdapter {
     private readonly logger = new Logger(AuthIoAdapter.name);
@@ -30,6 +33,7 @@ export class AuthIoAdapter extends IoAdapter {
     createIOServer(port: number, options?: Partial<ServerOptions>): Server {
         const server = super.createIOServer(port, options) as unknown as Server;
         const jwtService = this.app.get<JwtService>(JwtService);
+        const drizzle = this.app.get<DrizzleService>(DrizzleService);
 
         // Gắn Adapter để scale-out
         server.adapter(this.adapterConstructor);
@@ -44,11 +48,22 @@ export class AuthIoAdapter extends IoAdapter {
             }
 
             jwtService.verifyAsync<JwtPayload>(token)
-                .then((payload) => {
+                .then(async (payload) => {
+                    const [user] = await drizzle.db
+                        .select({
+                            userId: users.id,
+                            username: users.username,
+                            displayName: users.displayName,
+                        })
+                        .from(users)
+                        .where(eq(users.id, payload.userId))
+                        .limit(1);
+
+                    if (!user) throw new Error('User not found');
                     (socket as AuthenticatedSocket).user = {
-                        userId: payload.userId,
-                        username: payload.username,
-                        displayName: payload.displayName ?? null,
+                        userId: user.userId,
+                        username: user.username,
+                        displayName: user.displayName,
                     };
                     next();
                 })

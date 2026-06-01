@@ -4,6 +4,7 @@ import { messages, conversations, conversationMembers, messageStatuses } from '.
 import { asc, desc, eq, and, gt, gte, inArray, like, lt } from 'drizzle-orm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { ChatMessageType, UploadedMedia } from './media-upload.service';
+import { ProfilesService, type PublicUserSummaryDto } from '../profiles/profiles.service';
 
 export type MessageDeliveryStatus = 'sent' | 'delivered';
 export type MessageType = 'text' | 'gif' | 'call_event' | ChatMessageType;
@@ -17,7 +18,6 @@ export interface SendMessageInput {
 
 export interface CreateMediaMessageInput {
     conversationId: number;
-    senderName: string;
     caption?: string;
     clientTempId?: string;
     media: UploadedMedia;
@@ -26,7 +26,6 @@ export interface CreateMediaMessageInput {
 export interface CreateCallEventMessageInput {
     conversationId: number;
     senderId: number;
-    senderName: string;
     content: string;
 }
 
@@ -67,7 +66,8 @@ const AROUND_AFTER_LIMIT = 20;
 export class MessagesService {
     constructor(
         private drizzle: DrizzleService,
-        private eventEmitter: EventEmitter2
+        private eventEmitter: EventEmitter2,
+        private profilesService: ProfilesService,
     ) { }
 
     //check quyền
@@ -104,12 +104,14 @@ export class MessagesService {
         senderId: number,
         conversationId: number,
         content: string,
-        senderName: string,
         clientTempId?: string,
         input?: SendMessageInput,
     ) {
         await this.validateMember(senderId, conversationId);
-        const messageType = input?.type ?? 'text';
+        const [messageType, sender] = await Promise.all([
+            Promise.resolve(input?.type ?? 'text'),
+            this.profilesService.getPublicSummary(senderId),
+        ]);
 
         if (messageType === 'gif') {
             const gifUrl = input?.fileUrl?.trim();
@@ -120,7 +122,7 @@ export class MessagesService {
             return this.createMessage({
                 senderId,
                 conversationId,
-                senderName,
+                sender,
                 type: 'gif',
                 content: input?.content?.trim() || content?.trim() || '',
                 clientTempId: input?.clientTempId ?? clientTempId,
@@ -136,7 +138,7 @@ export class MessagesService {
         return this.createMessage({
             senderId,
             conversationId,
-            senderName,
+            sender,
             type: 'text',
             content: textContent,
             clientTempId: input?.clientTempId ?? clientTempId,
@@ -145,11 +147,12 @@ export class MessagesService {
 
     async createMediaMessage(senderId: number, input: CreateMediaMessageInput) {
         await this.validateMember(senderId, input.conversationId);
+        const sender = await this.profilesService.getPublicSummary(senderId);
 
         return this.createMessage({
             senderId,
             conversationId: input.conversationId,
-            senderName: input.senderName,
+            sender,
             type: input.media.type,
             content: input.caption?.trim() || '',
             clientTempId: input.clientTempId,
@@ -166,10 +169,11 @@ export class MessagesService {
     }
 
     async createCallEventMessage(input: CreateCallEventMessageInput) {
+        const sender = await this.profilesService.getPublicSummary(input.senderId);
         return this.createMessage({
             senderId: input.senderId,
             conversationId: input.conversationId,
-            senderName: input.senderName,
+            sender,
             type: 'call_event',
             content: input.content.trim(),
         });
@@ -178,7 +182,7 @@ export class MessagesService {
     private async createMessage(input: {
         senderId: number;
         conversationId: number;
-        senderName: string;
+        sender: PublicUserSummaryDto;
         type: MessageType;
         content: string;
         clientTempId?: string;
@@ -234,7 +238,8 @@ export class MessagesService {
                 fileHeight: input.fileHeight ?? null,
                 conversationId: input.conversationId,
                 senderId: input.senderId,
-                senderName: input.senderName,
+                senderName: input.sender.displayName || input.sender.username,
+                sender: input.sender,
                 conversationIndex: nextIndex,
                 createdAt: new Date(),
                 clientTempId: input.clientTempId,

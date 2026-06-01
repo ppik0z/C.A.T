@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { MessagesService } from './messages.service';
+import { ProfilesService } from '../profiles/profiles.service';
 
 describe('MessagesService', () => {
   let service: MessagesService;
@@ -17,6 +18,10 @@ describe('MessagesService', () => {
         {
           provide: EventEmitter2,
           useValue: { emit: jest.fn() },
+        },
+        {
+          provide: ProfilesService,
+          useValue: { getPublicSummary: jest.fn() },
         },
       ],
     }).compile();

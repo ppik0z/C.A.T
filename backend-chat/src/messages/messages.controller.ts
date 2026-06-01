@@ -14,7 +14,7 @@ export class MessagesController {
     ) { }
 
     @Post()
-    async send(@Body() body: { conversationId: number, content?: string, senderName: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string }, @Request() req: RequestWithUser) {
+    async send(@Body() body: { conversationId: number, content?: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string }, @Request() req: RequestWithUser) {
         const input: SendMessageInput = {
             type: body.type,
             content: body.content,
@@ -22,7 +22,7 @@ export class MessagesController {
             clientTempId: body.clientTempId,
         };
 
-        return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content ?? '', body.senderName, body.clientTempId, input);
+        return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content ?? '', body.clientTempId, input);
     }
 
     @Post('media')
@@ -46,7 +46,6 @@ export class MessagesController {
 
         return this.messagesService.createMediaMessage(req.user.userId, {
             conversationId,
-            senderName: req.user.username,
             caption: body.caption,
             clientTempId: body.clientTempId,
             media,

@@ -432,7 +432,7 @@ export class ConversationsService {
             .select({
                 id: conversationMembers.id,
                 userId: conversationMembers.userId,
-                username: conversationMembers.username,
+                username: users.username,
                 displayName: users.displayName,
                 nickname: conversationMembers.nickname,
                 isAdmin: conversationMembers.isAdmin,
