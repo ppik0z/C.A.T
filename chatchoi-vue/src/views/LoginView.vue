@@ -79,12 +79,12 @@ const submit = async () => {
 
         <div>
           <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="password">Mật khẩu</label>
-          <Input id="password" v-model="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="8" required type="password" />
+          <Input id="password" v-model="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="6" required type="password" />
         </div>
 
         <div v-if="mode === 'register'">
           <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="confirm-password">Xác nhận mật khẩu</label>
-          <Input id="confirm-password" v-model="confirmPassword" autocomplete="new-password" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="8" required type="password" />
+          <Input id="confirm-password" v-model="confirmPassword" autocomplete="new-password" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" minlength="6" required type="password" />
         </div>
 
         <p v-if="error" class="rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error" role="alert">{{ error }}</p>
