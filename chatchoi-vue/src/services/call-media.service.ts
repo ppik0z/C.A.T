@@ -5,6 +5,7 @@ import type {
   RemoteVideoTrack,
   Room,
   TrackPublication,
+  DisconnectReason,
 } from 'livekit-client';
 import type { CallKind, CallMediaToken } from '../types/call';
 
@@ -127,7 +128,7 @@ class CallMediaService {
       this.syncSubscriptions();
       this.emitSnapshot();
     });
-    room.on(liveKit.RoomEvent.Disconnected, (reason?: liveKit.DisconnectReason) => {
+    room.on(liveKit.RoomEvent.Disconnected, (reason?: DisconnectReason) => {
       this.detachAllAudio();
       if (reason === liveKit.DisconnectReason.DUPLICATE_IDENTITY) {
         this.setStatus('taken_over');
