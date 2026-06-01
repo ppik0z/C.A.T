@@ -10,7 +10,7 @@ import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
 import AccountTab from '@/components/organisms/AccountTab.vue';
 import { useChatStore } from '@/stores/chat';
-import { resolveDisplayName, getUserInitial } from '@/utils/userPresentation';
+import { resolveDisplayName } from '@/utils/userPresentation';
 import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
 import { useAppearance } from '@/theme/useAppearance';
 import { useLocalization } from '@/i18n/useLocalization';
@@ -26,6 +26,8 @@ import type {
   SettingsTabId,
   TimeFormat,
 } from '@/types/settings';
+import { useAccountStore } from '@/stores/account';
+import Avatar from '@/components/atoms/Avatar.vue';
 
 type StartupView = 'messages' | 'friends';
 type SidebarMode = 'hover' | 'icons';
@@ -33,6 +35,7 @@ type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
 const chatStore = useChatStore();
+const accountStore = useAccountStore();
 const { activePresetId, activeFont, activeFontSize, activeDensity, commitAppearance } = useAppearance();
 const { activeLanguage, activeTimeFormat, activeTimezone, commitLocalization } = useLocalization();
 
@@ -145,8 +148,7 @@ const quietHours = ref(false);
 const notificationLevel = ref<NotificationLevel>('mentions');
 
 const activeTabMeta = computed(() => settingsTabs.value.find((tab: SettingsTab) => tab.id === activeTab.value) ?? settingsTabs.value[0]);
-const userName = computed(() => resolveDisplayName({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
-const userInitial = computed(() => getUserInitial({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
+const userName = computed(() => resolveDisplayName(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
 
 const selectTab = (tabId: SettingsTabId) => {
   activeTab.value = tabId;
@@ -171,9 +173,7 @@ const closeMobileDetail = () => {
           <p class="text-xs font-bold uppercase tracking-[0.14em] text-on-surface-variant">{{ $t('settings.header.appTitle') }}</p>
           <h2 class="mt-1 text-2xl font-extrabold leading-8 text-primary">{{ $t('settings.header.title') }}</h2>
           <div class="mt-4 flex items-center gap-3 rounded-lg bg-surface-container-lowest p-3">
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary-container text-sm font-extrabold text-on-secondary-container">
-              {{ userInitial }}
-            </div>
+            <Avatar :avatar-url="accountStore.me?.avatar" :name="userName" />
             <div class="min-w-0">
               <p class="truncate text-sm font-bold text-on-surface">{{ userName }}</p>
               <p class="truncate text-xs font-semibold text-success">{{ $t('settings.header.online') }}</p>

@@ -19,6 +19,7 @@ const description = computed(() => props.member.nickname || 'Member profile');
 
 <template>
   <ProfileHoverCard
+    :user-id="props.member.userId"
     :avatar-url="props.member.avatar"
     :description="description"
     :eyebrow="roleLabel"

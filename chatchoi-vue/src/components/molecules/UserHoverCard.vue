@@ -39,6 +39,7 @@ const description = computed(() => (
 
 <template>
   <ProfileHoverCard
+    :user-id="!props.conversation?.isGroup ? getConversationUser(props.conversation)?.id : undefined"
     :avatar-url="avatarUrl"
     :description="description"
     :eyebrow="getConversationKindLabel(props.conversation)"

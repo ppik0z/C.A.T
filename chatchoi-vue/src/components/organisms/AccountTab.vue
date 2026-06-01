@@ -5,13 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import { useAccountStore } from '@/stores/account';
-import { useChatStore } from '@/stores/chat';
-import { resolveDisplayName, getUserInitial, formatUsername } from '@/utils/userPresentation';
-import { useI18n } from 'vue-i18n';
+import { resolveDisplayName, formatUsername } from '@/utils/userPresentation';
+import ProfileCardContent from '@/components/molecules/ProfileCardContent.vue';
 
 const accountStore = useAccountStore();
-const chatStore = useChatStore();
-const { t } = useI18n();
 
 const isEditing = ref(false);
 const draftProfile = ref({
@@ -22,10 +19,7 @@ const draftProfile = ref({
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 
-const userName = computed(() => chatStore.myUserName ?? 'User');
-const userInitial = computed(() => getUserInitial({ displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
-const userAvatar = computed(() => chatStore.myAvatar || null);
-const displayName = computed(() => resolveDisplayName({ displayName: accountStore.profile?.displayName || chatStore.myDisplayName, username: chatStore.myUserName }));
+const displayName = computed(() => resolveDisplayName(accountStore.me));
 
 onMounted(async () => {
   await accountStore.fetchAccount();
@@ -34,9 +28,9 @@ onMounted(async () => {
 
 const syncDrafts = () => {
   draftProfile.value = {
-    displayName: accountStore.profile?.displayName || '',
-    bio: accountStore.profile?.bio || '',
-    customStatus: accountStore.profile?.customStatus || '',
+    displayName: accountStore.me?.displayName || '',
+    bio: accountStore.me?.bio || '',
+    customStatus: accountStore.me?.customStatus || '',
   };
 };
 
@@ -74,33 +68,23 @@ const handleSave = async () => {
   <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
     <!-- Profile Preview Card -->
     <Card>
-      <CardContent class="pt-5">
-        <div class="flex flex-col items-center text-center">
-          <div class="relative group cursor-pointer" @click="triggerFileInput">
-            <img v-if="userAvatar" :src="userAvatar" class="size-24 rounded-lg object-cover" />
-            <div v-else class="flex size-24 items-center justify-center rounded-lg bg-secondary-container text-3xl font-extrabold text-on-secondary-container">
-              {{ userInitial }}
-            </div>
-            <!-- Overlay for hover -->
-            <div class="absolute inset-0 bg-black/50 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-              <span class="material-symbols-outlined text-white !text-2xl">edit</span>
-            </div>
-            <input type="file" ref="fileInput" class="hidden" accept="image/*" @change="handleFileChange" />
-          </div>
-          
-          <h3 class="mt-4 max-w-full truncate text-lg font-extrabold text-on-surface">
-            {{ isEditing ? draftProfile.displayName : displayName }}
-          </h3>
-          <p class="text-xs font-semibold text-on-surface-variant/70">
-            {{ formatUsername(userName) }}
-          </p>
-          <p class="text-sm font-semibold text-on-surface-variant">
-            {{ isEditing ? draftProfile.customStatus : (accountStore.profile?.customStatus || 'Online') }}
-          </p>
-          <p class="mt-4 text-sm text-on-surface text-left w-full border-t border-outline-variant pt-4" v-if="isEditing ? draftProfile.bio : accountStore.profile?.bio">
-            <span class="block font-bold text-xs uppercase mb-1 text-on-surface-variant">Giới thiệu</span>
-            {{ isEditing ? draftProfile.bio : accountStore.profile?.bio }}
-          </p>
+      <CardContent class="overflow-hidden p-0">
+        <ProfileCardContent
+          :avatar-url="accountStore.me?.avatar"
+          :banner="accountStore.me?.banner"
+          :bio="isEditing ? draftProfile.bio : accountStore.me?.bio"
+          :custom-status="isEditing ? draftProfile.customStatus : accountStore.me?.customStatus"
+          eyebrow="Giới thiệu"
+          :is-online="accountStore.me?.presence === 'online'"
+          :name="isEditing ? (draftProfile.displayName || accountStore.me?.username || 'User') : displayName"
+          :status-label="accountStore.me?.presence === 'online' ? 'Online' : 'Offline'"
+          :username="formatUsername(accountStore.me?.username)"
+        />
+        <div class="px-4 pb-4">
+          <button class="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-container/30" type="button" @click="triggerFileInput">
+            {{ isUploading ? 'Đang tải ảnh...' : 'Đổi ảnh đại diện' }}
+          </button>
+          <input ref="fileInput" class="hidden" type="file" accept="image/*" @change="handleFileChange" />
         </div>
       </CardContent>
     </Card>
@@ -121,7 +105,7 @@ const handleSave = async () => {
           </PreferenceRow>
           <Separator />
           <PreferenceRow icon="info" title="Giới thiệu bản thân" description="Một đoạn ngắn mô tả về bạn.">
-            <span class="font-semibold text-on-surface line-clamp-2 max-w-[200px] text-right">{{ accountStore.profile?.bio || 'Chưa cập nhật' }}</span>
+            <span class="font-semibold text-on-surface line-clamp-2 max-w-[200px] text-right">{{ accountStore.me?.bio || 'Chưa cập nhật' }}</span>
           </PreferenceRow>
           <Separator />
           <PreferenceRow icon="lock" :title="$t('settings.account.password.title')" :description="$t('settings.account.password.description')">
@@ -149,10 +133,13 @@ const handleSave = async () => {
             </div>
             <div class="flex justify-end gap-2 pt-4">
               <Button variant="ghost" @click="isEditing = false; syncDrafts()">Hủy</Button>
-              <Button @click="handleSave">Lưu thay đổi</Button>
+              <Button :disabled="accountStore.isSaving" @click="handleSave">{{ accountStore.isSaving ? 'Đang lưu...' : 'Lưu thay đổi' }}</Button>
             </div>
           </div>
         </template>
+        <p v-if="accountStore.error" class="mt-4 rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error">
+          {{ accountStore.error }}
+        </p>
       </CardContent>
     </Card>
   </div>
