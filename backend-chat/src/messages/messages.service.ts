@@ -198,7 +198,7 @@ export class MessagesService {
     }) {
         const previewContent = this.getMessagePreview(input.type, input.content, input.fileName);
 
-        return await this.drizzle.db.transaction(async (tx) => {
+        const savedMessage = await this.drizzle.db.transaction(async (tx) => {
             const [conv] = await tx.select({ currentIdx: conversations.lastMessageIndex })
                 .from(conversations)
                 .where(eq(conversations.id, input.conversationId))
@@ -257,10 +257,11 @@ export class MessagesService {
                 status: 'sent',
             })));
 
-            this.eventEmitter.emit('message.created', savedMsg);
-
             return savedMsg;
         });
+
+        this.eventEmitter.emit('message.created', savedMessage);
+        return savedMessage;
     }
 
     async markMessageDelivered(userId: number, conversationId: number, messageId: number) {

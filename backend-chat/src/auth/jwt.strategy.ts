@@ -30,6 +30,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             .where(eq(users.id, payload.userId))
             .limit(1);
 
-        return user ?? null;
+        return user ? { ...user, sessionId: payload.sid } : null;
     }
 }

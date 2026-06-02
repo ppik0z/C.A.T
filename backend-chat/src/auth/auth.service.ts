@@ -6,6 +6,7 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { JwtService } from '@nestjs/jwt';
 import { AuthSessionService } from './auth-session.service';
 import { PasswordHasherService } from './password-hasher.service';
+import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
@@ -22,6 +23,7 @@ export class AuthService {
     private jwtService: JwtService,
     private readonly sessions: AuthSessionService,
     private readonly passwordHasher: PasswordHasherService,
+    private readonly pushSubscriptions: PushSubscriptionsService,
   ) { }
 
   async register(data: RegisterDto, userAgent?: string): Promise<AuthResult> {
@@ -72,11 +74,17 @@ export class AuthService {
   }
 
   async logout(refreshToken: string | null) {
-    await this.sessions.revokeSerialized(refreshToken);
+    await Promise.all([
+      this.sessions.revokeSerialized(refreshToken),
+      this.pushSubscriptions.revokeForSerializedSession(refreshToken),
+    ]);
   }
 
   async logoutAll(userId: number) {
-    await this.sessions.revokeAllForUser(userId);
+    await Promise.all([
+      this.sessions.revokeAllForUser(userId),
+      this.pushSubscriptions.revokeAllForUser(userId),
+    ]);
   }
 
   async refreshTokens(refreshToken: string | null): Promise<AuthResult> {
@@ -85,23 +93,21 @@ export class AuthService {
     }
     const rotated = await this.sessions.rotate(refreshToken);
     return {
-      accessToken: await this.issueAccessToken(rotated.userId),
+      accessToken: await this.issueAccessToken(rotated.userId, rotated.sessionId),
       expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS,
       refreshToken: rotated.refreshToken,
     };
   }
 
   private async createAuthenticatedSession(userId: number, userAgent?: string): Promise<AuthResult> {
-    const [accessToken, refreshToken] = await Promise.all([
-      this.issueAccessToken(userId),
-      this.sessions.create(userId, userAgent),
-    ]);
-    return { accessToken, expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS, refreshToken };
+    const session = await this.sessions.create(userId, userAgent);
+    const accessToken = await this.issueAccessToken(userId, session.id);
+    return { accessToken, expiresInSeconds: ACCESS_TOKEN_TTL_SECONDS, refreshToken: session.refreshToken };
   }
 
-  private issueAccessToken(userId: number) {
+  private issueAccessToken(userId: number, sessionId: string) {
     return this.jwtService.signAsync(
-      { userId },
+      { userId, sid: sessionId },
       { secret: process.env.JWT_SECRET, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
     );
   }

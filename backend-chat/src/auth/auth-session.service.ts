@@ -20,7 +20,7 @@ export class AuthSessionService {
       userAgent: userAgent?.slice(0, 255) || null,
       expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
     });
-    return this.serialize(id, secret);
+    return { id, refreshToken: this.serialize(id, secret) };
   }
 
   async rotate(serializedToken: string) {
@@ -46,7 +46,7 @@ export class AuthSessionService {
       .set({ refreshTokenHash: this.hash(nextSecret), lastUsedAt: new Date() })
       .where(eq(authSessions.id, id));
 
-    return { userId: session.userId, refreshToken: this.serialize(id, nextSecret) };
+    return { sessionId: session.id, userId: session.userId, refreshToken: this.serialize(id, nextSecret) };
   }
 
   async revokeSerialized(serializedToken: string | null) {

@@ -7,7 +7,7 @@ import {
     OnGatewayConnection,
     OnGatewayDisconnect
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { MessagesService } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
@@ -155,8 +155,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SkipThrottle()
     @SubscribeMessage('join_room')
-    async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: Socket): Promise<void> {
+    async handleJoinRoom(@MessageBody() data: { conversationId: number }, @ConnectedSocket() client: AuthenticatedSocket): Promise<void> {
         console.log("User joined room: ", data.conversationId);
+        await this.messagesService.validateMember(client.user.userId, data.conversationId);
         await client.join(`conv_${data.conversationId}`);
     }
 

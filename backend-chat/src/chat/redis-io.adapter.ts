@@ -64,6 +64,7 @@ export class AuthIoAdapter extends IoAdapter {
                         userId: user.userId,
                         username: user.username,
                         displayName: user.displayName,
+                        sessionId: payload.sid,
                     };
                     next();
                 })
