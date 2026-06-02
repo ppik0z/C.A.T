@@ -10,6 +10,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProfilesService } from '../profiles/profiles.service';
 import { AuthSessionService } from '../auth/auth-session.service';
 import { PasswordHasherService } from '../auth/password-hasher.service';
+import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 
 @Injectable()
 export class AccountService {
@@ -19,6 +20,7 @@ export class AccountService {
     private readonly eventEmitter: EventEmitter2,
     private readonly sessions: AuthSessionService,
     private readonly passwordHasher: PasswordHasherService,
+    private readonly pushSubscriptions: PushSubscriptionsService,
   ) {
     cloudinary.config({ secure: true });
   }
@@ -44,6 +46,7 @@ export class AccountService {
           theme: true,
           language: true,
           notificationSound: true,
+          showNotificationPreview: true,
           status: true,
           updatedAt: true,
         },
@@ -109,6 +112,7 @@ export class AccountService {
     if (data.theme !== undefined) settingsData.theme = data.theme;
     if (data.language !== undefined) settingsData.language = data.language;
     if (data.notificationSound !== undefined) settingsData.notificationSound = data.notificationSound;
+    if (data.showNotificationPreview !== undefined) settingsData.showNotificationPreview = data.showNotificationPreview;
     if (data.status !== undefined) settingsData.status = data.status;
 
     if (Object.keys(settingsData).length > 0) {
@@ -133,7 +137,7 @@ export class AccountService {
       const uploadStream = cloudinary.uploader.upload_stream(
         { folder: `avatars/${userId}`, resource_type: 'image', format: 'webp' },
         (error, result) => {
-          if (error) rejectUpload(error instanceof Error ? error : new Error(error?.message || 'Upload failed'));
+          if (error) rejectUpload(new Error(error.message || 'Upload failed'));
           else if (result) resolveUpload(result);
           else rejectUpload(new Error('Upload failed: no result'));
         },
@@ -160,6 +164,7 @@ export class AccountService {
     const hashedPassword = await this.passwordHasher.hash(newPassword);
     await this.drizzle.db.update(users).set({ password: hashedPassword }).where(eq(users.id, userId));
     await this.sessions.revokeAllForUser(userId);
+    await this.pushSubscriptions.revokeAllForUser(userId);
 
     return { message: 'Password updated successfully' };
   }

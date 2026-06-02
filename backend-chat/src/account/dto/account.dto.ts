@@ -41,6 +41,10 @@ export class UpdateSettingsDto {
   notificationSound?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  showNotificationPreview?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(20)
   status?: string;

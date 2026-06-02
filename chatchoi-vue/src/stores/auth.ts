@@ -9,6 +9,7 @@ import { useCallMediaStore } from './call-media';
 import { useChatStore } from './chat';
 import { useFriendsStore } from './friends';
 import { useProfilesStore } from './profiles';
+import { usePushNotificationsStore } from './push-notifications';
 
 export type AuthStatus = 'unknown' | 'refreshing' | 'authenticated' | 'guest';
 
@@ -27,6 +28,7 @@ export const useAuthStore = defineStore('auth', () => {
       useAccountStore().fetchAccount(),
       useFriendsStore().refreshAll(),
       useCallStore().loadActiveCalls(),
+      usePushNotificationsStore().initializeAfterLogin(),
     ]);
   };
 
@@ -104,6 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
     useProfilesStore().clear();
     useFriendsStore().$reset();
     useCallStore().resetSession();
+    usePushNotificationsStore().resetSession();
     status.value = 'guest';
   };
 

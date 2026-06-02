@@ -28,14 +28,15 @@ import type {
 } from '@/types/settings';
 import { useAccountStore } from '@/stores/account';
 import Avatar from '@/components/atoms/Avatar.vue';
+import { usePushNotificationsStore } from '@/stores/push-notifications';
 
 type StartupView = 'messages' | 'friends';
 type SidebarMode = 'hover' | 'icons';
-type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
 const chatStore = useChatStore();
 const accountStore = useAccountStore();
+const pushNotificationsStore = usePushNotificationsStore();
 const { activePresetId, activeFont, activeFontSize, activeDensity, commitAppearance } = useAppearance();
 const { activeLanguage, activeTimeFormat, activeTimezone, commitLocalization } = useLocalization();
 
@@ -142,10 +143,14 @@ const activeStatusVisible = ref(true);
 const readReceipts = ref(true);
 const profileVisible = ref(true);
 const messageRequestPolicy = ref<MessageRequestPolicy>('friends');
-const messagePreview = ref(true);
-const notificationSound = ref(true);
-const quietHours = ref(false);
-const notificationLevel = ref<NotificationLevel>('mentions');
+const messagePreview = computed({
+  get: () => accountStore.settings?.showNotificationPreview ?? true,
+  set: (value: boolean) => void accountStore.updateSettings({ showNotificationPreview: value }),
+});
+const notificationSound = computed({
+  get: () => accountStore.settings?.notificationSound ?? true,
+  set: (value: boolean) => void accountStore.updateSettings({ notificationSound: value }),
+});
 
 const activeTabMeta = computed(() => settingsTabs.value.find((tab: SettingsTab) => tab.id === activeTab.value) ?? settingsTabs.value[0]);
 const userName = computed(() => resolveDisplayName(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
@@ -157,6 +162,10 @@ const selectTab = (tabId: SettingsTabId) => {
 
 const closeMobileDetail = () => {
   isMobileDetailOpen.value = false;
+};
+
+const togglePushNotifications = (enabled: boolean) => {
+  void (enabled ? pushNotificationsStore.enable() : pushNotificationsStore.disable()).catch(() => undefined);
 };
 </script>
 
@@ -481,27 +490,29 @@ const closeMobileDetail = () => {
                     <CardDescription>{{ $t('settings.notifications.description') }}</CardDescription>
                   </CardHeader>
                   <CardContent>
+                    <PreferenceRow icon="notifications_active" :title="$t('settings.notifications.pushDevice.title')" :description="$t('settings.notifications.pushDevice.description')">
+                      <Switch
+                        :checked="pushNotificationsStore.isEnabled"
+                        :disabled="pushNotificationsStore.isLoading || pushNotificationsStore.permission === 'unsupported'"
+                        @update:checked="togglePushNotifications"
+                      />
+                    </PreferenceRow>
+                    <p v-if="pushNotificationsStore.permission === 'denied'" class="pb-3 text-xs font-semibold text-error">
+                      {{ $t('settings.notifications.pushDevice.denied') }}
+                    </p>
+                    <p v-else-if="pushNotificationsStore.permission === 'unsupported'" class="pb-3 text-xs font-semibold text-on-surface-variant">
+                      {{ $t('settings.notifications.pushDevice.unsupported') }}
+                    </p>
+                    <p v-else-if="pushNotificationsStore.error" class="pb-3 text-xs font-semibold text-error">
+                      {{ pushNotificationsStore.error }}
+                    </p>
+                    <Separator />
                     <PreferenceRow icon="chat_bubble" :title="$t('settings.notifications.messagePreview.title')" :description="$t('settings.notifications.messagePreview.description')">
                       <Switch v-model:checked="messagePreview" />
                     </PreferenceRow>
                     <Separator />
                     <PreferenceRow icon="volume_up" :title="$t('settings.notifications.sound.title')" :description="$t('settings.notifications.sound.description')">
                       <Switch v-model:checked="notificationSound" />
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="notifications_active" :title="$t('settings.notifications.level.title')" :description="$t('settings.notifications.level.description')">
-                      <select
-                        v-model="notificationLevel"
-                        class="h-10 min-w-40 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="all">{{ $t('settings.notifications.level.all') }}</option>
-                        <option value="mentions">{{ $t('settings.notifications.level.mentions') }}</option>
-                        <option value="muted">{{ $t('settings.notifications.level.muted') }}</option>
-                      </select>
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="bedtime" :title="$t('settings.notifications.quietHours.title')" :description="$t('settings.notifications.quietHours.description')">
-                      <Switch v-model:checked="quietHours" />
                     </PreferenceRow>
                   </CardContent>
                 </Card>

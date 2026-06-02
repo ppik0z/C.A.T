@@ -26,8 +26,8 @@ describe('AuthSessionService', () => {
   });
 
   it('rotates the refresh secret for a valid session', async () => {
-    const serialized = await service.create(7);
-    const [id, secret] = serialized.split('.');
+    const session = await service.create(7);
+    const [id, secret] = session.refreshToken.split('.');
     const inserted = values.mock.calls[0][0] as { refreshTokenHash: string };
     limit.mockResolvedValueOnce([{
       id,
@@ -38,7 +38,8 @@ describe('AuthSessionService', () => {
     const rotated = await service.rotate(`${id}.${secret}`);
 
     expect(rotated.userId).toBe(7);
-    expect(rotated.refreshToken).not.toBe(serialized);
+    expect(rotated.sessionId).toBe(id);
+    expect(rotated.refreshToken).not.toBe(session.refreshToken);
     expect(set).toHaveBeenCalledWith(expect.objectContaining({ refreshTokenHash: expect.any(String) }));
   });
 

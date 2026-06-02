@@ -157,6 +157,12 @@ export default {
     notifications: {
       title: 'Thông báo',
       description: 'Điều chỉnh mức độ thông báo cho tin nhắn mới.',
+      pushDevice: {
+        title: 'Thông báo đẩy trên thiết bị này',
+        description: 'Nhận thông báo khi ChatChoi chạy nền hoặc đã đóng.',
+        denied: 'Trình duyệt đang chặn thông báo. Hãy cấp lại quyền trong cài đặt trình duyệt.',
+        unsupported: 'Trình duyệt này chưa hỗ trợ FCM Web.',
+      },
       messagePreview: {
         title: 'Xem trước tin nhắn',
         description: 'Hiển thị nội dung rút gọn trong thông báo.',

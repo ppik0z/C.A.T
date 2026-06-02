@@ -5,6 +5,7 @@ import { ProfilesService } from '../profiles/profiles.service';
 import { AuthSessionService } from '../auth/auth-session.service';
 import { PasswordHasherService } from '../auth/password-hasher.service';
 import { AccountService } from './account.service';
+import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 
 describe('AccountService', () => {
   let service: AccountService;
@@ -56,6 +57,10 @@ describe('AccountService', () => {
         {
           provide: PasswordHasherService,
           useValue: { hash: jest.fn(), verify: jest.fn() },
+        },
+        {
+          provide: PushSubscriptionsService,
+          useValue: { revokeAllForUser: jest.fn() },
         },
         {
           provide: EventEmitter2,

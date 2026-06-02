@@ -4,6 +4,7 @@ import { DrizzleService } from '../database/drizzle.service';
 import { AuthService } from './auth.service';
 import { AuthSessionService } from './auth-session.service';
 import { PasswordHasherService } from './password-hasher.service';
+import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -27,6 +28,10 @@ describe('AuthService', () => {
         {
           provide: PasswordHasherService,
           useValue: { hash: jest.fn(), verify: jest.fn() },
+        },
+        {
+          provide: PushSubscriptionsService,
+          useValue: { revokeForSerializedSession: jest.fn(), revokeAllForUser: jest.fn() },
         },
       ],
     }).compile();

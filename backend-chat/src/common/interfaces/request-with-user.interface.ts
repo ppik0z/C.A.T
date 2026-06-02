@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
     userId: number;
     username: string;
     displayName: string | null;
+    sessionId?: string;
 }
 export interface RequestWithUser extends Request {
     user: AuthenticatedUser;

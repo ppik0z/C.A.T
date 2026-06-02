@@ -20,6 +20,7 @@ export interface UserSettings {
   theme?: string;
   language?: string;
   notificationSound?: boolean;
+  showNotificationPreview?: boolean;
   status?: string;
   updatedAt?: string;
 }
@@ -39,4 +40,9 @@ export interface UpdateProfileRequest {
   customStatus?: string;
   email?: string;
   phone?: string;
+}
+
+export interface UpdateSettingsRequest {
+  notificationSound?: boolean;
+  showNotificationPreview?: boolean;
 }

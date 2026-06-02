@@ -23,6 +23,7 @@ import { CallsModule } from './calls/calls.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AccountModule } from './account/account.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module';
 
 @Module({
   imports: [DrizzleModule, AuthModule, FriendshipsModule, ConversationsModule, MessagesModule, ChatModule, ScheduleModule.forRoot(),
@@ -46,6 +47,7 @@ import { ProfilesModule } from './profiles/profiles.module';
     }),
     PresenceModule,
     ProfilesModule,
+    PushNotificationsModule,
     AccountModule,
   ],
   controllers: [AppController],
