@@ -45,6 +45,7 @@ export const userSettings = mysqlTable('user_settings', {
   theme: varchar('theme', { length: 20 }).notNull().default('system'), // 'light', 'dark', 'system'
   language: varchar('language', { length: 10 }).notNull().default('en'),
   notificationSound: boolean('notificationSound').notNull().default(true),
+  showNotificationPreview: boolean('showNotificationPreview').notNull().default(true),
   status: varchar('status', { length: 20 }).notNull().default('online'), // 'online', 'idle', 'dnd', 'invisible'
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
@@ -66,6 +67,33 @@ export const authSessions = mysqlTable(
   (t) => [
     index('idx_auth_sessions_user').on(t.userId),
     index('idx_auth_sessions_expiry').on(t.expiresAt),
+  ],
+);
+
+// ─── PushSubscriptions ────────────────────────────────────────────────────────
+export const pushSubscriptions = mysqlTable(
+  'push_subscriptions',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    authSessionId: varchar('authSessionId', { length: 36 }).notNull().references(() => authSessions.id, { onDelete: 'cascade' }),
+    installationId: varchar('installationId', { length: 36 }).notNull(),
+    provider: varchar('provider', { length: 20 }).notNull().default('fcm'),
+    token: text('token'),
+    endpoint: text('endpoint'),
+    p256dh: text('p256dh'),
+    auth: text('auth'),
+    subscriptionHash: varchar('subscriptionHash', { length: 64 }).notNull(),
+    userAgent: varchar('userAgent', { length: 255 }),
+    lastSeenAt: datetime('lastSeenAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: datetime('revokedAt'),
+    createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    uniqueIndex('uq_push_subscription_hash').on(t.subscriptionHash),
+    index('idx_push_subscription_user_active').on(t.userId, t.revokedAt),
+    index('idx_push_subscription_session').on(t.authSessionId),
   ],
 );
 
@@ -224,6 +252,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   profile: one(userProfiles, { fields: [users.id], references: [userProfiles.userId] }),
   settings: one(userSettings, { fields: [users.id], references: [userSettings.userId] }),
   authSessions: many(authSessions),
+  pushSubscriptions: many(pushSubscriptions),
 }));
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
@@ -241,6 +270,11 @@ export const userSettingsRelations = relations(userSettings, ({ one }) => ({
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
   user: one(users, { fields: [authSessions.userId], references: [users.id] }),
+}));
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, { fields: [pushSubscriptions.userId], references: [users.id] }),
+  authSession: one(authSessions, { fields: [pushSubscriptions.authSessionId], references: [authSessions.id] }),
 }));
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({

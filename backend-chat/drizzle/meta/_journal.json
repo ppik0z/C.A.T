@@ -8,6 +8,13 @@
       "when": 1780290914989,
       "tag": "0000_volatile_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1780371931927,
+      "tag": "0001_curious_namora",
+      "breakpoints": true
     }
   ]
 }
