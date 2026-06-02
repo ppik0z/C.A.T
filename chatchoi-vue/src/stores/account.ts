@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { fetchAccountMe, patchAccountProfile, uploadAccountAvatar } from '../services/account.service';
-import type { AccountMe, UpdateProfileRequest } from '../types/account';
+import { fetchAccountMe, patchAccountProfile, patchAccountSettings, uploadAccountAvatar } from '../services/account.service';
+import type { AccountMe, UpdateProfileRequest, UpdateSettingsRequest } from '../types/account';
 import { useChatStore } from './chat';
 
 export const useAccountStore = defineStore('account', () => {
@@ -61,6 +61,21 @@ export const useAccountStore = defineStore('account', () => {
     }
   };
 
+  const updateSettings = async (input: UpdateSettingsRequest) => {
+    isSaving.value = true;
+    error.value = null;
+    try {
+      const account = await patchAccountSettings(input);
+      applyAccount(account);
+      return account;
+    } catch (caught) {
+      error.value = caught instanceof Error ? caught.message : 'Không thể cập nhật cài đặt';
+      throw caught;
+    } finally {
+      isSaving.value = false;
+    }
+  };
+
   const clear = () => {
     me.value = null;
     error.value = null;
@@ -75,6 +90,7 @@ export const useAccountStore = defineStore('account', () => {
     fetchAccount,
     updateProfile,
     updateAvatar,
+    updateSettings,
     clear,
   };
 });

@@ -157,6 +157,12 @@ export default {
     notifications: {
       title: 'Notifications',
       description: 'Adjust notification levels for new messages.',
+      pushDevice: {
+        title: 'Push notifications on this device',
+        description: 'Receive notifications while ChatChoi is in the background or closed.',
+        denied: 'Notifications are blocked. Allow them again in your browser settings.',
+        unsupported: 'This browser does not support FCM Web yet.',
+      },
       messagePreview: {
         title: 'Message preview',
         description: 'Show brief content in notifications.',
