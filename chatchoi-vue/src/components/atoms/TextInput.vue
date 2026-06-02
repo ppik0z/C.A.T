@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Input } from '@/components/ui/input';
+
 interface Props {
   placeholder?: string;
   icon?: string;
@@ -19,14 +21,13 @@ const props = withDefaults(defineProps<Props>(), {
     >
       {{ props.icon }}
     </span>
-    <input
+    <Input
       v-model="model"
       :class="[
-        'w-full pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base',
+        'h-11 rounded-xl bg-surface-container-low pr-4 text-base focus-visible:border-transparent',
         props.icon ? 'pl-11' : 'pl-4',
       ]"
       :placeholder="props.placeholder"
-      type="text"
     />
   </label>
 </template>

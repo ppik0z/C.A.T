@@ -8,7 +8,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-on-primary shadow-sm hover:bg-primary/90 active:scale-[0.98]',
-        destructive: 'bg-error text-white shadow-sm hover:bg-error/90 active:scale-[0.98]',
+        destructive: 'bg-error text-on-error shadow-sm hover:bg-error/90 active:scale-[0.98]',
         outline: 'border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-high',
         secondary: 'bg-surface-container-high text-on-surface hover:bg-outline-variant/25',
         ghost: 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',

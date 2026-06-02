@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
-import { apiBaseUrl } from "./config/api";
+import { socketBaseUrl } from "./config/api";
 
-export const socket = io(apiBaseUrl, {
+export const socket = io(socketBaseUrl, {
     autoConnect: false, // Chỉ connect khi có token
     transports: ["websocket"],
 });

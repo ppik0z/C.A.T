@@ -1,0 +1,29 @@
+import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+
+export class RegisterDto {
+  @IsString()
+  @Matches(/^[a-zA-Z0-9._]{4,20}$/, {
+    message: 'Username chỉ gồm chữ, số, dấu chấm hoặc gạch dưới và dài từ 4 đến 20 ký tự.',
+  })
+  username!: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự.' })
+  @MaxLength(72, { message: 'Mật khẩu tối đa 72 ký tự.' })
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  displayName?: string;
+}
+
+export class LoginDto {
+  @IsString()
+  @IsNotEmpty()
+  username!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  password!: string;
+}

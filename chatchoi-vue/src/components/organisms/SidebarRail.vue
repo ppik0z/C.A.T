@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
+import { resolveDisplayName, getUserInitial } from '../../utils/userPresentation';
 import type { AppSection } from '../../types/navigation';
+import { useAccountStore } from '../../stores/account';
+import { useAuthStore } from '../../stores/auth';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
+const accountStore = useAccountStore();
+const authStore = useAuthStore();
 
 interface Props {
   activeSection: AppSection;
@@ -15,10 +20,7 @@ const emit = defineEmits<{
   navigate: [section: AppSection];
 }>();
 
-const handleLogout = () => {
-  localStorage.removeItem('accessToken');
-  window.location.reload();
-};
+const handleLogout = () => void authStore.logout();
 
 const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
   { icon: 'chat', label: 'Messages', section: 'messages' },
@@ -35,17 +37,17 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         v-for="item in navItems"
         :key="item.icon"
         :class="[
-          'h-12 flex flex-col items-center justify-center rounded-xl text-[10px] font-semibold transition-colors',
+          'h-12 flex flex-col items-center justify-center rounded-xl text-[0.625rem] font-semibold transition-colors',
           item.section === props.activeSection ? 'text-primary bg-primary-container/50' : 'text-on-surface-variant',
         ]"
         href="#"
         @click.prevent="item.section && emit('navigate', item.section)"
       >
         <span class="relative inline-flex items-center justify-center">
-          <span class="material-symbols-outlined !text-[22px]">{{ item.icon }}</span>
+          <span class="material-symbols-outlined !text-[1.375rem]">{{ item.icon }}</span>
           <span
             v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
+            class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error text-[0.625rem] leading-4 text-center font-bold font-body"
           >
             {{ Math.min(friendsStore.pendingCount, 99) }}
           </span>
@@ -53,8 +55,8 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         <span class="leading-none">{{ item.label }}</span>
       </a>
 
-      <button class="h-12 flex flex-col items-center justify-center rounded-xl text-[10px] font-semibold text-error" type="button" @click="handleLogout">
-        <span class="material-symbols-outlined !text-[22px]">logout</span>
+      <button class="h-12 flex flex-col items-center justify-center rounded-xl text-[0.625rem] font-semibold text-error" type="button" @click="handleLogout">
+        <span class="material-symbols-outlined !text-[1.375rem]">logout</span>
         <span class="leading-none">Logout</span>
       </button>
     </div>
@@ -64,7 +66,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
     <div class="flex flex-col items-start px-4 py-8 gap-8">
       <div class="flex items-center gap-4">
         <div class="min-w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-on-primary shadow-sm">
-          <span class="material-symbols-outlined !text-[24px]">hub</span>
+          <span class="material-symbols-outlined !text-[1.5rem]">hub</span>
         </div>
         <span class="sidebar-label text-xl font-bold text-primary">CHATCHOI</span>
       </div>
@@ -83,10 +85,10 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
       >
         <div class="min-w-12 h-12 flex items-center justify-center">
           <span class="relative inline-flex items-center justify-center">
-            <span class="material-symbols-outlined !text-[24px]">{{ item.icon }}</span>
+            <span class="material-symbols-outlined !text-[1.5rem]">{{ item.icon }}</span>
             <span
               v-if="item.section === 'friends' && friendsStore.pendingCount > 0"
-              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-white text-[10px] leading-4 text-center font-bold font-body"
+              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error text-[0.625rem] leading-4 text-center font-bold font-body"
             >
               {{ Math.min(friendsStore.pendingCount, 99) }}
             </span>
@@ -99,29 +101,29 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
     <div class="mt-auto flex flex-col items-start py-6 border-t border-outline-variant gap-4 px-4">
       <button class="flex items-center gap-4 w-full h-12 rounded-xl text-on-surface-variant hover:bg-surface-container-high transition-all" type="button">
         <div class="min-w-12 h-12 flex items-center justify-center">
-          <span class="material-symbols-outlined !text-[24px]">help</span>
+          <span class="material-symbols-outlined !text-[1.5rem]">help</span>
         </div>
         <span class="sidebar-label font-semibold">Support</span>
       </button>
 
       <button @click="handleLogout" class="flex items-center gap-4 w-full h-12 rounded-xl text-error hover:bg-error-container/40 transition-all" title="Đăng xuất" type="button">
         <div class="min-w-12 h-12 flex items-center justify-center">
-          <span class="material-symbols-outlined !text-[24px]">logout</span>
+          <span class="material-symbols-outlined !text-[1.5rem]">logout</span>
         </div>
         <span class="sidebar-label font-semibold">Logout</span>
       </button>
 
-      <div class="flex items-center gap-4 w-full">
-        <div class="min-w-12 flex items-center justify-center">
+      <button @click="emit('navigate', 'account')" class="flex items-center gap-4 w-full text-left rounded-xl hover:bg-surface-container-high transition-all p-2 -mx-2" type="button">
+        <div class="min-w-10 flex items-center justify-center">
           <div class="w-10 h-10 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-bold border-2 border-primary-container">
-            {{ chatStore.myUserName?.[0]?.toUpperCase() ?? chatStore.myId ?? 'U' }}
+            {{ getUserInitial(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }) }}
           </div>
         </div>
-        <div class="sidebar-label flex flex-col">
-          <span class="font-semibold text-on-surface leading-tight">{{ chatStore.myUserName ?? 'User' }}</span>
-          <span class="text-[10px] text-emerald-600 font-semibold">Online</span>
+        <div class="sidebar-label flex flex-col overflow-hidden">
+          <span class="font-semibold text-on-surface leading-tight truncate w-full">{{ resolveDisplayName(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }) }}</span>
+          <span class="text-[0.625rem] text-success font-semibold">Online</span>
         </div>
-      </div>
+      </button>
     </div>
   </aside>
 </template>

@@ -16,12 +16,86 @@ import { relations } from 'drizzle-orm';
 export const users = mysqlTable('users', {
   id: int('id').autoincrement().primaryKey(),
   username: varchar('username', { length: 191 }).notNull().unique(),
+  displayName: varchar('displayName', { length: 255 }),
   password: varchar('password', { length: 255 }).notNull(),
   avatar: varchar('avatar', { length: 255 }),
+  email: varchar('email', { length: 255 }),
+  phone: varchar('phone', { length: 50 }),
+  isEmailVerified: boolean('isEmailVerified').notNull().default(false),
   refreshToken: text('refreshToken'),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
 });
+
+// ─── UserProfiles ─────────────────────────────────────────────────────────────
+export const userProfiles = mysqlTable('user_profiles', {
+  id: int('id').autoincrement().primaryKey(),
+  userId: int('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  bio: text('bio'),
+  banner: varchar('banner', { length: 255 }),
+  customStatus: varchar('customStatus', { length: 255 }),
+  dateOfBirth: datetime('dateOfBirth'),
+  updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+});
+
+// ─── UserSettings ─────────────────────────────────────────────────────────────
+export const userSettings = mysqlTable('user_settings', {
+  id: int('id').autoincrement().primaryKey(),
+  userId: int('userId').notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  theme: varchar('theme', { length: 20 }).notNull().default('system'), // 'light', 'dark', 'system'
+  language: varchar('language', { length: 10 }).notNull().default('en'),
+  notificationSound: boolean('notificationSound').notNull().default(true),
+  showNotificationPreview: boolean('showNotificationPreview').notNull().default(true),
+  status: varchar('status', { length: 20 }).notNull().default('online'), // 'online', 'idle', 'dnd', 'invisible'
+  updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+});
+
+// ─── AuthSessions ────────────────────────────────────────────────────────────
+export const authSessions = mysqlTable(
+  'auth_sessions',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    refreshTokenHash: varchar('refreshTokenHash', { length: 64 }).notNull(),
+    userAgent: varchar('userAgent', { length: 255 }),
+    expiresAt: datetime('expiresAt').notNull(),
+    lastUsedAt: datetime('lastUsedAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: datetime('revokedAt'),
+    createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    index('idx_auth_sessions_user').on(t.userId),
+    index('idx_auth_sessions_expiry').on(t.expiresAt),
+  ],
+);
+
+// ─── PushSubscriptions ────────────────────────────────────────────────────────
+export const pushSubscriptions = mysqlTable(
+  'push_subscriptions',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    userId: int('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    authSessionId: varchar('authSessionId', { length: 36 }).notNull().references(() => authSessions.id, { onDelete: 'cascade' }),
+    installationId: varchar('installationId', { length: 36 }).notNull(),
+    provider: varchar('provider', { length: 20 }).notNull().default('fcm'),
+    token: text('token'),
+    endpoint: text('endpoint'),
+    p256dh: text('p256dh'),
+    auth: text('auth'),
+    subscriptionHash: varchar('subscriptionHash', { length: 64 }).notNull(),
+    userAgent: varchar('userAgent', { length: 255 }),
+    lastSeenAt: datetime('lastSeenAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    revokedAt: datetime('revokedAt'),
+    createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: datetime('updatedAt').notNull().default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    uniqueIndex('uq_push_subscription_hash').on(t.subscriptionHash),
+    index('idx_push_subscription_user_active').on(t.userId, t.revokedAt),
+    index('idx_push_subscription_session').on(t.authSessionId),
+  ],
+);
 
 // ─── Friendships ──────────────────────────────────────────────────────────────
 export const friendships = mysqlTable(
@@ -166,7 +240,7 @@ export const callParticipants = mysqlTable(
 );
 
 // ─── Relations ────────────────────────────────────────────────
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many, one }) => ({
   sentMessages: many(messages),
   memberships: many(conversationMembers),
   messageStatuses: many(messageStatuses),
@@ -175,11 +249,32 @@ export const usersRelations = relations(users, ({ many }) => ({
   friendOf: many(friendships, { relationName: 'FriendOfUser' }),
   startedCalls: many(callSessions),
   callParticipations: many(callParticipants),
+  profile: one(userProfiles, { fields: [users.id], references: [userProfiles.userId] }),
+  settings: one(userSettings, { fields: [users.id], references: [userSettings.userId] }),
+  authSessions: many(authSessions),
+  pushSubscriptions: many(pushSubscriptions),
 }));
 
 export const friendshipsRelations = relations(friendships, ({ one }) => ({
   user: one(users, { fields: [friendships.userId], references: [users.id], relationName: 'UserFriends' }),
   friend: one(users, { fields: [friendships.friendId], references: [users.id], relationName: 'FriendOfUser' }),
+}));
+
+export const userProfilesRelations = relations(userProfiles, ({ one }) => ({
+  user: one(users, { fields: [userProfiles.userId], references: [users.id] }),
+}));
+
+export const userSettingsRelations = relations(userSettings, ({ one }) => ({
+  user: one(users, { fields: [userSettings.userId], references: [users.id] }),
+}));
+
+export const authSessionsRelations = relations(authSessions, ({ one }) => ({
+  user: one(users, { fields: [authSessions.userId], references: [users.id] }),
+}));
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, { fields: [pushSubscriptions.userId], references: [users.id] }),
+  authSession: one(authSessions, { fields: [pushSubscriptions.authSessionId], references: [authSessions.id] }),
 }));
 
 export const conversationsRelations = relations(conversations, ({ many }) => ({

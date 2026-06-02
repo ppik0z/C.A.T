@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -8,73 +8,133 @@ import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
 import SettingOptionButton from '@/components/molecules/SettingOptionButton.vue';
 import SettingsTabItem from '@/components/molecules/SettingsTabItem.vue';
 import ThemePreview from '@/components/molecules/ThemePreview.vue';
+import AccountTab from '@/components/organisms/AccountTab.vue';
 import { useChatStore } from '@/stores/chat';
+import { resolveDisplayName } from '@/utils/userPresentation';
+import { themePresets, type ThemePresetId, resolveThemePreset } from '@/theme/themePresets';
+import { useAppearance } from '@/theme/useAppearance';
+import { useLocalization } from '@/i18n/useLocalization';
+import { useFormatDate } from '@/composables/useFormatDate';
+import { useI18n } from 'vue-i18n';
 import type {
-  AccentColor,
   FontChoice,
+  FontSize,
+  LanguageChoice,
   MessageDensity,
   SettingOption,
   SettingsTab,
   SettingsTabId,
-  ThemeMode,
+  TimeFormat,
 } from '@/types/settings';
+import { useAccountStore } from '@/stores/account';
+import Avatar from '@/components/atoms/Avatar.vue';
+import { usePushNotificationsStore } from '@/stores/push-notifications';
 
-type LanguageChoice = 'vi' | 'en';
-type TimeFormat = '24h' | '12h';
 type StartupView = 'messages' | 'friends';
 type SidebarMode = 'hover' | 'icons';
-type NotificationLevel = 'all' | 'mentions' | 'muted';
 type MessageRequestPolicy = 'everyone' | 'friends' | 'none';
 
-interface AccentOption {
-  value: AccentColor;
-  label: string;
-  swatchClass: string;
-}
-
 const chatStore = useChatStore();
+const accountStore = useAccountStore();
+const pushNotificationsStore = usePushNotificationsStore();
+const { activePresetId, activeFont, activeFontSize, activeDensity, commitAppearance } = useAppearance();
+const { activeLanguage, activeTimeFormat, activeTimezone, commitLocalization } = useLocalization();
 
-const settingsTabs: SettingsTab[] = [
-  { id: 'appearance', icon: 'palette', label: 'Appearance', summary: 'Theme, font, chat density' },
-  { id: 'language', icon: 'translate', label: 'Language & Region', summary: 'Ngôn ngữ, thời gian' },
-  { id: 'general', icon: 'tune', label: 'General', summary: 'Điều hướng, media' },
-  { id: 'privacy', icon: 'shield_lock', label: 'Privacy', summary: 'Trạng thái, quyền riêng tư' },
-  { id: 'account', icon: 'account_circle', label: 'Account', summary: 'Hồ sơ, bảo mật' },
-  { id: 'notifications', icon: 'notifications', label: 'Notifications', summary: 'Âm báo, preview' },
-];
+const supportedTimezones = Intl.supportedValuesOf('timeZone');
 
-const themeOptions: Array<SettingOption<ThemeMode>> = [
-  { value: 'system', label: 'System', description: 'Theo thiết bị', icon: 'desktop_windows' },
-  { value: 'light', label: 'Light', description: 'Nền sáng', icon: 'light_mode' },
-  { value: 'dark', label: 'Dark', description: 'Nền tối', icon: 'dark_mode' },
-];
 
-const fontOptions: Array<SettingOption<FontChoice>> = [
-  { value: 'jakarta', label: 'Plus Jakarta', description: 'Gọn, hiện đại' },
-  { value: 'lexend', label: 'Lexend', description: 'Rõ chữ, dễ đọc' },
-  { value: 'system', label: 'System', description: 'Nhanh nhất' },
-];
+const { t } = useI18n();
 
-const densityOptions: Array<SettingOption<MessageDensity>> = [
-  { value: 'comfortable', label: 'Comfortable', description: 'Khoảng thở rộng' },
-  { value: 'compact', label: 'Compact', description: 'Hiển thị nhiều hơn' },
-];
+const settingsTabs = computed<SettingsTab[]>(() => [
+  { id: 'appearance', icon: 'palette', label: t('settings.tabs.appearance.label'), summary: t('settings.tabs.appearance.summary') },
+  { id: 'language', icon: 'translate', label: t('settings.tabs.language.label'), summary: t('settings.tabs.language.summary') },
+  { id: 'general', icon: 'tune', label: t('settings.tabs.general.label'), summary: t('settings.tabs.general.summary') },
+  { id: 'privacy', icon: 'shield_lock', label: t('settings.tabs.privacy.label'), summary: t('settings.tabs.privacy.summary') },
+  { id: 'account', icon: 'account_circle', label: t('settings.tabs.account.label'), summary: t('settings.tabs.account.summary') },
+  { id: 'notifications', icon: 'notifications', label: t('settings.tabs.notifications.label'), summary: t('settings.tabs.notifications.summary') },
+]);
 
-const accentOptions: AccentOption[] = [
-  { value: 'ocean', label: 'Ocean', swatchClass: 'bg-primary' },
-  { value: 'emerald', label: 'Emerald', swatchClass: 'bg-emerald-600' },
-  { value: 'violet', label: 'Violet', swatchClass: 'bg-violet-600' },
-  { value: 'rose', label: 'Rose', swatchClass: 'bg-rose-600' },
-];
+const fontOptions = computed<Array<SettingOption<FontChoice>>>(() => [
+  { value: 'jakarta', label: t('settings.appearance.typography.fontOptions.jakarta.label'), description: t('settings.appearance.typography.fontOptions.jakarta.description') },
+  { value: 'lexend', label: t('settings.appearance.typography.fontOptions.lexend.label'), description: t('settings.appearance.typography.fontOptions.lexend.description') },
+  { value: 'inter', label: t('settings.appearance.typography.fontOptions.inter.label'), description: t('settings.appearance.typography.fontOptions.inter.description') },
+  { value: 'roboto', label: t('settings.appearance.typography.fontOptions.roboto.label'), description: t('settings.appearance.typography.fontOptions.roboto.description') },
+  { value: 'opensans', label: t('settings.appearance.typography.fontOptions.opensans.label'), description: t('settings.appearance.typography.fontOptions.opensans.description') },
+  { value: 'system', label: t('settings.appearance.typography.fontOptions.system.label'), description: t('settings.appearance.typography.fontOptions.system.description') },
+]);
 
-const activeTab = ref<SettingsTabId>('appearance');
+const fontSizeOptions = computed<Array<SettingOption<FontSize>>>(() => [
+  { value: 'small', label: t('settings.appearance.typography.sizeOptions.small.label'), description: t('settings.appearance.typography.sizeOptions.small.description') },
+  { value: 'medium', label: t('settings.appearance.typography.sizeOptions.medium.label'), description: t('settings.appearance.typography.sizeOptions.medium.description') },
+  { value: 'large', label: t('settings.appearance.typography.sizeOptions.large.label'), description: t('settings.appearance.typography.sizeOptions.large.description') },
+  { value: 'extra-large', label: t('settings.appearance.typography.sizeOptions.extraLarge.label'), description: t('settings.appearance.typography.sizeOptions.extraLarge.description') },
+]);
+
+// densityOptions temporarily removed as it's not used
+
+const props = defineProps<{
+  initialTab?: SettingsTabId;
+}>();
+
+const activeTab = ref<SettingsTabId>(props.initialTab ?? 'appearance');
+
+watch(() => props.initialTab, (newVal) => {
+  if (newVal) {
+    activeTab.value = newVal;
+  }
+});
 const isMobileDetailOpen = ref(false);
-const themeMode = ref<ThemeMode>('system');
-const accentColor = ref<AccentColor>('ocean');
-const fontChoice = ref<FontChoice>('jakarta');
-const messageDensity = ref<MessageDensity>('comfortable');
-const language = ref<LanguageChoice>('vi');
-const timeFormat = ref<TimeFormat>('24h');
+
+// Draft states for Appearance
+const draftPresetId = ref<ThemePresetId>(activePresetId.value);
+const draftFont = ref<FontChoice>(activeFont.value);
+const draftFontSize = ref<FontSize>(activeFontSize.value);
+const draftDensity = ref<MessageDensity>(activeDensity.value);
+
+// Draft states for Localization
+const draftLanguage = ref<LanguageChoice>(activeLanguage.value);
+const draftTimeFormat = ref<TimeFormat>(activeTimeFormat.value);
+const draftTimezone = ref<string>(activeTimezone.value);
+
+const now = new Date();
+const datePreview = useFormatDate(now, draftLanguage, draftTimeFormat, draftTimezone);
+
+const syncDrafts = () => {
+  draftPresetId.value = activePresetId.value;
+  draftFont.value = activeFont.value;
+  draftFontSize.value = activeFontSize.value;
+  draftDensity.value = activeDensity.value;
+  
+  draftLanguage.value = activeLanguage.value;
+  draftTimeFormat.value = activeTimeFormat.value;
+  draftTimezone.value = activeTimezone.value;
+};
+
+// Discard drafts when switching tabs
+watch(activeTab, (_, oldTab) => {
+  if (oldTab === 'appearance' || oldTab === 'language') {
+    syncDrafts();
+  }
+});
+
+const isDirty = computed(() => {
+  return draftPresetId.value !== activePresetId.value ||
+         draftFont.value !== activeFont.value ||
+         draftFontSize.value !== activeFontSize.value ||
+         draftDensity.value !== activeDensity.value ||
+         draftLanguage.value !== activeLanguage.value ||
+         draftTimeFormat.value !== activeTimeFormat.value ||
+         draftTimezone.value !== activeTimezone.value;
+});
+
+const draftPreset = computed(() => resolveThemePreset(draftPresetId.value));
+
+const applyChanges = () => {
+  commitAppearance(draftPresetId.value, draftFont.value, draftFontSize.value, draftDensity.value);
+  commitLocalization(draftLanguage.value, draftTimeFormat.value, draftTimezone.value);
+};
+
+// Other settings
 const startupView = ref<StartupView>('messages');
 const sidebarMode = ref<SidebarMode>('hover');
 const autoplayMedia = ref(false);
@@ -83,14 +143,17 @@ const activeStatusVisible = ref(true);
 const readReceipts = ref(true);
 const profileVisible = ref(true);
 const messageRequestPolicy = ref<MessageRequestPolicy>('friends');
-const messagePreview = ref(true);
-const notificationSound = ref(true);
-const quietHours = ref(false);
-const notificationLevel = ref<NotificationLevel>('mentions');
+const messagePreview = computed({
+  get: () => accountStore.settings?.showNotificationPreview ?? true,
+  set: (value: boolean) => void accountStore.updateSettings({ showNotificationPreview: value }),
+});
+const notificationSound = computed({
+  get: () => accountStore.settings?.notificationSound ?? true,
+  set: (value: boolean) => void accountStore.updateSettings({ notificationSound: value }),
+});
 
-const activeTabMeta = computed(() => settingsTabs.find((tab) => tab.id === activeTab.value) ?? settingsTabs[0]);
-const userName = computed(() => chatStore.myUserName ?? 'User');
-const userInitial = computed(() => userName.value[0]?.toUpperCase() ?? 'U');
+const activeTabMeta = computed(() => settingsTabs.value.find((tab: SettingsTab) => tab.id === activeTab.value) ?? settingsTabs.value[0]);
+const userName = computed(() => resolveDisplayName(accountStore.me ?? { displayName: chatStore.myDisplayName, username: chatStore.myUserName }));
 
 const selectTab = (tabId: SettingsTabId) => {
   activeTab.value = tabId;
@@ -99,6 +162,10 @@ const selectTab = (tabId: SettingsTabId) => {
 
 const closeMobileDetail = () => {
   isMobileDetailOpen.value = false;
+};
+
+const togglePushNotifications = (enabled: boolean) => {
+  void (enabled ? pushNotificationsStore.enable() : pushNotificationsStore.disable()).catch(() => undefined);
 };
 </script>
 
@@ -112,15 +179,13 @@ const closeMobileDetail = () => {
         ]"
       >
         <div class="border-b border-outline-variant p-5">
-          <p class="text-xs font-bold uppercase tracking-[0.14em] text-on-surface-variant">Chatchoi</p>
-          <h2 class="mt-1 text-2xl font-extrabold leading-8 text-primary">Settings</h2>
+          <p class="text-xs font-bold uppercase tracking-[0.14em] text-on-surface-variant">{{ $t('settings.header.appTitle') }}</p>
+          <h2 class="mt-1 text-2xl font-extrabold leading-8 text-primary">{{ $t('settings.header.title') }}</h2>
           <div class="mt-4 flex items-center gap-3 rounded-lg bg-surface-container-lowest p-3">
-            <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary-container text-sm font-extrabold text-on-secondary-container">
-              {{ userInitial }}
-            </div>
+            <Avatar :avatar-url="accountStore.me?.avatar" :name="userName" />
             <div class="min-w-0">
               <p class="truncate text-sm font-bold text-on-surface">{{ userName }}</p>
-              <p class="truncate text-xs font-semibold text-emerald-600">Online</p>
+              <p class="truncate text-xs font-semibold text-success">{{ $t('settings.header.online') }}</p>
             </div>
           </div>
         </div>
@@ -162,52 +227,40 @@ const closeMobileDetail = () => {
                   <div class="space-y-4">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Theme</CardTitle>
-                        <CardDescription>Chọn nền và màu nhấn cho giao diện chat.</CardDescription>
+                        <CardTitle>{{ $t('settings.appearance.theme.title') }}</CardTitle>
+                        <CardDescription>{{ $t('settings.appearance.theme.description') }}</CardDescription>
                       </CardHeader>
                       <CardContent class="space-y-4">
-                        <div class="grid gap-2 sm:grid-cols-3">
-                          <SettingOptionButton
-                            v-for="option in themeOptions"
-                            :key="option.value"
-                            :description="option.description"
-                            :icon="option.icon"
-                            :label="option.label"
-                            :selected="themeMode === option.value"
-                            @select="themeMode = option.value"
-                          />
-                        </div>
-
-                        <Separator />
-
-                        <div>
-                          <h4 class="mb-2 text-sm font-bold text-on-surface">Accent color</h4>
-                          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            <button
-                              v-for="accent in accentOptions"
-                              :key="accent.value"
-                              :aria-pressed="accentColor === accent.value"
-                              :class="[
-                                'flex h-11 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                                accentColor === accent.value
-                                  ? 'border-primary bg-primary-container/45 text-primary'
-                                  : 'border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-high',
-                              ]"
-                              type="button"
-                              @click="accentColor = accent.value"
-                            >
-                              <span :class="['size-4 rounded-full', accent.swatchClass]" />
-                              <span class="truncate">{{ accent.label }}</span>
-                            </button>
-                          </div>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                          <button
+                            v-for="preset in themePresets"
+                            :key="preset.id"
+                            :aria-pressed="draftPresetId === preset.id"
+                            :class="[
+                              'rounded-lg border p-3 text-left transition-[background-color,border-color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[0.99]',
+                              draftPresetId === preset.id
+                                ? 'border-primary bg-primary-container/30 shadow-sm'
+                                : 'border-outline-variant bg-surface-container-lowest hover:bg-surface-container-low',
+                            ]"
+                            type="button"
+                            @click="draftPresetId = preset.id"
+                          >
+                            <div class="mb-3 flex gap-1">
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.primary }" />
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.surfaceContainerLow }" />
+                              <span class="h-8 flex-1 rounded-md" :style="{ backgroundColor: preset.colors.surfaceContainerHighest }" />
+                            </div>
+                            <span class="block text-sm font-extrabold text-on-surface">{{ preset.name }}</span>
+                            <span class="mt-1 block text-xs font-semibold leading-4 text-on-surface-variant">{{ preset.description }}</span>
+                          </button>
                         </div>
                       </CardContent>
                     </Card>
 
                     <Card>
                       <CardHeader>
-                        <CardTitle>Typography & density</CardTitle>
-                        <CardDescription>Tối ưu cảm giác đọc và số lượng tin nhắn trên màn hình.</CardDescription>
+                        <CardTitle>{{ $t('settings.appearance.typography.title') }}</CardTitle>
+                        <CardDescription>{{ $t('settings.appearance.typography.description') }}</CardDescription>
                       </CardHeader>
                       <CardContent class="space-y-4">
                         <div class="grid gap-2 sm:grid-cols-3">
@@ -216,11 +269,28 @@ const closeMobileDetail = () => {
                             :key="option.value"
                             :description="option.description"
                             :label="option.label"
-                            :selected="fontChoice === option.value"
-                            @select="fontChoice = option.value"
+                            :selected="draftFont === option.value"
+                            @select="draftFont = option.value"
                           />
                         </div>
 
+                        <Separator />
+
+                        <div class="space-y-3">
+                          <p class="text-sm font-bold text-on-surface">{{ $t('settings.appearance.typography.size') }}</p>
+                          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <SettingOptionButton
+                              v-for="option in fontSizeOptions"
+                              :key="option.value"
+                              :description="option.description"
+                              :label="option.label"
+                              :selected="draftFontSize === option.value"
+                              @select="draftFontSize = option.value"
+                            />
+                          </div>
+                        </div>
+
+                        <!-- Temporarily hiding density
                         <Separator />
 
                         <div class="grid gap-2 sm:grid-cols-2">
@@ -229,102 +299,147 @@ const closeMobileDetail = () => {
                             :key="option.value"
                             :description="option.description"
                             :label="option.label"
-                            :selected="messageDensity === option.value"
-                            @select="messageDensity = option.value"
+                            :selected="draftDensity === option.value"
+                            @select="draftDensity = option.value"
                           />
                         </div>
+                        -->
                       </CardContent>
                     </Card>
                   </div>
 
                   <Card class="xl:sticky xl:top-0 xl:self-start">
                     <CardHeader>
-                      <CardTitle>Live preview</CardTitle>
-                      <CardDescription>Áp dụng lựa chọn trên mẫu hội thoại.</CardDescription>
+                      <CardTitle>{{ $t('settings.appearance.livePreview.title') }}</CardTitle>
+                      <CardDescription>{{ $t('settings.appearance.livePreview.description') }}</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <ThemePreview
-                        :accent="accentColor"
-                        :density="messageDensity"
-                        :font="fontChoice"
-                        :mode="themeMode"
+                        :density="draftDensity"
+                        :font="draftFont"
+                        :fontSize="draftFontSize"
+                        :preset="draftPreset"
                       />
                     </CardContent>
                   </Card>
                 </div>
+                  <Transition
+                    enter-active-class="transition duration-200 ease-out"
+                    enter-from-class="translate-y-4 opacity-0"
+                    enter-to-class="translate-y-0 opacity-100"
+                    leave-active-class="transition duration-150 ease-in"
+                    leave-from-class="translate-y-0 opacity-100"
+                    leave-to-class="translate-y-4 opacity-0"
+                  >
+                    <div v-if="isDirty" class="sticky bottom-4 z-10 mx-auto mt-4 max-w-fit rounded-xl border border-outline-variant bg-surface-container p-3 shadow-lg flex items-center gap-4">
+                      <span class="text-sm font-semibold text-on-surface">{{ $t('settings.common.youHaveUnsavedChanges') }}</span>
+                      <div class="flex items-center gap-2">
+                        <Button variant="ghost" @click="syncDrafts">{{ $t('settings.common.reset') }}</Button>
+                        <Button @click="applyChanges">{{ $t('settings.common.applyChanges') }}</Button>
+                      </div>
+                    </div>
+                  </Transition>
               </template>
 
               <template v-else-if="activeTab === 'language'">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Language & Region</CardTitle>
-                    <CardDescription>Thiết lập ngôn ngữ và định dạng thời gian hiển thị.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <PreferenceRow icon="language" title="App language" description="Ngôn ngữ chính cho giao diện.">
-                      <select
-                        v-model="language"
-                        class="h-10 min-w-40 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="vi">Tiếng Việt</option>
-                        <option value="en">English</option>
-                      </select>
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="schedule" title="Time format" description="Định dạng giờ trong danh sách chat và tin nhắn.">
-                      <div class="grid grid-cols-2 gap-2">
-                        <Button :variant="timeFormat === '24h' ? 'secondary' : 'outline'" type="button" @click="timeFormat = '24h'">
-                          24h
-                        </Button>
-                        <Button :variant="timeFormat === '12h' ? 'secondary' : 'outline'" type="button" @click="timeFormat = '12h'">
-                          12h
-                        </Button>
+                <div class="space-y-4 relative">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{{ $t('settings.languageRegion.title') }}</CardTitle>
+                      <CardDescription>{{ $t('settings.languageRegion.description') }}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <PreferenceRow icon="language" :title="$t('settings.languageRegion.appLanguage.title')" :description="$t('settings.languageRegion.appLanguage.description')">
+                        <select
+                          v-model="draftLanguage"
+                          class="h-10 min-w-40 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <option value="vi">{{ $t('settings.languageRegion.appLanguage.vi') }}</option>
+                          <option value="en">{{ $t('settings.languageRegion.appLanguage.en') }}</option>
+                        </select>
+                      </PreferenceRow>
+                      <Separator />
+                      <PreferenceRow icon="public" :title="$t('settings.languageRegion.timezone.title')" :description="$t('settings.languageRegion.timezone.description')">
+                        <select
+                          v-model="draftTimezone"
+                          class="h-10 max-w-[200px] rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          <option v-for="tz in supportedTimezones" :key="tz" :value="tz">{{ tz }}</option>
+                        </select>
+                      </PreferenceRow>
+                      <Separator />
+                      <PreferenceRow icon="schedule" :title="$t('settings.languageRegion.timeFormat.title')" :description="$t('settings.languageRegion.timeFormat.description')">
+                        <div class="grid grid-cols-2 gap-2">
+                          <Button :variant="draftTimeFormat === '24h' ? 'secondary' : 'outline'" type="button" @click="draftTimeFormat = '24h'">
+                            24h
+                          </Button>
+                          <Button :variant="draftTimeFormat === '12h' ? 'secondary' : 'outline'" type="button" @click="draftTimeFormat = '12h'">
+                            12h
+                          </Button>
+                        </div>
+                      </PreferenceRow>
+                      <Separator />
+                      <PreferenceRow icon="event" :title="$t('settings.languageRegion.datePreview.title')" :description="$t('settings.languageRegion.datePreview.description')">
+                        <span class="rounded-lg bg-surface-container-high px-3 py-2 text-sm font-bold text-on-surface capitalize">
+                          {{ datePreview }}
+                        </span>
+                      </PreferenceRow>
+                    </CardContent>
+                  </Card>
+
+                  <Transition
+                    enter-active-class="transition duration-200 ease-out"
+                    enter-from-class="translate-y-4 opacity-0"
+                    enter-to-class="translate-y-0 opacity-100"
+                    leave-active-class="transition duration-150 ease-in"
+                    leave-from-class="translate-y-0 opacity-100"
+                    leave-to-class="translate-y-4 opacity-0"
+                  >
+                    <div v-if="isDirty" class="sticky bottom-4 z-10 mx-auto mt-4 max-w-fit rounded-xl border border-outline-variant bg-surface-container p-3 shadow-lg flex items-center gap-4">
+                      <span class="text-sm font-semibold text-on-surface">{{ $t('settings.common.youHaveUnsavedChanges') }}</span>
+                      <div class="flex items-center gap-2">
+                        <Button variant="ghost" @click="syncDrafts">{{ $t('settings.common.reset') }}</Button>
+                        <Button @click="applyChanges">{{ $t('settings.common.applyChanges') }}</Button>
                       </div>
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="event" title="Date preview" description="Mẫu hiển thị ngày trong trạng thái hiện tại.">
-                      <span class="rounded-lg bg-surface-container-high px-3 py-2 text-sm font-bold text-on-surface">
-                        {{ language === 'vi' ? 'Thứ năm, 28/05/2026' : 'Thu, May 28, 2026' }}
-                      </span>
-                    </PreferenceRow>
-                  </CardContent>
-                </Card>
+                    </div>
+                  </Transition>
+                </div>
               </template>
 
               <template v-else-if="activeTab === 'general'">
                 <Card>
                   <CardHeader>
-                    <CardTitle>General</CardTitle>
-                    <CardDescription>Các tuỳ chọn mặc định khi mở ứng dụng.</CardDescription>
+                    <CardTitle>{{ $t('settings.general.title') }}</CardTitle>
+                    <CardDescription>{{ $t('settings.general.description') }}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <PreferenceRow icon="home" title="Startup view" description="Màn hình đầu tiên sau khi đăng nhập.">
+                    <PreferenceRow icon="home" :title="$t('settings.general.startupView.title')" :description="$t('settings.general.startupView.description')">
                       <div class="grid grid-cols-2 gap-2">
                         <Button :variant="startupView === 'messages' ? 'secondary' : 'outline'" type="button" @click="startupView = 'messages'">
-                          Messages
+                          {{ $t('settings.general.startupView.messages') }}
                         </Button>
                         <Button :variant="startupView === 'friends' ? 'secondary' : 'outline'" type="button" @click="startupView = 'friends'">
-                          Friends
+                          {{ $t('settings.general.startupView.friends') }}
                         </Button>
                       </div>
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="dock_to_left" title="Sidebar style" description="Cách thanh điều hướng desktop mở rộng.">
+                    <PreferenceRow icon="dock_to_left" :title="$t('settings.general.sidebarStyle.title')" :description="$t('settings.general.sidebarStyle.description')">
                       <div class="grid grid-cols-2 gap-2">
                         <Button :variant="sidebarMode === 'hover' ? 'secondary' : 'outline'" type="button" @click="sidebarMode = 'hover'">
-                          Hover
+                          {{ $t('settings.general.sidebarStyle.hover') }}
                         </Button>
                         <Button :variant="sidebarMode === 'icons' ? 'secondary' : 'outline'" type="button" @click="sidebarMode = 'icons'">
-                          Icons
+                          {{ $t('settings.general.sidebarStyle.icons') }}
                         </Button>
                       </div>
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="animated_images" title="Autoplay media" description="Tự chạy GIF và video preview trong cuộc trò chuyện.">
+                    <PreferenceRow icon="animated_images" :title="$t('settings.general.autoplayMedia.title')" :description="$t('settings.general.autoplayMedia.description')">
                       <Switch v-model:checked="autoplayMedia" />
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="motion_photos_off" title="Reduce motion" description="Giảm chuyển động ở các vùng giao diện phụ.">
+                    <PreferenceRow icon="motion_photos_off" :title="$t('settings.general.reduceMotion.title')" :description="$t('settings.general.reduceMotion.description')">
                       <Switch v-model:checked="reduceMotion" />
                     </PreferenceRow>
                   </CardContent>
@@ -334,30 +449,30 @@ const closeMobileDetail = () => {
               <template v-else-if="activeTab === 'privacy'">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Privacy</CardTitle>
-                    <CardDescription>Kiểm soát trạng thái và thông tin hiển thị với người khác.</CardDescription>
+                    <CardTitle>{{ $t('settings.privacy.title') }}</CardTitle>
+                    <CardDescription>{{ $t('settings.privacy.description') }}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <PreferenceRow icon="radio_button_checked" title="Active status" description="Cho bạn bè thấy khi tài khoản đang online.">
+                    <PreferenceRow icon="radio_button_checked" :title="$t('settings.privacy.activeStatus.title')" :description="$t('settings.privacy.activeStatus.description')">
                       <Switch v-model:checked="activeStatusVisible" />
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="done_all" title="Read receipts" description="Hiển thị trạng thái đã xem trong đoạn chat.">
+                    <PreferenceRow icon="done_all" :title="$t('settings.privacy.readReceipts.title')" :description="$t('settings.privacy.readReceipts.description')">
                       <Switch v-model:checked="readReceipts" />
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="badge" title="Profile visibility" description="Cho phép người khác xem hồ sơ rút gọn.">
+                    <PreferenceRow icon="badge" :title="$t('settings.privacy.profileVisibility.title')" :description="$t('settings.privacy.profileVisibility.description')">
                       <Switch v-model:checked="profileVisible" />
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="mark_chat_unread" title="Message requests" description="Ai có thể gửi tin nhắn mới tới tài khoản này.">
+                    <PreferenceRow icon="mark_chat_unread" :title="$t('settings.privacy.messageRequests.title')" :description="$t('settings.privacy.messageRequests.description')">
                       <select
                         v-model="messageRequestPolicy"
                         class="h-10 min-w-44 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
                       >
-                        <option value="everyone">Everyone</option>
-                        <option value="friends">Friends only</option>
-                        <option value="none">No one</option>
+                        <option value="everyone">{{ $t('settings.privacy.messageRequests.everyone') }}</option>
+                        <option value="friends">{{ $t('settings.privacy.messageRequests.friends') }}</option>
+                        <option value="none">{{ $t('settings.privacy.messageRequests.none') }}</option>
                       </select>
                     </PreferenceRow>
                   </CardContent>
@@ -365,73 +480,39 @@ const closeMobileDetail = () => {
               </template>
 
               <template v-else-if="activeTab === 'account'">
-                <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-                  <Card>
-                    <CardContent class="pt-5">
-                      <div class="flex flex-col items-center text-center">
-                        <div class="flex size-20 items-center justify-center rounded-lg bg-secondary-container text-2xl font-extrabold text-on-secondary-container">
-                          {{ userInitial }}
-                        </div>
-                        <h3 class="mt-4 max-w-full truncate text-lg font-extrabold text-on-surface">{{ userName }}</h3>
-                        <p class="text-sm font-semibold text-on-surface-variant">Chatchoi account</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Account</CardTitle>
-                      <CardDescription>Thông tin hồ sơ và bảo mật tài khoản.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <PreferenceRow icon="person" title="Display name" description="Tên hiển thị trong cuộc trò chuyện.">
-                        <Button disabled type="button" variant="outline">Edit</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="lock" title="Password" description="Cập nhật mật khẩu và bảo vệ đăng nhập.">
-                        <Button disabled type="button" variant="outline">Change</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="devices" title="Sessions" description="Quản lý thiết bị đang đăng nhập.">
-                        <Button disabled type="button" variant="outline">Review</Button>
-                      </PreferenceRow>
-                      <Separator />
-                      <PreferenceRow icon="logout" title="Logout" description="Thoát phiên đăng nhập trên thiết bị này.">
-                        <Button disabled type="button" variant="destructive">Logout</Button>
-                      </PreferenceRow>
-                    </CardContent>
-                  </Card>
-                </div>
+                <AccountTab />
               </template>
 
               <template v-else>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Notifications</CardTitle>
-                    <CardDescription>Điều chỉnh mức độ thông báo cho tin nhắn mới.</CardDescription>
+                    <CardTitle>{{ $t('settings.notifications.title') }}</CardTitle>
+                    <CardDescription>{{ $t('settings.notifications.description') }}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <PreferenceRow icon="chat_bubble" title="Message preview" description="Hiển thị nội dung rút gọn trong thông báo.">
+                    <PreferenceRow icon="notifications_active" :title="$t('settings.notifications.pushDevice.title')" :description="$t('settings.notifications.pushDevice.description')">
+                      <Switch
+                        :checked="pushNotificationsStore.isEnabled"
+                        :disabled="pushNotificationsStore.isLoading || pushNotificationsStore.permission === 'unsupported'"
+                        @update:checked="togglePushNotifications"
+                      />
+                    </PreferenceRow>
+                    <p v-if="pushNotificationsStore.permission === 'denied'" class="pb-3 text-xs font-semibold text-error">
+                      {{ $t('settings.notifications.pushDevice.denied') }}
+                    </p>
+                    <p v-else-if="pushNotificationsStore.permission === 'unsupported'" class="pb-3 text-xs font-semibold text-on-surface-variant">
+                      {{ $t('settings.notifications.pushDevice.unsupported') }}
+                    </p>
+                    <p v-else-if="pushNotificationsStore.error" class="pb-3 text-xs font-semibold text-error">
+                      {{ pushNotificationsStore.error }}
+                    </p>
+                    <Separator />
+                    <PreferenceRow icon="chat_bubble" :title="$t('settings.notifications.messagePreview.title')" :description="$t('settings.notifications.messagePreview.description')">
                       <Switch v-model:checked="messagePreview" />
                     </PreferenceRow>
                     <Separator />
-                    <PreferenceRow icon="volume_up" title="Sound" description="Phát âm báo khi có tin nhắn mới.">
+                    <PreferenceRow icon="volume_up" :title="$t('settings.notifications.sound.title')" :description="$t('settings.notifications.sound.description')">
                       <Switch v-model:checked="notificationSound" />
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="notifications_active" title="Notification level" description="Mức ưu tiên thông báo trong các đoạn chat.">
-                      <select
-                        v-model="notificationLevel"
-                        class="h-10 min-w-40 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary"
-                      >
-                        <option value="all">All messages</option>
-                        <option value="mentions">Mentions</option>
-                        <option value="muted">Muted</option>
-                      </select>
-                    </PreferenceRow>
-                    <Separator />
-                    <PreferenceRow icon="bedtime" title="Quiet hours" description="Tạm dừng âm báo trong khoảng thời gian nghỉ.">
-                      <Switch v-model:checked="quietHours" />
                     </PreferenceRow>
                   </CardContent>
                 </Card>

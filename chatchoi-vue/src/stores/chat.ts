@@ -24,6 +24,8 @@ import type {
     TypingStateUpdate,
     TypingUser,
 } from '../types/chat';
+import type { PublicUserProfile, PublicUserSummary } from '../types/account';
+import { getAccessToken } from '../services/session.runtime';
 
 const PREFETCH_DELAY_MS = 250;
 const CONVERSATION_DETAIL_TTL_MS = 60_000;
@@ -112,6 +114,8 @@ export const useChatStore = defineStore('chat', {
         isConnected: false,
         conversations: [] as Conversation[],
         myUserName: null as string | null,
+        myDisplayName: null as string | null,
+        myAvatar: null as string | null,
     }),
 
     getters: {
@@ -126,11 +130,53 @@ export const useChatStore = defineStore('chat', {
             try {
                 const decoded = jwtDecode<JwtIdentity>(token);
                 this.myId = decoded.userId; // Lấy userId từ Token
-                this.myUserName = decoded.username;
+                if (decoded.username) this.myUserName = decoded.username;
+                if (decoded.displayName !== undefined) this.myDisplayName = decoded.displayName;
                 console.log("Định danh thành công, ID: ", this.myId);
             } catch (error) {
                 console.error("Token lỏ!");
             }
+        },
+
+        resetSession() {
+            this.$reset();
+            typingExpiryTimers.forEach((timer) => clearTimeout(timer));
+            typingExpiryTimers.clear();
+        },
+
+        applyCurrentUserProfile(profile: PublicUserSummary) {
+            if (this.myId !== null && profile.id !== this.myId) return;
+            this.myId = profile.id;
+            this.myUserName = profile.username;
+            this.myDisplayName = profile.displayName;
+            this.myAvatar = profile.avatar;
+        },
+
+        applyUserProfileUpdate(profile: PublicUserProfile) {
+            if (profile.id === this.myId) {
+                this.applyCurrentUserProfile(profile);
+            }
+
+            this.conversations.forEach((conversation) => {
+                if (!conversation.isGroup && conversation.friend?.id === profile.id) {
+                    conversation.friend = {
+                        ...conversation.friend,
+                        username: profile.username,
+                        displayName: profile.displayName,
+                        avatar: profile.avatar,
+                    };
+                }
+            });
+
+            Object.values(this.conversationDetailsById).forEach((detail) => {
+                detail.members?.forEach((member) => {
+                    if (member.userId === profile.id) {
+                        member.username = profile.username;
+                        member.displayName = profile.displayName;
+                        member.avatar = profile.avatar;
+                    }
+                });
+            });
         },
 
         setMessagesForConversation(
@@ -437,8 +483,8 @@ export const useChatStore = defineStore('chat', {
                 content: content.trim(),
                 createdAt: new Date(),
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -447,7 +493,6 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
-                senderName: this.myUserName,
                 type: 'text',
                 content: content.trim(),
                 clientTempId,
@@ -462,7 +507,7 @@ export const useChatStore = defineStore('chat', {
         async sendMediaMessage(file: File, caption = '') {
             if (!this.currentConversationId || !this.myUserName) return;
 
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!token) throw new Error('Bạn cần đăng nhập để gửi file.');
             if (file.size > MAX_MEDIA_FILE_BYTES) throw new Error('File tối đa 10 MB.');
 
@@ -484,8 +529,8 @@ export const useChatStore = defineStore('chat', {
                 uploadProgress: 0,
                 compressionProgress: 0,
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -497,18 +542,18 @@ export const useChatStore = defineStore('chat', {
             });
             this.pushMessage(optimisticMessage);
             this.stopTyping(conversationId);
-            await this.uploadPendingMedia(clientTempId, token);
+            await this.uploadPendingMedia(clientTempId);
         },
 
         async retryMediaMessage(clientTempId: string) {
             const pendingUpload = pendingMediaUploads.get(clientTempId);
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             if (!pendingUpload || !token) return;
 
-            await this.uploadPendingMedia(clientTempId, token);
+            await this.uploadPendingMedia(clientTempId);
         },
 
-        async uploadPendingMedia(clientTempId: string, token: string) {
+        async uploadPendingMedia(clientTempId: string) {
             const pendingUpload = pendingMediaUploads.get(clientTempId);
             if (!pendingUpload) return;
 
@@ -557,7 +602,7 @@ export const useChatStore = defineStore('chat', {
                     uploadProgress: 0,
                 });
 
-                const response = await uploadMediaMessage(token, {
+                const response = await uploadMediaMessage({
                     conversationId: pendingUpload.conversationId,
                     file: uploadFile,
                     caption: pendingUpload.caption,
@@ -591,8 +636,8 @@ export const useChatStore = defineStore('chat', {
                 createdAt: new Date(),
                 fileUrl: gifUrl.trim(),
                 senderId: this.myId ?? undefined,
-                senderName: this.myUserName,
-                sender: this.myId ? { id: this.myId, username: this.myUserName } : undefined,
+                senderName: this.myDisplayName || this.myUserName,
+                sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
                 localStatus: 'sending',
             };
 
@@ -601,7 +646,6 @@ export const useChatStore = defineStore('chat', {
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
-                senderName: this.myUserName,
                 type: 'gif',
                 content: caption.trim(),
                 fileUrl: gifUrl.trim(),
@@ -686,11 +730,8 @@ export const useChatStore = defineStore('chat', {
                 return this.conversationDetailPromisesById[conversationId];
             }
 
-            const token = localStorage.getItem('accessToken');
-            if (!token) throw new Error('Bạn cần đăng nhập để tải thông tin đoạn chat.');
-
             this.conversationDetailLoadStateById[conversationId] = 'loading';
-            const request = fetchConversationDetail(token, conversationId)
+            const request = fetchConversationDetail(conversationId)
                 .then((detail) => {
                     this.upsertConversationDetail(detail);
                     return detail;
@@ -860,7 +901,7 @@ export const useChatStore = defineStore('chat', {
                 return;
             }
 
-            const nextUser = { userId: update.userId, username: update.username };
+            const nextUser = { userId: update.userId, username: update.username, displayName: update.displayName };
             this.typingUsersByConversationId[update.conversationId] = existingIndex === -1
                 ? [...users, nextUser]
                 : users.map((item, index) => index === existingIndex ? nextUser : item);

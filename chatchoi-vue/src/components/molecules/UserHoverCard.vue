@@ -8,6 +8,7 @@ import {
   getConversationName,
   getConversationUser,
 } from '../../utils/chatPresentation';
+import { formatUsername } from '../../utils/userPresentation';
 
 interface Props {
   conversation: Conversation | null;
@@ -38,6 +39,7 @@ const description = computed(() => (
 
 <template>
   <ProfileHoverCard
+    :user-id="!props.conversation?.isGroup ? getConversationUser(props.conversation)?.id : undefined"
     :avatar-url="avatarUrl"
     :description="description"
     :eyebrow="getConversationKindLabel(props.conversation)"
@@ -46,6 +48,7 @@ const description = computed(() => (
     :placement="props.placement"
     :show-status="!props.conversation?.isGroup"
     :status-label="statusLabel"
+    :username="!props.conversation?.isGroup ? formatUsername(getConversationUser(props.conversation)?.username) : undefined"
     z-index-class="z-[120]"
   >
     <slot />

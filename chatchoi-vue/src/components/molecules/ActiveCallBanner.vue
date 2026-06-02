@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useCallStore } from '../../stores/call';
 import type { Conversation } from '../../types/chat';
 import { getConversationName } from '../../utils/chatPresentation';
+import { resolveDisplayName } from '../../utils/userPresentation';
 
 interface Props {
   conversation: Conversation;
@@ -26,7 +27,7 @@ const description = computed(() => {
   const kind = call.value.kind === 'video' ? 'video' : 'thoại';
   const count = call.value.activeParticipantCount;
   if (count > 0) return `${count} người trong cuộc gọi ${kind}`;
-  return `${call.value.startedBy.username} đã bắt đầu cuộc gọi ${kind}`;
+  return `${resolveDisplayName(call.value.startedBy)} đã bắt đầu cuộc gọi ${kind}`;
 });
 
 const handlePrimaryAction = () => {
@@ -37,6 +38,7 @@ const handlePrimaryAction = () => {
   }
   if (call.value.currentUserStatus === 'joined') {
     callStore.overlayCallId = call.value.id;
+    callStore.isCallExpanded = true;
     return;
   }
   callStore.joinCall(call.value.id);

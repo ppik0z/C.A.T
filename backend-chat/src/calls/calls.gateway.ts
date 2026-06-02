@@ -1,11 +1,12 @@
 import {
     ConnectedSocket,
     MessageBody,
+    OnGatewayDisconnect,
     SubscribeMessage,
     WebSocketGateway,
     WebSocketServer,
 } from '@nestjs/websockets';
-import { ConflictException, UseGuards } from '@nestjs/common';
+import { ConflictException, Logger, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Server } from 'socket.io';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -38,10 +39,28 @@ interface UpdateMediaConnectionPayload extends CallIdPayload {
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
 @WebSocketGateway({ cors: { origin: '*' } })
-export class CallsGateway {
+export class CallsGateway implements OnGatewayDisconnect {
     @WebSocketServer() server: Server;
+    private readonly logger = new Logger(CallsGateway.name);
+    private readonly socketCallMap = new Map<string, { userId: number; callIds: Set<number> }>();
 
     constructor(private readonly callsService: CallsService) { }
+
+    async handleDisconnect(client: AuthenticatedSocket) {
+        const entry = this.socketCallMap.get(client.id);
+        if (!entry) return;
+        this.socketCallMap.delete(client.id);
+
+        for (const callId of entry.callIds) {
+            try {
+                await this.callsService.updateMediaConnectionStatus(
+                    entry.userId, callId, { status: 'disconnected' },
+                );
+            } catch (error) {
+                this.logger.debug(`Socket disconnect cleanup skipped for call ${callId}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
 
     @OnEvent('call.started')
     async handleCallStarted(result: CallMutationResult) {
@@ -61,7 +80,7 @@ export class CallsGateway {
     @SubscribeMessage('call:start')
     async startCall(@MessageBody() data: StartCallPayload, @ConnectedSocket() client: AuthenticatedSocket) {
         try {
-            await this.callsService.startCall(client.user.userId, client.user.username, data);
+            await this.callsService.startCall(client.user.userId, client.user.username, data, client.user.displayName);
             return { status: 'ack' };
         } catch (error) {
             return this.emitCallError(client, error);
@@ -218,6 +237,13 @@ export class CallsGateway {
     ) {
         try {
             await this.callsService.updateMediaConnectionStatus(client.user.userId, callId, { status, failureReason });
+
+            if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
+                this.trackSocketCall(client, callId);
+            } else if (status === 'disconnected' || status === 'failed') {
+                this.untrackSocketCall(client, callId);
+            }
+
             return { status: 'ack' };
         } catch (error) {
             if (error instanceof ConflictException) {
@@ -226,6 +252,22 @@ export class CallsGateway {
 
             return this.emitCallError(client, error);
         }
+    }
+
+    private trackSocketCall(client: AuthenticatedSocket, callId: number) {
+        let entry = this.socketCallMap.get(client.id);
+        if (!entry) {
+            entry = { userId: client.user.userId, callIds: new Set() };
+            this.socketCallMap.set(client.id, entry);
+        }
+        entry.callIds.add(callId);
+    }
+
+    private untrackSocketCall(client: AuthenticatedSocket, callId: number) {
+        const entry = this.socketCallMap.get(client.id);
+        if (!entry) return;
+        entry.callIds.delete(callId);
+        if (entry.callIds.size === 0) this.socketCallMap.delete(client.id);
     }
 
     private emitCallError(client: AuthenticatedSocket, error: unknown) {

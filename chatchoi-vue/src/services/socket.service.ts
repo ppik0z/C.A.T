@@ -2,6 +2,9 @@ import { socket } from "../socket";
 import { useCallStore } from "../stores/call";
 import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
+import { useProfilesStore } from "../stores/profiles";
+import { useAccountStore } from "../stores/account";
+import type { PublicUserProfile } from "../types/account";
 import type { ActiveCallsPayload, CallErrorPayload, CallState } from "../types/call";
 import type {
     ChatMessage,
@@ -14,20 +17,42 @@ import type {
     TypingStateUpdate,
 } from "../types/chat";
 
-export const initSocketService = (token: string) => {
+let listenersRegistered = false;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+export const connectSocket = (token: string) => {
+    registerSocketListeners();
+    socket.auth = { token };
+    if (socket.connected) {
+        socket.disconnect();
+    }
+    socket.connect();
+};
+
+export const disconnectSocket = () => {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+    socket.disconnect();
+};
+
+export const initSocketService = connectSocket;
+
+const registerSocketListeners = () => {
+    if (listenersRegistered) return;
+    listenersRegistered = true;
     const chatStore = useChatStore();
     const callStore = useCallStore();
     const friendsStore = useFriendsStore();
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-
-    socket.auth = { token };
-    socket.connect();
-
+    const profilesStore = useProfilesStore();
+    const accountStore = useAccountStore();
     socket.on("connect", () => {
         chatStore.isConnected = true;
         console.log("Đã kết nối!");
 
         // Heartbeat, interval 15s
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
         heartbeatInterval = setInterval(() => {
             if (socket.connected) {
                 socket.emit("heartbeat");
@@ -86,6 +111,15 @@ export const initSocketService = (token: string) => {
     socket.on("user_status_changed", (data: { userId: number, status: string }) => {
         console.log(`User ${data.userId} đang ${data.status}`);
         chatStore.updateUserStatus(data.userId, data.status);
+    });
+
+    socket.on("user_profile_updated", (profile: PublicUserProfile) => {
+        profilesStore.applyProfile(profile);
+        chatStore.applyUserProfileUpdate(profile);
+        friendsStore.applyUserProfileUpdate(profile);
+        if (profile.id === chatStore.myId) {
+            void accountStore.fetchAccount();
+        }
     });
 
     socket.on("update_conversation_list", (data: ConversationListUpdate) => {

@@ -45,11 +45,8 @@ const conversations = computed(() => {
 });
 
 onMounted(async () => {
-  const token = localStorage.getItem('accessToken');
-  if (!token) return;
-
   try {
-    const data = await fetchConversations(token);
+    const data = await fetchConversations();
     chatStore.setConversations(data);
     await chatStore.prefetchMessagesForConversations(data.slice(0, 3).map((conversation) => conversation.id));
   } catch (error) {

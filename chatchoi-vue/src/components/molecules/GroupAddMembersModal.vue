@@ -5,6 +5,7 @@ import TextInput from '../atoms/TextInput.vue';
 import { addConversationMembers } from '../../services/conversation.service';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 import type { ConversationMember } from '../../types/chat';
 import type { FriendUser } from '../../types/friends';
 
@@ -75,14 +76,13 @@ const toggleUser = (user: FriendUser) => {
 };
 
 const submit = async () => {
-  const token = localStorage.getItem('accessToken');
-  if (!token || selectedIds.value.length === 0 || isSubmitting.value) return;
+  if (selectedIds.value.length === 0 || isSubmitting.value) return;
 
   isSubmitting.value = true;
   error.value = null;
 
   try {
-    const updated = await addConversationMembers(token, props.conversationId, selectedIds.value);
+    const updated = await addConversationMembers(props.conversationId, selectedIds.value);
     chatStore.upsertConversationDetail(updated);
     emit('added');
     emit('close');
@@ -123,7 +123,7 @@ const submit = async () => {
             type="button"
             @click="toggleUser(user)"
           >
-            <span>{{ user.username }}</span>
+            <span>{{ resolveDisplayName(user) }}</span>
             <span class="material-symbols-outlined !text-[16px]">close</span>
           </button>
         </div>
@@ -143,7 +143,8 @@ const submit = async () => {
             <div class="flex items-center gap-3 min-w-0">
               <Avatar :avatar-url="user.avatar" :name="user.username" />
               <div class="min-w-0">
-                <p class="font-semibold text-on-surface truncate">{{ user.username }}</p>
+                <p class="font-semibold text-on-surface truncate">{{ resolveDisplayName(user) }}</p>
+                <p v-if="user.username" class="text-xs text-on-surface-variant/70 truncate">{{ formatUsername(user.username) }}</p>
                 <p class="text-xs text-on-surface-variant">{{ user.relationshipStatus === 'friends' ? 'Bạn bè' : 'Tìm kiếm' }}</p>
               </div>
             </div>

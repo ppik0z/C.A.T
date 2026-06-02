@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Avatar from '../atoms/Avatar.vue';
 import FriendActionButton from './FriendActionButton.vue';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 import type { FriendUser } from '../../types/friends';
 
 interface Props {
@@ -30,7 +31,8 @@ const emit = defineEmits<{
     />
 
     <div class="min-w-0 flex-1">
-      <h3 class="font-bold text-on-surface truncate">{{ props.user.username }}</h3>
+      <h3 class="font-bold text-on-surface truncate">{{ resolveDisplayName(props.user) }}</h3>
+      <p v-if="props.user.username" class="text-xs text-on-surface-variant/70 truncate">{{ formatUsername(props.user.username) }}</p>
       <p class="text-xs font-semibold text-on-surface-variant">
         <span v-if="props.user.relationshipStatus === 'friends'">
           {{ props.user.isOnline ? 'Online' : 'Offline' }}

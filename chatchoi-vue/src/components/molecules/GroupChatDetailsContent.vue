@@ -8,6 +8,7 @@ import type { Conversation, ConversationMember } from '../../types/chat';
 import { removeConversationMember, updateConversation } from '../../services/conversation.service';
 import { useChatStore } from '../../stores/chat';
 import { getConversationName } from '../../utils/chatPresentation';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 
 interface Props {
   conversation: Conversation;
@@ -37,10 +38,11 @@ const members = computed(() => detail.value.members ?? []);
 const filteredMembers = computed(() => {
   const query = memberSearch.value.trim().toLowerCase();
   if (!query) return members.value;
-  return members.value.filter((member) => member.username.toLowerCase().includes(query));
+  return members.value.filter((member) => 
+    member.username.toLowerCase().includes(query) ||
+    (member.displayName?.toLowerCase().includes(query) ?? false)
+  );
 });
-
-const token = () => localStorage.getItem('accessToken');
 
 const resetForms = () => {
   error.value = null;
@@ -75,11 +77,8 @@ const startEdit = () => {
 };
 
 const saveGroup = async () => {
-  const accessToken = token();
-  if (!accessToken) return;
-
   try {
-    const updated = await updateConversation(accessToken, props.conversation.id, {
+    const updated = await updateConversation(props.conversation.id, {
       name: editName.value.trim(),
       avatarGroup: editAvatar.value.trim() || null,
     });
@@ -91,15 +90,12 @@ const saveGroup = async () => {
 };
 
 const removeMember = async (member: ConversationMember) => {
-  const accessToken = token();
-  if (!accessToken) return;
-
   const isSelf = member.userId === chatStore.myId;
-  const confirmed = window.confirm(isSelf ? 'Rời khỏi nhóm này?' : `Xoá ${member.username} khỏi nhóm?`);
+  const confirmed = window.confirm(isSelf ? 'Rời khỏi nhóm này?' : `Xoá ${resolveDisplayName(member)} khỏi nhóm?`);
   if (!confirmed) return;
 
   try {
-    await removeConversationMember(accessToken, props.conversation.id, member.userId);
+    await removeConversationMember(props.conversation.id, member.userId);
     if (isSelf) {
       chatStore.removeConversation(props.conversation.id);
       return;
@@ -178,7 +174,8 @@ const removeMember = async (member: ConversationMember) => {
               <Avatar :avatar-url="member.avatar" :is-online="member.isOnline" :name="member.username" show-status />
             </MemberHoverCard>
             <div class="min-w-0">
-              <p class="font-semibold text-on-surface truncate">{{ member.username }}</p>
+              <p class="font-semibold text-on-surface truncate">{{ resolveDisplayName(member) }}</p>
+              <p v-if="member.username" class="text-xs text-on-surface-variant/70 truncate">{{ formatUsername(member.username) }}</p>
               <p class="text-xs text-on-surface-variant">
                 {{ member.isAdmin ? 'Admin' : 'Member' }} · {{ member.isOnline ? 'Online' : 'Offline' }}
               </p>

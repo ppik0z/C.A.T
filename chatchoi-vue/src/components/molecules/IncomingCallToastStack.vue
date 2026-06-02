@@ -4,6 +4,7 @@ import Avatar from '../atoms/Avatar.vue';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
 import { getConversationName } from '../../utils/chatPresentation';
+import { resolveDisplayName } from '../../utils/userPresentation';
 
 const callStore = useCallStore();
 const chatStore = useChatStore();
@@ -28,7 +29,7 @@ const getConversationLabel = (conversationId: number) => {
       <div class="flex gap-3">
         <Avatar :avatar-url="call.startedBy.avatar" :name="call.startedBy.username" size="lg" />
         <div class="min-w-0 flex-1">
-          <p class="font-bold text-on-surface truncate">{{ call.startedBy.username }}</p>
+          <p class="font-bold text-on-surface truncate">{{ resolveDisplayName(call.startedBy) }}</p>
           <p class="text-sm text-on-surface-variant truncate">
             Gọi {{ call.kind === 'video' ? 'video' : 'thoại' }} trong {{ getConversationLabel(call.conversationId) }}
           </p>
@@ -40,7 +41,7 @@ const getConversationLabel = (conversationId: number) => {
 
       <div class="mt-4 grid grid-cols-2 gap-2">
         <button
-          class="h-10 rounded-full bg-error text-white text-sm font-bold hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
+          class="h-10 rounded-full bg-error text-on-error text-sm font-bold hover:bg-error/90 focus:outline-none focus:ring-2 focus:ring-error focus:ring-offset-2"
           type="button"
           @click="callStore.declineCall(call.id)"
         >
