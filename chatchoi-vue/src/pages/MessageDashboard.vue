@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 import ChatDetailsDrawer from '../components/organisms/ChatDetailsDrawer.vue';
 import CallOverlay from '../components/organisms/CallOverlay.vue';
 import ChatPanel from '../components/organisms/ChatPanel.vue';
@@ -8,9 +8,11 @@ import FriendsPanel from '../components/organisms/FriendsPanel.vue';
 import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
 import CallMiniPlayer from '../components/molecules/CallMiniPlayer.vue';
+import PushNotificationBanner from '../components/molecules/PushNotificationBanner.vue';
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
 import type { AppSection } from '../types/navigation';
+import { pushOpenConversationEvent, takePendingPushConversationId } from '../pwa/pwaRuntime';
 
 type MobileView = 'list' | 'chat';
 const SettingsPanel = defineAsyncComponent(() => import('../components/organisms/SettingsPanel.vue'));
@@ -21,6 +23,7 @@ const activeSection = ref<AppSection>('messages');
 const mobileView = ref<MobileView>('list');
 const isDetailsOpen = ref(false);
 const isMessageSearchOpen = ref(false);
+const pendingConversationId = ref<number | null>(null);
 
 const currentConversation = computed(() => {
   return chatStore.conversations.find((conversation) => conversation.id === chatStore.currentConversationId) ?? null;
@@ -65,6 +68,45 @@ const handleOpenMessageSearch = () => {
   isMessageSearchOpen.value = true;
   mobileView.value = 'chat';
 };
+
+const openPendingConversation = () => {
+  const conversationId = pendingConversationId.value;
+  if (!conversationId || !chatStore.conversations.some((conversation) => conversation.id === conversationId)) return;
+
+  chatStore.selectConversation(conversationId);
+  callStore.requestConversationActiveCall(conversationId);
+  activeSection.value = 'messages';
+  mobileView.value = 'chat';
+  pendingConversationId.value = null;
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete('conversationId');
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+};
+
+const setPendingConversation = (value: unknown) => {
+  const conversationId = typeof value === 'string' ? Number(value) : Number.NaN;
+  if (!Number.isInteger(conversationId) || conversationId <= 0) return;
+
+  pendingConversationId.value = conversationId;
+  openPendingConversation();
+};
+
+const handlePushOpenConversation = (event: Event) => {
+  setPendingConversation((event as CustomEvent<{ conversationId?: string }>).detail?.conversationId);
+};
+
+watch(() => chatStore.conversations.length, openPendingConversation);
+
+onMounted(() => {
+  setPendingConversation(new URL(window.location.href).searchParams.get('conversationId'));
+  setPendingConversation(takePendingPushConversationId());
+  window.addEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+});
+
+onUnmounted(() => {
+  window.removeEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+});
 </script>
 
 <template>
@@ -116,6 +158,7 @@ const handleOpenMessageSearch = () => {
     <IncomingCallToastStack />
     <CallOverlay />
     <CallMiniPlayer />
+    <PushNotificationBanner />
 
     <button
       v-if="callStore.callError"

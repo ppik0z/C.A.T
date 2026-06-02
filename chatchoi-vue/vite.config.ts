@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => {
         registerType: 'prompt',
         srcDir: 'src',
         filename: 'service-worker.ts',
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
         includeAssets: ['pwa/cat-icon.svg', 'pwa/apple-touch-icon.png'],
         manifest: {
           id: '/',
