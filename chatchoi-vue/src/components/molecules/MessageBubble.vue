@@ -45,6 +45,10 @@ const showUploadState = (message: ChatMessage): boolean => {
   return ['sending', 'compressing', 'uploading', 'failed'].includes(message.localStatus ?? '');
 };
 
+const showMessageControls = (message: ChatMessage): boolean => {
+  return !showUploadState(message);
+};
+
 const getFooterStatusText = (message: ChatMessage): string => {
   if (showUploadState(message)) return getUploadStatusText(message);
   return props.isOwn && props.statusText ? props.statusText : formatMessageTime(message.createdAt);
@@ -227,7 +231,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      v-if="!props.message.localStatus"
+      v-if="showMessageControls(props.message)"
       :class="['relative flex shrink-0 items-center gap-1 self-end pb-5', props.isOwn ? 'flex-row-reverse' : '']"
     >
       <button

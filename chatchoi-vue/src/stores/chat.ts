@@ -60,7 +60,7 @@ const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): Cha
     if (clientKey) {
         const tempIndex = messages.findIndex((item) => item.clientMessageId === clientKey || item.clientTempId === clientKey);
         if (tempIndex !== -1) {
-            return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: 'sent' as const } : item);
+            return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: undefined } : item);
         }
     }
 
