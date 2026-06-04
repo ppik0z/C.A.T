@@ -14,12 +14,15 @@ export class MessagesController {
     ) { }
 
     @Post()
-    async send(@Body() body: { conversationId: number, content?: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string }, @Request() req: RequestWithUser) {
+    async send(@Body() body: { conversationId: number, content?: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string, clientMessageId?: string, replyToMessageId?: number, mentionedUserIds?: number[] }, @Request() req: RequestWithUser) {
         const input: SendMessageInput = {
             type: body.type,
             content: body.content,
             fileUrl: body.fileUrl,
             clientTempId: body.clientTempId,
+            clientMessageId: body.clientMessageId,
+            replyToMessageId: body.replyToMessageId,
+            mentionedUserIds: body.mentionedUserIds,
         };
 
         return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content ?? '', body.clientTempId, input);
@@ -33,7 +36,7 @@ export class MessagesController {
     }))
     async sendMedia(
         @UploadedFile() file: Express.Multer.File,
-        @Body() body: { conversationId: string; caption?: string; clientTempId?: string },
+        @Body() body: { conversationId: string; caption?: string; clientTempId?: string; clientMessageId?: string; replyToMessageId?: string; mentionedUserIds?: string },
         @Request() req: RequestWithUser,
     ) {
         const conversationId = Number(body.conversationId);
@@ -48,6 +51,9 @@ export class MessagesController {
             conversationId,
             caption: body.caption,
             clientTempId: body.clientTempId,
+            clientMessageId: body.clientMessageId,
+            replyToMessageId: body.replyToMessageId ? Number(body.replyToMessageId) : undefined,
+            mentionedUserIds: this.parseMentionedUserIds(body.mentionedUserIds),
             media,
         });
     }
@@ -58,5 +64,16 @@ export class MessagesController {
         @Request() req: RequestWithUser
     ) {
         return this.messagesService.getMessages(req.user.userId, convId);
+    }
+
+    private parseMentionedUserIds(value: string | undefined) {
+        if (!value) return undefined;
+        try {
+            const parsed = JSON.parse(value) as unknown;
+            if (!Array.isArray(parsed)) throw new Error('invalid');
+            return parsed.filter((item): item is number => Number.isInteger(item));
+        } catch {
+            throw new BadRequestException('mentionedUserIds không hợp lệ.');
+        }
     }
 }

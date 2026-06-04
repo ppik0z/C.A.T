@@ -9,6 +9,7 @@ interface MessageCreatedEvent {
   previewContent: string;
   senderId: number;
   senderName: string;
+  mentionedUserIds?: number[];
 }
 
 const MAX_PREVIEW_LENGTH = 120;
@@ -28,10 +29,11 @@ export class PushNotificationListener {
       const members = await this.getRecipientSubscriptions(payload);
       if (members.length === 0) return;
 
+      const mentionedIds = new Set(payload.mentionedUserIds ?? []);
       const result = await this.fcmPushProvider.send(members.map((subscription) => ({
         token: subscription.token,
         data: {
-          type: 'chat.message',
+          type: mentionedIds.has(subscription.userId) ? 'chat.mention' : 'chat.message',
           messageId: String(payload.id),
           conversationId: String(payload.conversationId),
           senderName: payload.senderName,
