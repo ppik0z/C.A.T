@@ -15,6 +15,8 @@ import type {
     MessageDeliveryStatus,
     MessageLoadState,
     MessagePageInfo,
+    MessageReactionUpdate,
+    MessageRecallUpdate,
     MessageSearchResult,
     MessageSearchState,
     MessageStatusSnapshot,
@@ -40,6 +42,9 @@ interface PendingMediaUpload {
     file: File;
     caption: string;
     previewUrl: string;
+    clientMessageId: string;
+    replyToMessageId?: number;
+    mentionedUserIds?: number[];
 }
 
 type MessageLoadDirection = 'replace' | 'older' | 'newer' | 'anchor';
@@ -51,8 +56,9 @@ const delay = (milliseconds: number) => new Promise<void>((resolve) => {
 });
 
 const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): ChatMessage[] => {
-    if (message.clientTempId) {
-        const tempIndex = messages.findIndex((item) => item.clientTempId === message.clientTempId);
+    const clientKey = message.clientMessageId ?? message.clientTempId;
+    if (clientKey) {
+        const tempIndex = messages.findIndex((item) => item.clientMessageId === clientKey || item.clientTempId === clientKey);
         if (tempIndex !== -1) {
             return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: 'sent' as const } : item);
         }
@@ -110,6 +116,7 @@ export const useChatStore = defineStore('chat', {
         conversationDetailFetchedAtById: {} as Record<number, number>,
         conversationDetailPromisesById: {} as Record<number, Promise<Conversation> | undefined>,
         currentConversationId: null as number | null,
+        replyTarget: null as ChatMessage | null,
         myId: null as number | null,
         isConnected: false,
         conversations: [] as Conversation[],
@@ -471,13 +478,24 @@ export const useChatStore = defineStore('chat', {
         },
 
         // Hàm gửi tin nhắn đi
-        sendMessage(content: string) {
+        setReplyTarget(message: ChatMessage) {
+            if (message.recalledAt) return;
+            this.replyTarget = message;
+        },
+
+        clearReplyTarget() {
+            this.replyTarget = null;
+        },
+
+        sendMessage(content: string, mentionedUserIds: number[] = []) {
             if (!content.trim() || !this.currentConversationId || !this.myUserName) return;
 
             const clientTempId = crypto.randomUUID();
+            const replyTo = this.replyTarget;
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
+                clientMessageId: clientTempId,
                 conversationId: this.currentConversationId,
                 type: 'text',
                 content: content.trim(),
@@ -485,17 +503,29 @@ export const useChatStore = defineStore('chat', {
                 senderId: this.myId ?? undefined,
                 senderName: this.myDisplayName || this.myUserName,
                 sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
+                replyToMessageId: replyTo?.id,
+                replyTo: replyTo ? {
+                    id: replyTo.id,
+                    senderName: replyTo.senderName ?? replyTo.sender?.displayName ?? replyTo.sender?.username ?? 'Unknown',
+                    type: replyTo.type ?? 'text',
+                    contentPreview: replyTo.recalledAt ? 'Tin nhắn đã được thu hồi' : (replyTo.content || replyTo.fileName || '[Media]'),
+                    recalled: Boolean(replyTo.recalledAt),
+                } : null,
                 localStatus: 'sending',
             };
 
             this.pushMessage(optimisticMessage);
             this.stopTyping(this.currentConversationId);
+            this.clearReplyTarget();
 
             socket.emit("send_message", {
                 conversationId: this.currentConversationId,
                 type: 'text',
                 content: content.trim(),
                 clientTempId,
+                clientMessageId: clientTempId,
+                replyToMessageId: replyTo?.id,
+                mentionedUserIds,
             }, (response: ChatMessage) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
                 if (response && response.id) {
@@ -504,7 +534,7 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
-        async sendMediaMessage(file: File, caption = '') {
+        async sendMediaMessage(file: File, caption = '', mentionedUserIds: number[] = []) {
             if (!this.currentConversationId || !this.myUserName) return;
 
             const token = getAccessToken();
@@ -513,10 +543,12 @@ export const useChatStore = defineStore('chat', {
 
             const clientTempId = crypto.randomUUID();
             const conversationId = this.currentConversationId;
+            const replyTo = this.replyTarget;
             const previewUrl = URL.createObjectURL(file);
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
+                clientMessageId: clientTempId,
                 conversationId,
                 type: resolveLocalMessageType(file),
                 content: caption.trim(),
@@ -531,6 +563,14 @@ export const useChatStore = defineStore('chat', {
                 senderId: this.myId ?? undefined,
                 senderName: this.myDisplayName || this.myUserName,
                 sender: this.myId ? { id: this.myId, username: this.myUserName, displayName: this.myDisplayName } : undefined,
+                replyToMessageId: replyTo?.id,
+                replyTo: replyTo ? {
+                    id: replyTo.id,
+                    senderName: replyTo.senderName ?? replyTo.sender?.displayName ?? replyTo.sender?.username ?? 'Unknown',
+                    type: replyTo.type ?? 'text',
+                    contentPreview: replyTo.recalledAt ? 'Tin nhắn đã được thu hồi' : (replyTo.content || replyTo.fileName || '[Media]'),
+                    recalled: Boolean(replyTo.recalledAt),
+                } : null,
                 localStatus: 'sending',
             };
 
@@ -539,9 +579,13 @@ export const useChatStore = defineStore('chat', {
                 file,
                 caption: caption.trim(),
                 previewUrl,
+                clientMessageId: clientTempId,
+                replyToMessageId: replyTo?.id,
+                mentionedUserIds,
             });
             this.pushMessage(optimisticMessage);
             this.stopTyping(conversationId);
+            this.clearReplyTarget();
             await this.uploadPendingMedia(clientTempId);
         },
 
@@ -607,6 +651,9 @@ export const useChatStore = defineStore('chat', {
                     file: uploadFile,
                     caption: pendingUpload.caption,
                     clientTempId,
+                    clientMessageId: pendingUpload.clientMessageId,
+                    replyToMessageId: pendingUpload.replyToMessageId,
+                    mentionedUserIds: pendingUpload.mentionedUserIds,
                     onProgress: (progress) => {
                         this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
                             uploadProgress: progress,
@@ -630,6 +677,7 @@ export const useChatStore = defineStore('chat', {
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
+                clientMessageId: clientTempId,
                 conversationId: this.currentConversationId,
                 type: 'gif',
                 content: caption.trim(),
@@ -650,6 +698,7 @@ export const useChatStore = defineStore('chat', {
                 content: caption.trim(),
                 fileUrl: gifUrl.trim(),
                 clientTempId,
+                clientMessageId: clientTempId,
             }, (response: ChatMessage) => {
                 if (response && response.id) {
                     this.pushMessage(response);
@@ -804,7 +853,9 @@ export const useChatStore = defineStore('chat', {
             if (index !== -1) {
                 const conv = this.conversations[index];
                 const isCallEvent = data.lastMessageType === 'call_event';
-                conv.lastMessageContent = isCallEvent
+                conv.lastMessageContent = data.isRecallUpdate
+                    ? data.lastMessageContent
+                    : isCallEvent
                     ? data.lastMessageContent
                     : (data.senderName === 'Bạn' ? 'Bạn: ' : `${data.senderName}: `) + data.lastMessageContent;
                 conv.lastMessage = {
@@ -815,7 +866,9 @@ export const useChatStore = defineStore('chat', {
                 };
                 conv.lastMessageIndex = data.lastMessageIndex;
 
-                if (this.currentConversationId !== data.conversationId) {
+                if (data.isRecallUpdate) {
+                    conv.unreadCount = conv.unreadCount || 0;
+                } else if (this.currentConversationId !== data.conversationId) {
                     conv.unreadCount = (conv.unreadCount || 0) + 1;
                 } else {
                     this.markAsRead(data.conversationId, data.lastMessageIndex);
@@ -824,6 +877,91 @@ export const useChatStore = defineStore('chat', {
                 // Đẩy lên Top
                 this.conversations.splice(index, 1);
                 this.conversations.unshift(conv);
+            }
+        },
+
+        setReaction(message: ChatMessage, emoji: string) {
+            if (!message.conversationId || message.recalledAt) return;
+            socket.emit('message:reaction:set', {
+                conversationId: message.conversationId,
+                messageId: message.id,
+                emoji,
+            });
+        },
+
+        removeReaction(message: ChatMessage) {
+            if (!message.conversationId) return;
+            socket.emit('message:reaction:remove', {
+                conversationId: message.conversationId,
+                messageId: message.id,
+            });
+        },
+
+        recallMessage(message: ChatMessage) {
+            if (!message.conversationId || message.senderId !== this.myId || message.recalledAt) return;
+            socket.emit('message:recall', {
+                conversationId: message.conversationId,
+                messageId: message.id,
+            });
+        },
+
+        applyReactionUpdate(update: MessageReactionUpdate) {
+            const messages = this.messagesByConversationId[update.conversationId] ?? [];
+            this.messagesByConversationId[update.conversationId] = messages.map((message) => {
+                return message.id === update.messageId
+                    ? { ...message, reactions: update.reactions }
+                    : message;
+            });
+        },
+
+        applyRecallUpdate(update: MessageRecallUpdate) {
+            const messages = this.messagesByConversationId[update.conversationId] ?? [];
+            this.messagesByConversationId[update.conversationId] = messages.map((message) => {
+                if (message.id === update.messageId) {
+                    return {
+                        ...message,
+                        content: '',
+                        type: 'text',
+                        fileUrl: null,
+                        filePublicId: null,
+                        fileResourceType: null,
+                        fileName: null,
+                        fileMimeType: null,
+                        fileSizeBytes: null,
+                        fileFormat: null,
+                        fileWidth: null,
+                        fileHeight: null,
+                        recalledAt: update.recalledAt,
+                        recalledByUserId: update.recalledByUserId,
+                        reactions: [],
+                    };
+                }
+
+                if (message.replyTo?.id === update.messageId) {
+                    return {
+                        ...message,
+                        replyTo: {
+                            ...message.replyTo,
+                            contentPreview: 'Tin nhắn đã được thu hồi',
+                            recalled: true,
+                        },
+                    };
+                }
+
+                return message;
+            });
+
+            if (update.lastMessage) {
+                const conv = this.conversations.find((conversation) => conversation.id === update.conversationId);
+                if (conv) {
+                    conv.lastMessage = {
+                        id: update.lastMessage.id,
+                        content: update.lastMessage.content,
+                        senderName: conv.lastMessage.senderName,
+                        type: update.lastMessage.type,
+                    };
+                    conv.lastMessageContent = update.lastMessage.content;
+                }
             }
         },
 

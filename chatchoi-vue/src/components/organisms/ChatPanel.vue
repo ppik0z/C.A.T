@@ -124,6 +124,11 @@ const currentSearchState = computed(() => {
     : null;
 });
 
+const currentMembers = computed(() => {
+  if (!props.conversation?.isGroup) return [];
+  return chatStore.conversationDetailsById[props.conversation.id]?.members ?? props.conversation.members ?? [];
+});
+
 const activeSearchResult = computed(() => {
   const state = currentSearchState.value;
   if (!state || state.activeResultIndex < 0) return null;
@@ -287,6 +292,10 @@ watch(
     pendingScrollAnchorIndex.value = null;
     pendingPrependHeight.value = null;
     pendingPrependAnchor.value = null;
+    chatStore.clearReplyTarget();
+    if (props.conversation?.isGroup) {
+      void chatStore.loadConversationDetail(props.conversation.id);
+    }
     void nextTick(() => scrollToBottom('auto'));
   },
 );
@@ -457,6 +466,10 @@ onBeforeUnmount(() => {
               :is-own="isOwnMessage(message)"
               :message="message"
               :status-text="isOwnMessage(message) ? chatStore.getMessageDisplayStatus(message, props.conversation) : undefined"
+              @react="chatStore.setReaction"
+              @recall="chatStore.recallMessage"
+              @remove-reaction="chatStore.removeReaction"
+              @reply="chatStore.setReplyTarget"
               @retry-media="chatStore.retryMediaMessage"
             />
           </div>
@@ -476,6 +489,10 @@ onBeforeUnmount(() => {
       </div>
 
       <ComposerBar
+        :is-group="Boolean(props.conversation?.isGroup)"
+        :members="currentMembers"
+        :reply-target="chatStore.replyTarget"
+        @cancel-reply="chatStore.clearReplyTarget"
         @send="chatStore.sendMessage"
         @send-media="chatStore.sendMediaMessage"
         @send-gif="chatStore.sendGifMessage"

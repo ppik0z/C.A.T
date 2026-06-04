@@ -8,6 +8,9 @@ export const uploadMediaMessage = async (
     file: File;
     caption?: string;
     clientTempId?: string;
+    clientMessageId?: string;
+    replyToMessageId?: number;
+    mentionedUserIds?: number[];
     onProgress?: (progress: number) => void;
   },
 ): Promise<ChatMessage> => {
@@ -29,6 +32,9 @@ const sendUpload = (
     formData.append('file', payload.file);
     if (payload.caption) formData.append('caption', payload.caption);
     if (payload.clientTempId) formData.append('clientTempId', payload.clientTempId);
+    if (payload.clientMessageId) formData.append('clientMessageId', payload.clientMessageId);
+    if (payload.replyToMessageId) formData.append('replyToMessageId', payload.replyToMessageId.toString());
+    if (payload.mentionedUserIds?.length) formData.append('mentionedUserIds', JSON.stringify(payload.mentionedUserIds));
 
     const request = new XMLHttpRequest();
     request.open('POST', `${apiBaseUrl}/messages/media`);

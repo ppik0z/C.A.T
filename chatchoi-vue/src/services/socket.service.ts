@@ -11,6 +11,8 @@ import type {
     Conversation,
     ConversationListUpdate,
     LoadMessagesSuccessPayload,
+    MessageReactionUpdate,
+    MessageRecallUpdate,
     MessageSearchResult,
     MessageStatusUpdate,
     ReadStateUpdate,
@@ -139,6 +141,18 @@ const registerSocketListeners = () => {
 
     socket.on("message_status_updated", (data: MessageStatusUpdate) => {
         chatStore.applyMessageStatusUpdate(data);
+    });
+
+    socket.on("message:reaction:updated", (data: MessageReactionUpdate) => {
+        chatStore.applyReactionUpdate(data);
+    });
+
+    socket.on("message:recalled", (data: MessageRecallUpdate) => {
+        chatStore.applyRecallUpdate(data);
+    });
+
+    socket.on("mention_received", (data: { conversationId: number; messageId: number; senderName: string }) => {
+        console.log(`${data.senderName} đã nhắc đến bạn trong đoạn chat ${data.conversationId}.`);
     });
 
     socket.on("read_state_updated", (data: ReadStateUpdate) => {

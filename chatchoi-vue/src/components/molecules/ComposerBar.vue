@@ -2,11 +2,25 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import IconButton from '../atoms/IconButton.vue';
 import { formatFileSize } from '../../utils/chatPresentation';
+import type { ChatMessage, ConversationMember } from '../../types/chat';
+
+interface Props {
+  members?: ConversationMember[];
+  isGroup?: boolean;
+  replyTarget?: ChatMessage | null;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  members: () => [],
+  isGroup: false,
+  replyTarget: null,
+});
 
 const emit = defineEmits<{
-  send: [content: string];
-  sendMedia: [file: File, caption: string];
+  send: [content: string, mentionedUserIds: number[]];
+  sendMedia: [file: File, caption: string, mentionedUserIds: number[]];
   sendGif: [gifUrl: string, caption: string];
+  cancelReply: [];
   typingStart: [];
   typingStop: [];
 }>();
@@ -16,6 +30,9 @@ const selectedFile = ref<File | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const previewUrl = ref<string | null>(null);
 const errorText = ref('');
+const mentionSearch = ref('');
+const mentionStartIndex = ref<number | null>(null);
+const selectedMentionIdsByUsername = ref<Record<string, number>>({});
 let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -40,6 +57,23 @@ const allowedMimeTypes = new Set([
 
 const isSelectedImage = computed(() => selectedFile.value?.type.startsWith('image/') ?? false);
 const isSelectedVideo = computed(() => selectedFile.value?.type.startsWith('video/') ?? false);
+const mentionedUserIds = computed(() => {
+  return Object.entries(selectedMentionIdsByUsername.value)
+    .filter(([username]) => text.value.includes(`@${username}`))
+    .map(([, userId]) => userId);
+});
+const mentionOptions = computed(() => {
+  if (!props.isGroup || mentionStartIndex.value === null) return [];
+  const query = mentionSearch.value.trim().toLowerCase();
+  return props.members
+    .filter((member) => {
+      if (!member.username) return false;
+      return !query
+        || member.username.toLowerCase().includes(query)
+        || (member.displayName?.toLowerCase().includes(query) ?? false);
+    })
+    .slice(0, 6);
+});
 
 const clearTypingStopTimer = () => {
   if (!typingStopTimer) return;
@@ -52,13 +86,16 @@ const handleSend = () => {
   if (!content && !selectedFile.value) return;
 
   if (selectedFile.value) {
-    emit('sendMedia', selectedFile.value, content);
+    emit('sendMedia', selectedFile.value, content, mentionedUserIds.value);
     clearSelectedFile();
   } else {
-    emit('send', content);
+    emit('send', content, mentionedUserIds.value);
   }
 
   text.value = '';
+  selectedMentionIdsByUsername.value = {};
+  mentionStartIndex.value = null;
+  mentionSearch.value = '';
   clearTypingStopTimer();
   emit('typingStop');
 };
@@ -119,7 +156,37 @@ const handleGif = () => {
   emit('typingStop');
 };
 
+const updateMentionSearch = () => {
+  if (!props.isGroup) return;
+  const cursorIndex = text.value.length;
+  const beforeCursor = text.value.slice(0, cursorIndex);
+  const match = beforeCursor.match(/(^|\s)@([\w.]*)$/);
+  if (!match) {
+    mentionStartIndex.value = null;
+    mentionSearch.value = '';
+    return;
+  }
+
+  mentionStartIndex.value = cursorIndex - match[2].length - 1;
+  mentionSearch.value = match[2];
+};
+
+const selectMention = (member: ConversationMember) => {
+  if (mentionStartIndex.value === null || !member.username) return;
+  const start = mentionStartIndex.value;
+  const before = text.value.slice(0, start);
+  const after = text.value.slice(text.value.length);
+  text.value = `${before}@${member.username} ${after}`;
+  selectedMentionIdsByUsername.value = {
+    ...selectedMentionIdsByUsername.value,
+    [member.username]: member.userId,
+  };
+  mentionStartIndex.value = null;
+  mentionSearch.value = '';
+};
+
 watch(text, (value) => {
+  updateMentionSearch();
   clearTypingStopTimer();
   if (!value.trim()) {
     emit('typingStop');
@@ -141,7 +208,25 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <footer class="px-3 sm:px-6 py-3 sm:py-4 bg-surface-container-lowest border-t border-outline-variant">
+  <footer class="relative px-3 sm:px-6 py-3 sm:py-4 bg-surface-container-lowest border-t border-outline-variant">
+    <div
+      v-if="props.replyTarget"
+      class="mb-3 flex items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-3 py-2"
+    >
+      <div class="min-w-0 flex-1 border-l-4 border-primary pl-3">
+        <p class="text-xs font-bold uppercase text-primary">Đang trả lời</p>
+        <p class="truncate text-sm font-semibold text-on-surface">
+          {{ props.replyTarget.senderName ?? props.replyTarget.sender?.displayName ?? props.replyTarget.sender?.username }}
+        </p>
+        <p class="truncate text-xs text-on-surface-variant">
+          {{ props.replyTarget.recalledAt ? 'Tin nhắn đã được thu hồi' : (props.replyTarget.content || props.replyTarget.fileName || '[Media]') }}
+        </p>
+      </div>
+      <button class="h-8 w-8 rounded-full text-secondary hover:bg-surface-container-high" type="button" @click="emit('cancelReply')">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+
     <div class="flex items-center gap-2 sm:gap-3">
       <input
         ref="fileInputRef"
@@ -153,6 +238,26 @@ onBeforeUnmount(() => {
       <IconButton class="hidden xs:flex" icon="add" label="Add attachment" @click="openFilePicker" />
 
       <div class="flex-1 flex items-center bg-surface-container-low border border-outline-variant rounded-full px-3 sm:px-4 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all min-w-0">
+        <div
+          v-if="mentionOptions.length > 0"
+          class="absolute bottom-20 left-4 right-4 sm:left-8 sm:right-8 z-20 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
+        >
+          <button
+            v-for="member in mentionOptions"
+            :key="member.userId"
+            class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface-container-high"
+            type="button"
+            @click="selectMention(member)"
+          >
+            <span class="h-8 w-8 rounded-full bg-primary-container text-primary flex items-center justify-center text-xs font-bold">
+              {{ (member.displayName || member.username)[0]?.toUpperCase() }}
+            </span>
+            <span class="min-w-0">
+              <span class="block truncate text-sm font-semibold text-on-surface">{{ member.displayName || member.username }}</span>
+              <span class="block truncate text-xs text-on-surface-variant">@{{ member.username }}</span>
+            </span>
+          </button>
+        </div>
         <input
           v-model="text"
           class="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-sm sm:text-base py-2 placeholder:text-outline"
