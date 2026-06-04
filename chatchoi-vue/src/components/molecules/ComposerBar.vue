@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import IconButton from '../atoms/IconButton.vue';
 import { formatFileSize } from '../../utils/chatPresentation';
 import type { ChatMessage, ConversationMember } from '../../types/chat';
@@ -19,7 +19,6 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   send: [content: string, mentionedUserIds: number[]];
   sendMedia: [file: File, caption: string, mentionedUserIds: number[]];
-  sendGif: [gifUrl: string, caption: string];
   cancelReply: [];
   typingStart: [];
   typingStop: [];
@@ -28,34 +27,20 @@ const emit = defineEmits<{
 const text = ref('');
 const selectedFile = ref<File | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
-const attachmentMenuRef = ref<HTMLElement | null>(null);
+const messageInputRef = ref<HTMLInputElement | null>(null);
 const previewUrl = ref<string | null>(null);
 const errorText = ref('');
 const mentionSearch = ref('');
 const mentionStartIndex = ref<number | null>(null);
 const selectedMentionIdsByUsername = ref<Record<string, number>>({});
-const isAttachmentMenuOpen = ref(false);
 const fileInputAccept = ref('');
+const isEmojiPickerOpen = ref(false);
 let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const mediaFileAccept = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime';
 const documentFileAccept = 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv';
 const allFileAccept = `${mediaFileAccept},${documentFileAccept}`;
-
-const attachmentActions = [
-  {
-    icon: 'photo_library',
-    label: 'Ảnh hoặc video',
-    description: 'Chọn media từ máy',
-    accept: mediaFileAccept,
-  },
-  {
-    icon: 'description',
-    label: 'Tài liệu',
-    description: 'PDF, Office, text',
-    accept: documentFileAccept,
-  },
-] as const;
+const quickEmojis = ['😀', '😂', '😍', '🥰', '😎', '😭', '😡', '👍', '🙏', '🔥', '❤️', '🎉'];
 
 const allowedMimeTypes = new Set([
   'image/jpeg',
@@ -123,20 +108,7 @@ const handleSend = () => {
 
 const openFilePicker = (accept = allFileAccept) => {
   fileInputAccept.value = accept;
-  isAttachmentMenuOpen.value = false;
   fileInputRef.value?.click();
-};
-
-const toggleAttachmentMenu = () => {
-  errorText.value = '';
-  isAttachmentMenuOpen.value = !isAttachmentMenuOpen.value;
-};
-
-const handleOutsidePointerDown = (event: PointerEvent) => {
-  if (!isAttachmentMenuOpen.value) return;
-  const menuElement = attachmentMenuRef.value;
-  if (!menuElement || event.target instanceof Node && menuElement.contains(event.target)) return;
-  isAttachmentMenuOpen.value = false;
 };
 
 const handleFileSelected = (event: Event) => {
@@ -170,26 +142,22 @@ const clearSelectedFile = () => {
   previewUrl.value = null;
 };
 
-const handleGif = () => {
+const toggleEmojiPicker = () => {
   errorText.value = '';
-  isAttachmentMenuOpen.value = false;
-  const gifUrl = window.prompt('GIF URL');
-  if (!gifUrl?.trim()) return;
-  try {
-    const url = new URL(gifUrl.trim());
-    if (url.protocol !== 'https:') {
-      errorText.value = 'GIF URL phải dùng HTTPS.';
-      return;
-    }
-  } catch {
-    errorText.value = 'GIF URL không hợp lệ.';
-    return;
-  }
+  isEmojiPickerOpen.value = !isEmojiPickerOpen.value;
+};
 
-  emit('sendGif', gifUrl.trim(), text.value.trim());
-  text.value = '';
-  clearTypingStopTimer();
-  emit('typingStop');
+const insertEmoji = async (emoji: string) => {
+  const input = messageInputRef.value;
+  const start = input?.selectionStart ?? text.value.length;
+  const end = input?.selectionEnd ?? start;
+  text.value = `${text.value.slice(0, start)}${emoji}${text.value.slice(end)}`;
+  isEmojiPickerOpen.value = false;
+
+  await nextTick();
+  const cursorPosition = start + emoji.length;
+  messageInputRef.value?.focus();
+  messageInputRef.value?.setSelectionRange(cursorPosition, cursorPosition);
 };
 
 const updateMentionSearch = () => {
@@ -237,14 +205,9 @@ watch(text, (value) => {
 });
 
 onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', handleOutsidePointerDown);
   clearTypingStopTimer();
   clearSelectedFile();
   emit('typingStop');
-});
-
-onMounted(() => {
-  document.addEventListener('pointerdown', handleOutsidePointerDown);
 });
 </script>
 
@@ -276,45 +239,8 @@ onMounted(() => {
         :accept="fileInputAccept || allFileAccept"
         @change="handleFileSelected"
       />
-      <div ref="attachmentMenuRef" class="relative shrink-0">
-        <IconButton
-          icon="add_circle"
-          label="Thêm media"
-          :active="isAttachmentMenuOpen"
-          @click="toggleAttachmentMenu"
-        />
-
-        <div
-          v-if="isAttachmentMenuOpen"
-          class="absolute bottom-12 left-0 z-30 w-56 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
-        >
-          <button
-            v-for="action in attachmentActions"
-            :key="action.label"
-            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none"
-            type="button"
-            @click="openFilePicker(action.accept)"
-          >
-            <span class="material-symbols-outlined text-[22px] text-primary">{{ action.icon }}</span>
-            <span class="min-w-0">
-              <span class="block text-sm font-semibold text-on-surface">{{ action.label }}</span>
-              <span class="block text-xs text-on-surface-variant">{{ action.description }}</span>
-            </span>
-          </button>
-
-          <button
-            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none"
-            type="button"
-            @click="handleGif"
-          >
-            <span class="material-symbols-outlined text-[22px] text-primary">gif_box</span>
-            <span class="min-w-0">
-              <span class="block text-sm font-semibold text-on-surface">GIF</span>
-              <span class="block text-xs text-on-surface-variant">Gửi bằng URL HTTPS</span>
-            </span>
-          </button>
-        </div>
-      </div>
+      <IconButton icon="add_photo_alternate" label="Thêm ảnh hoặc video" @click="openFilePicker(mediaFileAccept)" />
+      <IconButton icon="attach_file" label="Đính kèm tài liệu" @click="openFilePicker(documentFileAccept)" />
 
       <div class="flex-1 flex items-center bg-surface-container-low border border-outline-variant rounded-full px-3 sm:px-4 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all min-w-0">
         <div
@@ -338,15 +264,39 @@ onMounted(() => {
           </button>
         </div>
         <input
+          ref="messageInputRef"
           v-model="text"
           class="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-sm sm:text-base py-2 placeholder:text-outline"
           placeholder="Type your message..."
           type="text"
           @keyup.enter="handleSend"
         />
-        <button class="hidden sm:flex w-8 h-8 items-center justify-center text-primary hover:bg-surface-container-highest rounded-full transition-colors shrink-0" type="button" @click="handleGif">
-          <span class="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
-        </button>
+        <div class="relative shrink-0">
+          <div
+            v-if="isEmojiPickerOpen"
+            class="absolute bottom-10 right-0 z-30 grid w-48 grid-cols-6 gap-1 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
+          >
+            <button
+              v-for="emoji in quickEmojis"
+              :key="emoji"
+              class="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-colors hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none"
+              type="button"
+              :aria-label="`Chèn emoji ${emoji}`"
+              @click="insertEmoji(emoji)"
+            >
+              {{ emoji }}
+            </button>
+          </div>
+          <button
+            class="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-highest"
+            type="button"
+            aria-label="Thêm emoji"
+            title="Thêm emoji"
+            @click="toggleEmojiPicker"
+          >
+            <span class="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
+          </button>
+        </div>
       </div>
 
       <IconButton icon="send" label="Send message" @click="handleSend" />

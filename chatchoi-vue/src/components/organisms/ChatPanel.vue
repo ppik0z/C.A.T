@@ -495,7 +495,6 @@ onBeforeUnmount(() => {
         @cancel-reply="chatStore.clearReplyTarget"
         @send="chatStore.sendMessage"
         @send-media="chatStore.sendMediaMessage"
-        @send-gif="chatStore.sendGifMessage"
         @typing-start="props.conversation && chatStore.startTyping(props.conversation.id)"
         @typing-stop="props.conversation && chatStore.stopTyping(props.conversation.id)"
       />
