@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
+import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
 import { formatFileSize, formatMessageTime } from '../../utils/chatPresentation';
 import { resolveDisplayName } from '../../utils/userPresentation';
@@ -20,6 +21,8 @@ const emit = defineEmits<{
 }>();
 
 const copied = ref(false);
+const isMenuOpen = ref(false);
+const isReactionOpen = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
@@ -51,12 +54,47 @@ const copyMessage = async () => {
   if (!props.message.content || props.message.recalledAt) return;
   await navigator.clipboard.writeText(props.message.content);
   copied.value = true;
+  closeActions();
   if (copiedTimer) clearTimeout(copiedTimer);
   copiedTimer = setTimeout(() => {
     copied.value = false;
     copiedTimer = null;
   }, 1200);
 };
+
+const closeActions = () => {
+  isMenuOpen.value = false;
+  isReactionOpen.value = false;
+};
+
+const toggleMenu = () => {
+  isReactionOpen.value = false;
+  isMenuOpen.value = !isMenuOpen.value;
+};
+
+const toggleReactionPicker = () => {
+  isMenuOpen.value = false;
+  isReactionOpen.value = !isReactionOpen.value;
+};
+
+const replyToMessage = () => {
+  emit('reply', props.message);
+  closeActions();
+};
+
+const recallMessage = () => {
+  emit('recall', props.message);
+  closeActions();
+};
+
+const reactToMessage = (emoji: string) => {
+  emit('react', props.message, emoji);
+  closeActions();
+};
+
+onBeforeUnmount(() => {
+  if (copiedTimer) clearTimeout(copiedTimer);
+});
 </script>
 
 <template>
@@ -84,47 +122,6 @@ const copyMessage = async () => {
     </div>
 
     <div :class="['flex flex-col gap-1 min-w-0', props.isOwn ? 'items-end' : 'items-start']">
-      <div
-        v-if="!props.message.localStatus"
-        :class="['message-actions flex flex-wrap items-center gap-1 rounded-full bg-surface-container-lowest/95 px-2 py-1 shadow-sm border border-outline-variant', props.isOwn ? 'justify-end' : 'justify-start']"
-      >
-        <button
-          v-if="props.message.content && !props.message.recalledAt"
-          class="action-pill"
-          type="button"
-          @click="copyMessage"
-        >
-          {{ copied ? 'Đã copy' : 'Copy' }}
-        </button>
-        <button
-          v-if="!props.message.recalledAt"
-          class="action-pill"
-          type="button"
-          @click="emit('reply', props.message)"
-        >
-          Reply
-        </button>
-        <button
-          v-if="props.isOwn && !props.message.recalledAt"
-          class="action-pill text-error"
-          type="button"
-          @click="emit('recall', props.message)"
-        >
-          Thu hồi
-        </button>
-        <template v-if="!props.message.recalledAt">
-          <button
-            v-for="emoji in quickReactions"
-            :key="emoji"
-            class="h-7 w-7 rounded-full hover:bg-surface-container-high text-sm"
-            type="button"
-            @click="emit('react', props.message, emoji)"
-          >
-            {{ emoji }}
-          </button>
-        </template>
-      </div>
-
       <div
         :class="[
           'p-3 sm:p-4 shadow-sm break-words',
@@ -210,7 +207,7 @@ const copyMessage = async () => {
             reaction.reactedByMe ? 'border-primary bg-primary-container text-primary' : 'border-outline-variant bg-surface-container-lowest text-on-surface-variant',
           ]"
           type="button"
-          @click="reaction.reactedByMe ? emit('removeReaction', props.message) : emit('react', props.message, reaction.emoji)"
+          @click="reaction.reactedByMe ? emit('removeReaction', props.message) : reactToMessage(reaction.emoji)"
         >
           {{ reaction.emoji }} {{ reaction.count }}
         </button>
@@ -226,6 +223,92 @@ const copyMessage = async () => {
           {{ getFooterStatusText(props.message) }}
         </span>
         <span v-if="props.isOwn" class="material-symbols-outlined text-[16px] text-primary">done_all</span>
+      </div>
+    </div>
+
+    <div
+      v-if="!props.message.localStatus"
+      :class="['relative flex shrink-0 items-center gap-1 self-end pb-5', props.isOwn ? 'flex-row-reverse' : '']"
+    >
+      <button
+        v-if="!props.message.recalledAt"
+        class="message-icon-button"
+        type="button"
+        aria-label="Thả reaction"
+        title="Thả reaction"
+        @click="toggleReactionPicker"
+      >
+        <Smile :size="17" stroke-width="2.2" />
+      </button>
+
+      <button
+        class="message-icon-button"
+        type="button"
+        aria-label="Mở tuỳ chọn tin nhắn"
+        title="Tuỳ chọn"
+        @click="toggleMenu"
+      >
+        <MoreHorizontal :size="18" stroke-width="2.2" />
+      </button>
+
+      <div
+        v-if="isReactionOpen && !props.message.recalledAt"
+        :class="[
+          'absolute bottom-14 z-20 flex gap-1 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl',
+          props.isOwn ? 'right-0' : 'left-0',
+        ]"
+      >
+        <template v-if="!props.message.recalledAt">
+          <button
+            v-for="emoji in quickReactions"
+            :key="emoji"
+            class="h-9 w-9 rounded-full text-lg hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            type="button"
+            @click="reactToMessage(emoji)"
+          >
+            {{ emoji }}
+          </button>
+        </template>
+      </div>
+
+      <div
+        v-if="isMenuOpen"
+        :class="[
+          'absolute bottom-14 z-20 w-48 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest py-1 shadow-xl',
+          props.isOwn ? 'right-0' : 'left-0',
+        ]"
+      >
+        <div v-if="copied" class="px-3 py-2 text-xs font-bold text-primary">Đã sao chép</div>
+        <button
+          v-if="props.message.content && !props.message.recalledAt"
+          class="menu-item"
+          type="button"
+          @click="copyMessage"
+        >
+          <Copy :size="16" />
+          <span>Copy</span>
+        </button>
+        <button
+          v-if="!props.message.recalledAt"
+          class="menu-item"
+          type="button"
+          @click="replyToMessage"
+        >
+          <Reply :size="16" />
+          <span>Trả lời</span>
+        </button>
+        <button
+          v-if="props.isOwn && !props.message.recalledAt"
+          class="menu-item text-error hover:bg-error-container/30"
+          type="button"
+          @click="recallMessage"
+        >
+          <RotateCcw :size="16" />
+          <span>Thu hồi</span>
+        </button>
+        <div v-if="props.message.recalledAt" class="px-3 py-2 text-sm text-on-surface-variant">
+          Không còn thao tác khả dụng.
+        </div>
       </div>
     </div>
   </div>
@@ -247,40 +330,46 @@ const copyMessage = async () => {
     transform: rotate(360deg);
   }
 }
-</style>
-
-<style scoped>
-.message-actions {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.flex:hover > .message-actions,
-.message-actions:focus-within {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.action-pill {
+.message-icon-button {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
   border-radius: 9999px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.7rem;
+  border: 1px solid var(--color-outline-variant);
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 94%, transparent);
+  color: var(--color-on-surface-variant);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.08);
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.message-icon-button:hover,
+.message-icon-button:focus-visible {
+  background: var(--color-surface-container-high);
+  color: var(--color-primary);
+  outline: none;
+}
+
+.message-icon-button:active {
+  transform: scale(0.96);
+}
+
+.menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-on-surface-variant);
 }
 
-.action-pill:hover {
+.menu-item:hover,
+.menu-item:focus-visible {
   background: var(--color-surface-container-high);
-}
-
-@media (hover: none) {
-  .message-actions {
-    opacity: 1;
-    pointer-events: auto;
-    transform: none;
-  }
+  outline: none;
 }
 </style>
