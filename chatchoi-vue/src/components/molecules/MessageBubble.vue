@@ -154,6 +154,21 @@ watch(
 
     <div :class="['flex flex-col gap-1 min-w-0', props.isOwn ? 'items-end' : 'items-start']">
       <div
+        v-if="props.message.replyTo"
+        :class="[
+          'max-w-[min(100%,22rem)] rounded-2xl border border-outline-variant bg-surface-container-high px-3 py-2 text-on-surface-variant shadow-sm',
+          props.isOwn ? 'rounded-br-md mr-2' : 'rounded-bl-md ml-2',
+        ]"
+      >
+        <p class="truncate text-[11px] font-bold text-secondary">
+          Trả lời {{ props.message.replyTo.senderName }}
+        </p>
+        <p class="mt-0.5 line-clamp-2 text-xs leading-4 opacity-85">
+          {{ props.message.replyTo.contentPreview }}
+        </p>
+      </div>
+
+      <div
         :class="[
           'p-3 sm:p-4 shadow-sm break-words',
           props.isOwn
@@ -164,13 +179,6 @@ watch(
         <p v-if="!props.isOwn" class="text-[11px] font-semibold opacity-70 mb-1 uppercase tracking-wider">
           {{ getSenderName(props.message) }}
         </p>
-        <div
-          v-if="props.message.replyTo"
-          class="mb-2 rounded-lg border-l-4 border-primary/70 bg-surface-container-low/70 px-3 py-2 text-xs"
-        >
-          <p class="font-semibold opacity-80">{{ props.message.replyTo.senderName }}</p>
-          <p class="line-clamp-2 opacity-75">{{ props.message.replyTo.contentPreview }}</p>
-        </div>
         <p v-if="props.message.recalledAt" class="text-sm italic opacity-75">
           Tin nhắn đã được thu hồi
         </p>

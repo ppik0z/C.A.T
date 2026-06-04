@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { Reply, X } from '@lucide/vue';
 import IconButton from '../atoms/IconButton.vue';
 import { formatFileSize } from '../../utils/chatPresentation';
 import type { ChatMessage, ConversationMember } from '../../types/chat';
@@ -215,19 +216,27 @@ onBeforeUnmount(() => {
   <footer class="relative px-3 sm:px-6 py-3 sm:py-4 bg-surface-container-lowest border-t border-outline-variant">
     <div
       v-if="props.replyTarget"
-      class="mb-3 flex items-center gap-3 rounded-xl border border-outline-variant bg-surface-container-low px-3 py-2"
+      class="mb-2 mx-1 sm:mx-2 flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low px-3 py-2 shadow-sm"
     >
-      <div class="min-w-0 flex-1 border-l-4 border-primary pl-3">
-        <p class="text-xs font-bold uppercase text-primary">Đang trả lời</p>
-        <p class="truncate text-sm font-semibold text-on-surface">
-          {{ props.replyTarget.senderName ?? props.replyTarget.sender?.displayName ?? props.replyTarget.sender?.username }}
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-container text-primary">
+        <Reply :size="17" stroke-width="2.3" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-xs font-bold text-primary">
+          Đang trả lời {{ props.replyTarget.senderName ?? props.replyTarget.sender?.displayName ?? props.replyTarget.sender?.username }}
         </p>
-        <p class="truncate text-xs text-on-surface-variant">
+        <p class="truncate text-sm font-semibold text-on-surface">
           {{ props.replyTarget.recalledAt ? 'Tin nhắn đã được thu hồi' : (props.replyTarget.content || props.replyTarget.fileName || '[Media]') }}
         </p>
       </div>
-      <button class="h-8 w-8 rounded-full text-secondary hover:bg-surface-container-high" type="button" @click="emit('cancelReply')">
-        <span class="material-symbols-outlined text-[20px]">close</span>
+      <button
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-secondary transition-colors hover:bg-surface-container-high hover:text-primary"
+        type="button"
+        aria-label="Huỷ trả lời"
+        title="Huỷ trả lời"
+        @click="emit('cancelReply')"
+      >
+        <X :size="17" stroke-width="2.3" />
       </button>
     </div>
 
