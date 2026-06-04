@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
 import { formatFileSize, formatMessageTime } from '../../utils/chatPresentation';
@@ -23,6 +23,7 @@ const emit = defineEmits<{
 const copied = ref(false);
 const isMenuOpen = ref(false);
 const isReactionOpen = ref(false);
+const actionRootRef = ref<HTMLElement | null>(null);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
@@ -71,6 +72,20 @@ const closeActions = () => {
   isReactionOpen.value = false;
 };
 
+const isAnyActionOpen = () => isMenuOpen.value || isReactionOpen.value;
+
+const handleOutsidePointerDown = (event: PointerEvent) => {
+  if (!isAnyActionOpen()) return;
+  const actionElement = actionRootRef.value;
+  if (actionElement && event.target instanceof Node && actionElement.contains(event.target)) return;
+  closeActions();
+};
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !isAnyActionOpen()) return;
+  closeActions();
+};
+
 const toggleMenu = () => {
   isReactionOpen.value = false;
   isMenuOpen.value = !isMenuOpen.value;
@@ -97,8 +112,20 @@ const reactToMessage = (emoji: string) => {
 };
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsidePointerDown);
+  document.removeEventListener('keydown', handleKeydown);
   if (copiedTimer) clearTimeout(copiedTimer);
 });
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsidePointerDown);
+  document.addEventListener('keydown', handleKeydown);
+});
+
+watch(
+  () => props.message.id,
+  () => closeActions(),
+);
 </script>
 
 <template>
@@ -232,6 +259,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="showMessageControls(props.message)"
+      ref="actionRootRef"
       :class="['relative flex shrink-0 items-center gap-1 self-end pb-5', props.isOwn ? 'flex-row-reverse' : '']"
     >
       <button
