@@ -149,6 +149,7 @@ export const conversationMembers = mysqlTable(
 // ─── Messages ─────────────────────────────────────────────────────────────────
 export const messages = mysqlTable('messages', {
   id: int('id').autoincrement().primaryKey(),
+  clientMessageId: varchar('clientMessageId', { length: 36 }),
   content: longtext('content'),
   type: varchar('type', { length: 50 }).notNull().default('text'),
   fileUrl: text('fileUrl'),
@@ -162,9 +163,17 @@ export const messages = mysqlTable('messages', {
   fileHeight: int('fileHeight'),
   senderId: int('senderId').notNull().references(() => users.id),
   conversationId: int('conversationId').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  replyToMessageId: int('replyToMessageId'),
   conversationIndex: int('conversationIndex').notNull().default(1),
+  recalledAt: datetime('recalledAt'),
+  recalledByUserId: int('recalledByUserId').references(() => users.id),
   createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (t) => [
+  uniqueIndex('uq_message_client_id').on(t.senderId, t.clientMessageId),
+  uniqueIndex('uq_message_conversation_index').on(t.conversationId, t.conversationIndex),
+  index('idx_message_conversation_index').on(t.conversationId, t.conversationIndex),
+  index('idx_message_reply_to').on(t.replyToMessageId),
+]);
 
 // ─── MessageStatuses ──────────────────────────────────────────────────────────
 export const messageStatuses = mysqlTable(
@@ -189,7 +198,10 @@ export const messageReactions = mysqlTable(
     emoji: varchar('emoji', { length: 50 }).notNull(),
     createdAt: datetime('createdAt').notNull().default(sql`CURRENT_TIMESTAMP`),
   },
-  (t) => [uniqueIndex('uq_msg_reaction').on(t.messageId, t.userId, t.emoji)],
+  (t) => [
+    uniqueIndex('uq_msg_reaction').on(t.messageId, t.userId),
+    index('idx_msg_reaction_message').on(t.messageId),
+  ],
 );
 
 // ─── CallSessions ─────────────────────────────────────────────────────────────
