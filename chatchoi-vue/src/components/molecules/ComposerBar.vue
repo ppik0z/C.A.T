@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import IconButton from '../atoms/IconButton.vue';
 import { formatFileSize } from '../../utils/chatPresentation';
 import type { ChatMessage, ConversationMember } from '../../types/chat';
@@ -28,13 +28,34 @@ const emit = defineEmits<{
 const text = ref('');
 const selectedFile = ref<File | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const attachmentMenuRef = ref<HTMLElement | null>(null);
 const previewUrl = ref<string | null>(null);
 const errorText = ref('');
 const mentionSearch = ref('');
 const mentionStartIndex = ref<number | null>(null);
 const selectedMentionIdsByUsername = ref<Record<string, number>>({});
+const isAttachmentMenuOpen = ref(false);
+const fileInputAccept = ref('');
 let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const mediaFileAccept = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime';
+const documentFileAccept = 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv';
+const allFileAccept = `${mediaFileAccept},${documentFileAccept}`;
+
+const attachmentActions = [
+  {
+    icon: 'photo_library',
+    label: 'Ảnh hoặc video',
+    description: 'Chọn media từ máy',
+    accept: mediaFileAccept,
+  },
+  {
+    icon: 'description',
+    label: 'Tài liệu',
+    description: 'PDF, Office, text',
+    accept: documentFileAccept,
+  },
+] as const;
 
 const allowedMimeTypes = new Set([
   'image/jpeg',
@@ -100,8 +121,22 @@ const handleSend = () => {
   emit('typingStop');
 };
 
-const openFilePicker = () => {
+const openFilePicker = (accept = allFileAccept) => {
+  fileInputAccept.value = accept;
+  isAttachmentMenuOpen.value = false;
   fileInputRef.value?.click();
+};
+
+const toggleAttachmentMenu = () => {
+  errorText.value = '';
+  isAttachmentMenuOpen.value = !isAttachmentMenuOpen.value;
+};
+
+const handleOutsidePointerDown = (event: PointerEvent) => {
+  if (!isAttachmentMenuOpen.value) return;
+  const menuElement = attachmentMenuRef.value;
+  if (!menuElement || event.target instanceof Node && menuElement.contains(event.target)) return;
+  isAttachmentMenuOpen.value = false;
 };
 
 const handleFileSelected = (event: Event) => {
@@ -137,6 +172,7 @@ const clearSelectedFile = () => {
 
 const handleGif = () => {
   errorText.value = '';
+  isAttachmentMenuOpen.value = false;
   const gifUrl = window.prompt('GIF URL');
   if (!gifUrl?.trim()) return;
   try {
@@ -201,9 +237,14 @@ watch(text, (value) => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsidePointerDown);
   clearTypingStopTimer();
   clearSelectedFile();
   emit('typingStop');
+});
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsidePointerDown);
 });
 </script>
 
@@ -232,10 +273,48 @@ onBeforeUnmount(() => {
         ref="fileInputRef"
         class="hidden"
         type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
+        :accept="fileInputAccept || allFileAccept"
         @change="handleFileSelected"
       />
-      <IconButton class="hidden xs:flex" icon="add" label="Add attachment" @click="openFilePicker" />
+      <div ref="attachmentMenuRef" class="relative shrink-0">
+        <IconButton
+          icon="add_circle"
+          label="Thêm media"
+          :active="isAttachmentMenuOpen"
+          @click="toggleAttachmentMenu"
+        />
+
+        <div
+          v-if="isAttachmentMenuOpen"
+          class="absolute bottom-12 left-0 z-30 w-56 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
+        >
+          <button
+            v-for="action in attachmentActions"
+            :key="action.label"
+            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none"
+            type="button"
+            @click="openFilePicker(action.accept)"
+          >
+            <span class="material-symbols-outlined text-[22px] text-primary">{{ action.icon }}</span>
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold text-on-surface">{{ action.label }}</span>
+              <span class="block text-xs text-on-surface-variant">{{ action.description }}</span>
+            </span>
+          </button>
+
+          <button
+            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-surface-container-high focus:bg-surface-container-high focus:outline-none"
+            type="button"
+            @click="handleGif"
+          >
+            <span class="material-symbols-outlined text-[22px] text-primary">gif_box</span>
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold text-on-surface">GIF</span>
+              <span class="block text-xs text-on-surface-variant">Gửi bằng URL HTTPS</span>
+            </span>
+          </button>
+        </div>
+      </div>
 
       <div class="flex-1 flex items-center bg-surface-container-low border border-outline-variant rounded-full px-3 sm:px-4 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all min-w-0">
         <div
@@ -301,14 +380,5 @@ onBeforeUnmount(() => {
     </div>
 
     <p v-if="errorText" class="mt-2 px-2 sm:px-4 text-xs text-error">{{ errorText }}</p>
-
   </footer>
 </template>
-
-<style scoped>
-@media (min-width: 420px) {
-  .xs\:flex {
-    display: flex;
-  }
-}
-</style>
