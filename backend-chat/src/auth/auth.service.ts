@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { DrizzleService } from '../database/drizzle.service';
 import { users, userProfiles, userSettings } from '../database/schema';
 import { eq } from 'drizzle-orm';
@@ -7,8 +7,10 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthSessionService } from './auth-session.service';
 import { PasswordHasherService } from './password-hasher.service';
 import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
+import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
 
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+const BCRYPT_MAX_PASSWORD_BYTES = 72;
+const DUMMY_PASSWORD_HASH = '$2b$12$t45DXE.uoPn.cmRdfllA6eTM/0ZObK1/mrcXDOyL4kwW7/G8qDBpy';
 
 export interface AuthResult {
   accessToken: string;
@@ -29,6 +31,7 @@ export class AuthService {
   async register(data: RegisterDto, userAgent?: string): Promise<AuthResult> {
     const db = this.drizzle.db;
     const username = this.normalizeUsername(data.username);
+    this.assertPasswordLength(data.password);
 
     const [existing] = await db
       .select({ id: users.id })
@@ -41,32 +44,46 @@ export class AuthService {
     }
 
     const hashedPassword = await this.passwordHasher.hash(data.password);
-    const userId = await db.transaction(async (tx) => {
-      const [newUser] = await tx.insert(users).values({
-        username,
-        displayName: data.displayName?.trim() || null,
-        password: hashedPassword,
+    let userId: number;
+    try {
+      userId = await db.transaction(async (tx) => {
+        const [newUser] = await tx.insert(users).values({
+          username,
+          displayName: data.displayName?.trim() || null,
+          password: hashedPassword,
+        });
+        await Promise.all([
+          tx.insert(userProfiles).values({ userId: newUser.insertId }),
+          tx.insert(userSettings).values({ userId: newUser.insertId }),
+        ]);
+        return newUser.insertId;
       });
-      await Promise.all([
-        tx.insert(userProfiles).values({ userId: newUser.insertId }),
-        tx.insert(userSettings).values({ userId: newUser.insertId }),
-      ]);
-      return newUser.insertId;
-    });
+    } catch (error) {
+      if (this.isDuplicateEntryError(error)) {
+        throw new ConflictException('Tên đăng nhập đã tồn tại!');
+      }
+      throw error;
+    }
 
     return this.createAuthenticatedSession(userId, userAgent);
   }
 
   async login(loginDto: LoginDto, userAgent?: string): Promise<AuthResult> {
     const { username, password } = loginDto;
+    const passwordWithinLimit = Buffer.byteLength(password, 'utf8') <= BCRYPT_MAX_PASSWORD_BYTES;
 
     const [user] = await this.drizzle.db
-      .select()
+      .select({
+        id: users.id,
+        password: users.password,
+      })
       .from(users)
       .where(eq(users.username, this.normalizeUsername(username)))
       .limit(1);
 
-    if (!user || !(await this.passwordHasher.verify(password, user.password))) {
+    const passwordMatches = passwordWithinLimit
+      && await this.passwordHasher.verify(password, user?.password ?? DUMMY_PASSWORD_HASH);
+    if (!user || !passwordMatches) {
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không chính xác!');
     }
 
@@ -74,10 +91,10 @@ export class AuthService {
   }
 
   async logout(refreshToken: string | null) {
-    await Promise.all([
-      this.sessions.revokeSerialized(refreshToken),
-      this.pushSubscriptions.revokeForSerializedSession(refreshToken),
-    ]);
+    const sessionId = await this.sessions.revokeSerialized(refreshToken);
+    if (sessionId) {
+      await this.pushSubscriptions.revokeForSession(sessionId);
+    }
   }
 
   async logoutAll(userId: number) {
@@ -106,13 +123,22 @@ export class AuthService {
   }
 
   private issueAccessToken(userId: number, sessionId: string) {
-    return this.jwtService.signAsync(
-      { userId, sid: sessionId },
-      { secret: process.env.JWT_SECRET, expiresIn: ACCESS_TOKEN_TTL_SECONDS },
-    );
+    return this.jwtService.signAsync({ userId, sid: sessionId });
   }
 
   private normalizeUsername(username: string) {
     return username.trim().toLowerCase();
+  }
+
+  private assertPasswordLength(password: string) {
+    if (Buffer.byteLength(password, 'utf8') > BCRYPT_MAX_PASSWORD_BYTES) {
+      throw new BadRequestException('Mật khẩu tối đa 72 byte.');
+    }
+  }
+
+  private isDuplicateEntryError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const candidate = error as { code?: unknown; cause?: { code?: unknown } };
+    return candidate.code === 'ER_DUP_ENTRY' || candidate.cause?.code === 'ER_DUP_ENTRY';
   }
 }

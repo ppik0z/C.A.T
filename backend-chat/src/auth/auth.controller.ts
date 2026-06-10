@@ -45,8 +45,8 @@ export class AuthController {
   @Post('logout')
   async logout(@Request() req: ExpressRequest, @Res({ passthrough: true }) res: Response) {
     this.cookies.assertTrustedOrigin(req);
-    await this.authService.logout(this.cookies.getRefreshToken(req));
     this.cookies.clearRefreshToken(res);
+    await this.authService.logout(this.cookies.getRefreshToken(req));
     return { message: 'Đăng xuất thành công.' };
   }
 
@@ -54,8 +54,8 @@ export class AuthController {
   @Post('logout-all')
   async logoutAll(@Request() req: AuthenticatedRequest, @Res({ passthrough: true }) res: Response) {
     this.cookies.assertTrustedOrigin(req);
-    await this.authService.logoutAll(req.user.userId);
     this.cookies.clearRefreshToken(res);
+    await this.authService.logoutAll(req.user.userId);
     return { message: 'Đã đăng xuất khỏi tất cả thiết bị.' };
   }
 
@@ -69,6 +69,8 @@ export class AuthController {
   }
 
   private respondWithSession(result: Awaited<ReturnType<AuthService['login']>>, request: ExpressRequest, response: Response) {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('Pragma', 'no-cache');
     this.cookies.setRefreshToken(request, response, result.refreshToken);
     return {
       accessToken: result.accessToken,

@@ -8,7 +8,7 @@ export class RegisterDto {
   username!: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự.' })
+  @MinLength(8, { message: 'Mật khẩu phải có ít nhất 8 ký tự.' })
   @MaxLength(72, { message: 'Mật khẩu tối đa 72 ký tự.' })
   password!: string;
 
@@ -25,5 +25,6 @@ export class LoginDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(72)
   password!: string;
 }

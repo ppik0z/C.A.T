@@ -8,18 +8,24 @@ import { AuthCookieService } from './auth-cookie.service';
 import { AuthSessionService } from './auth-session.service';
 import { PasswordHasherService } from './password-hasher.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
+import { getJwtModuleOptions } from './auth.constants';
+import { AuthIdentityService } from './auth-identity.service';
 
 @Module({
   imports: [
     PassportModule,
     PushNotificationsModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET!,
-      signOptions: { expiresIn: '1d' }, //Token expire 1 ngày
-    }),
+    JwtModule.register(getJwtModuleOptions()),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, AuthCookieService, AuthSessionService, PasswordHasherService],
-  exports: [AuthService, AuthSessionService, PasswordHasherService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    AuthCookieService,
+    AuthSessionService,
+    AuthIdentityService,
+    PasswordHasherService,
+  ],
+  exports: [JwtModule, AuthService, AuthSessionService, AuthIdentityService, PasswordHasherService],
 })
 export class AuthModule { }

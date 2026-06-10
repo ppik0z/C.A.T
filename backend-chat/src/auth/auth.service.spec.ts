@@ -31,7 +31,7 @@ describe('AuthService', () => {
         },
         {
           provide: PushSubscriptionsService,
-          useValue: { revokeForSerializedSession: jest.fn(), revokeAllForUser: jest.fn() },
+          useValue: { revokeForSession: jest.fn(), revokeAllForUser: jest.fn() },
         },
       ],
     }).compile();
