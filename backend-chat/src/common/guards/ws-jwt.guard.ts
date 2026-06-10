@@ -4,6 +4,11 @@ import { WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import type { AuthenticatedSocket } from '../interfaces/request-with-user.interface';
+import {
+  ACCESS_TOKEN_ALGORITHM,
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
+} from '../../auth/auth.constants';
 
 @Injectable()
 export class WsJwtGuard implements CanActivate {
@@ -21,16 +26,25 @@ export class WsJwtGuard implements CanActivate {
         throw new WsException('Token không tồn tại!');
       }
 
-      await this.jwtService.verifyAsync<JwtPayload>(token);
-      if (!(client as AuthenticatedSocket).user) {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
+        algorithms: [ACCESS_TOKEN_ALGORITHM],
+        audience: ACCESS_TOKEN_AUDIENCE,
+        issuer: ACCESS_TOKEN_ISSUER,
+      });
+      const identity = (client as AuthenticatedSocket).user;
+      if (
+        !identity
+        || identity.userId !== payload.userId
+        || identity.sessionId !== payload.sid
+      ) {
         throw new WsException('Không tìm thấy định danh socket.');
       }
 
       return true;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Auth failed: ${message}`);
-      throw new WsException('Token lỏ!');
+      this.logger.warn(`WebSocket authentication failed: ${message}`);
+      throw new WsException('Phiên đăng nhập không hợp lệ.');
     }
   }
 
@@ -43,9 +57,6 @@ export class WsJwtGuard implements CanActivate {
     if (header && header.startsWith('Bearer ')) {
       return header.split(' ')[1];
     }
-
-    const query = client.handshake.query?.token;
-    if (typeof query === 'string') return query;
 
     return undefined;
   }
