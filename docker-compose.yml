@@ -1,0 +1,76 @@
+services:
+  migrate:
+    build:
+      context: ./backend-chat
+      target: migration
+    environment:
+      DATABASE_URL: mysql://root:root_password@mysql:3306/messaging_app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend-chat
+    env_file:
+      - ./backend-chat/.env
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://root:root_password@mysql:3306/messaging_app
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-aloalo123}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-aloalo1234}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/fcm-key.json
+    volumes:
+      - ./backend-chat/fcm-key.json:/app/fcm-key.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./chatchoi-vue
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: messaging_app
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
