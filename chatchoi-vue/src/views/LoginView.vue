@@ -9,6 +9,7 @@ type AuthMode = 'login' | 'register';
 const authStore = useAuthStore();
 const mode = ref<AuthMode>('login');
 const username = ref('');
+const email = ref('');
 const displayName = ref('');
 const password = ref('');
 const confirmPassword = ref('');
@@ -44,6 +45,7 @@ const submit = async () => {
     }
     await authStore.register({
       username: normalizedUsername,
+      email: email.value.trim().toLowerCase(),
       displayName: displayName.value.trim() || undefined,
       password: password.value,
     });
@@ -81,6 +83,11 @@ const submit = async () => {
         <div v-if="mode === 'register'">
           <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="display-name">Tên hiển thị</label>
           <Input id="display-name" v-model="displayName" autocomplete="name" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" :disabled="isLoading" maxlength="64" placeholder="Không bắt buộc" />
+        </div>
+
+        <div v-if="mode === 'register'">
+          <label class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant" for="email">Email</label>
+          <Input id="email" v-model="email" autocapitalize="none" autocomplete="email" class="h-12 rounded-xl bg-surface-container-low px-4 text-base" :disabled="isLoading" maxlength="255" required spellcheck="false" type="email" />
         </div>
 
         <div>

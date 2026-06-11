@@ -1,11 +1,24 @@
-import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @IsString()
   @Matches(/^[a-zA-Z0-9._]{4,20}$/, {
-    message: 'Username chỉ gồm chữ, số, dấu chấm hoặc gạch dưới và dài từ 4 đến 20 ký tự.',
+    message:
+      'Username chỉ gồm chữ, số, dấu chấm hoặc gạch dưới và dài từ 4 đến 20 ký tự.',
   })
   username!: string;
+
+  @IsEmail({}, { message: 'Email không hợp lệ.' })
+  @MaxLength(255)
+  email!: string;
 
   @IsString()
   @MinLength(8, { message: 'Mật khẩu phải có ít nhất 8 ký tự.' })

@@ -7,6 +7,7 @@ export interface AuthSessionResponse {
 
 export interface RegisterInput {
   username: string;
+  email: string;
   displayName?: string;
   password: string;
 }
