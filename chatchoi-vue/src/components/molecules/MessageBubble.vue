@@ -2,14 +2,17 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
+import type { CallKind } from '../../types/call';
 import { formatMessageTime } from '../../utils/chatPresentation';
 import { resolveDisplayName } from '../../utils/userPresentation';
 import MessageContentRenderer from './message/MessageContentRenderer.vue';
 import MediaLightbox from '../organisms/MediaLightbox.vue';
+import CallEventCard from './message/CallEventCard.vue';
 
 interface Props {
   message: ChatMessage;
   isOwn: boolean;
+  currentUserId: number | null;
   statusText?: string;
 }
 
@@ -20,6 +23,7 @@ const emit = defineEmits<{
   recall: [message: ChatMessage];
   react: [message: ChatMessage, emoji: string];
   removeReaction: [message: ChatMessage];
+  callBack: [kind: CallKind];
 }>();
 
 const copied = ref(false);
@@ -144,11 +148,16 @@ watch(
 <template>
   <div
     v-if="getMessageType(props.message) === 'call_event'"
-    class="mx-auto max-w-[min(90%,28rem)] animate-slide-in rounded-full bg-surface-container-high px-4 py-2 text-center text-xs sm:text-sm font-semibold text-on-surface-variant flex items-center justify-center gap-2"
+    :class="[
+      'flex animate-slide-in',
+      props.isOwn ? 'justify-end' : 'justify-start',
+    ]"
   >
-    <span class="material-symbols-outlined text-[18px] text-primary">call</span>
-    <span class="truncate">{{ props.message.content }}</span>
-    <span class="text-secondary font-medium">{{ formatMessageTime(props.message.createdAt) }}</span>
+    <CallEventCard
+      :current-user-id="props.currentUserId"
+      :message="props.message"
+      @call-back="emit('callBack', $event)"
+    />
   </div>
 
   <div

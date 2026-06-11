@@ -463,10 +463,12 @@ onBeforeUnmount(() => {
             ]"
           >
             <MessageBubble
+              :current-user-id="chatStore.myId"
               :is-own="isOwnMessage(message)"
               :message="message"
               :status-text="isOwnMessage(message) ? chatStore.getMessageDisplayStatus(message, props.conversation) : undefined"
               @react="chatStore.setReaction"
+              @call-back="handleStartCall"
               @recall="chatStore.recallMessage"
               @remove-reaction="chatStore.removeReaction"
               @reply="chatStore.setReplyTarget"
