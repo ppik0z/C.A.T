@@ -2,9 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import TextInput from '../atoms/TextInput.vue';
 import FriendRow from '../molecules/FriendRow.vue';
+import LoadingListSkeleton from '../molecules/LoadingListSkeleton.vue';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
-import { accessDirectConversation, fetchConversations } from '../../services/conversation.service';
+import { accessDirectConversation } from '../../services/conversation.service';
 import type { FriendsTab } from '../../types/friends';
 
 const emit = defineEmits<{
@@ -52,8 +53,7 @@ onMounted(() => {
 
 const handleMessage = async (friendId: number) => {
   const conversation = await accessDirectConversation(friendId);
-  const conversations = await fetchConversations();
-  chatStore.setConversations(conversations);
+  await chatStore.loadConversations(true);
   chatStore.selectConversation(conversation.id);
   emit('openMessages');
 };
@@ -106,9 +106,7 @@ const handleMessage = async (friendId: number) => {
           {{ friendsStore.error }}
         </div>
 
-        <div v-if="friendsStore.isLoading" class="px-6 py-12 text-center text-sm text-on-surface-variant">
-          Đang tải danh sách bạn bè...
-        </div>
+        <LoadingListSkeleton v-if="friendsStore.isLoading && visibleUsers.length === 0" />
 
         <template v-else>
           <FriendRow

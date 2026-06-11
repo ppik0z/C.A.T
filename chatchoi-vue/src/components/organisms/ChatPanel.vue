@@ -4,6 +4,7 @@ import ActiveCallBanner from '../molecules/ActiveCallBanner.vue';
 import ChatHeader from '../molecules/ChatHeader.vue';
 import ComposerBar from '../molecules/ComposerBar.vue';
 import MessageBubble from '../molecules/MessageBubble.vue';
+import MessageThreadSkeleton from '../molecules/MessageThreadSkeleton.vue';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
 import type { CallKind } from '../../types/call';
@@ -445,7 +446,11 @@ onBeforeUnmount(() => {
           Đang tải tin nhắn cũ...
         </div>
 
-        <template v-for="group in messageGroups" :key="group.key">
+        <MessageThreadSkeleton
+          v-if="currentLoadState === 'loading' && sortedMessages.length === 0"
+        />
+
+        <template v-else v-for="group in messageGroups" :key="group.key">
           <div class="flex justify-center">
             <span class="rounded-full border border-outline-variant/70 bg-surface-container-lowest/85 px-3 py-1 text-[11px] font-semibold text-on-surface-variant shadow-sm backdrop-blur-sm">
               {{ group.label }}

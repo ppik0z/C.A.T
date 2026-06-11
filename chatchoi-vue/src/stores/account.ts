@@ -22,6 +22,8 @@ export const useAccountStore = defineStore('account', () => {
   const isChangingPassword = ref(false);
   const error = ref<string | null>(null);
   const settings = computed(() => me.value?.settings ?? null);
+  let fetchPromise: Promise<AccountMe> | null = null;
+  let sessionGeneration = 0;
 
   const applyAccount = (account: AccountMe) => {
     me.value = account;
@@ -29,18 +31,30 @@ export const useAccountStore = defineStore('account', () => {
   };
 
   const fetchAccount = async () => {
+    if (fetchPromise) return fetchPromise;
+    const requestGeneration = sessionGeneration;
     isLoading.value = true;
     error.value = null;
-    try {
-      const account = await fetchAccountMe();
-      applyAccount(account);
-      return account;
-    } catch (caught) {
-      error.value = caught instanceof Error ? caught.message : 'Không thể tải thông tin tài khoản';
-      throw caught;
-    } finally {
-      isLoading.value = false;
-    }
+    fetchPromise = fetchAccountMe()
+      .then((account) => {
+        if (requestGeneration === sessionGeneration) {
+          applyAccount(account);
+        }
+        return account;
+      })
+      .catch((caught: unknown) => {
+        if (requestGeneration === sessionGeneration) {
+          error.value = caught instanceof Error ? caught.message : 'Không thể tải thông tin tài khoản';
+        }
+        throw caught;
+      })
+      .finally(() => {
+        if (requestGeneration === sessionGeneration) {
+          isLoading.value = false;
+          fetchPromise = null;
+        }
+      });
+    return fetchPromise;
   };
 
   const updateProfile = async (input: UpdateProfileRequest) => {
@@ -99,7 +113,10 @@ export const useAccountStore = defineStore('account', () => {
   };
 
   const clear = () => {
+    sessionGeneration += 1;
+    fetchPromise = null;
     me.value = null;
+    isLoading.value = false;
     error.value = null;
   };
 

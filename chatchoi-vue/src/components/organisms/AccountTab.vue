@@ -14,6 +14,7 @@ import PreferenceRow from "@/components/molecules/PreferenceRow.vue";
 import { useAccountStore } from "@/stores/account";
 import { resolveDisplayName, formatUsername } from "@/utils/userPresentation";
 import ProfileCardContent from "@/components/molecules/ProfileCardContent.vue";
+import AccountTabSkeleton from "@/components/molecules/AccountTabSkeleton.vue";
 import { useAuthStore } from "@/stores/auth";
 import { requestEmailVerification } from "@/services/auth.service";
 
@@ -227,7 +228,8 @@ const handleChangePassword = async () => {
 </script>
 
 <template>
-  <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+  <AccountTabSkeleton v-if="accountStore.isLoading && !accountStore.me" />
+  <div v-else class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
     <!-- Profile Preview Card -->
     <Card>
       <CardContent class="overflow-hidden p-0">

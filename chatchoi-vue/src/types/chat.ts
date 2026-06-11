@@ -216,6 +216,7 @@ export interface MessageSearchState {
 
 export type MessageLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 export type ConversationDetailLoadState = 'idle' | 'loading' | 'loaded' | 'error';
+export type ConversationListLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 export interface LoadMessagesSuccessPayload {
   conversationId: number;

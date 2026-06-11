@@ -55,6 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
   const hydrateSession = async () => {
     await Promise.allSettled([
       useAccountStore().fetchAccount(),
+      useChatStore().loadConversations(),
       useFriendsStore().refreshAll(),
       useCallStore().loadActiveCalls(),
       usePushNotificationsStore().initializeAfterLogin(),
