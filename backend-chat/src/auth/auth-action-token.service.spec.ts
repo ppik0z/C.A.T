@@ -6,7 +6,7 @@ import { AUTH_ACTION_PURPOSE } from './auth-action-token.types';
 describe('AuthActionTokenService', () => {
   it('stores only a hash when issuing a token', async () => {
     const values = jest.fn().mockResolvedValue(undefined);
-    const transaction = jest.fn(async (callback: (tx: unknown) => unknown) =>
+    const transaction = jest.fn((callback: (tx: unknown) => unknown) =>
       callback({
         update: jest.fn(() => ({
           set: jest.fn(() => ({
@@ -47,5 +47,20 @@ describe('AuthActionTokenService', () => {
       service.consumeEmailVerification('invalid'),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('discards a token that could not be delivered', async () => {
+    const where = jest.fn().mockResolvedValue(undefined);
+    const service = new AuthActionTokenService({
+      db: {
+        delete: jest.fn(() => ({
+          where,
+        })),
+      },
+    } as unknown as DrizzleService);
+
+    await service.discard('8a845e9d-10ab-4c16-b8a7-0fc60e313514');
+
+    expect(where).toHaveBeenCalled();
   });
 });

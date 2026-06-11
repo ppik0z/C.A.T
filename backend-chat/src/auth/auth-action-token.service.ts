@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash, randomBytes, randomUUID } from 'crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import {
   authActionTokens,
@@ -76,6 +76,32 @@ export class AuthActionTokenService {
       )
       .limit(1);
     return Boolean(recentToken);
+  }
+
+  async hasReachedIssueLimit(
+    userId: number,
+    purpose: AuthActionPurpose,
+    windowMs: number,
+    limit: number,
+  ) {
+    const tokens = await this.drizzle.db
+      .select({ id: authActionTokens.id })
+      .from(authActionTokens)
+      .where(
+        and(
+          eq(authActionTokens.userId, userId),
+          eq(authActionTokens.purpose, purpose),
+          gte(authActionTokens.createdAt, new Date(Date.now() - windowMs)),
+        ),
+      )
+      .limit(limit);
+    return tokens.length >= limit;
+  }
+
+  async discard(id: string) {
+    await this.drizzle.db
+      .delete(authActionTokens)
+      .where(eq(authActionTokens.id, id));
   }
 
   async consumeEmailVerification(rawToken: string) {

@@ -21,7 +21,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Request as ExpressRequest, Response } from 'express';
 import { AuthCookieService } from './auth-cookie.service';
 import type { RequestWithUser as AuthenticatedRequest } from '../common';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { AuthRecoveryService } from './auth-recovery.service';
 
 interface RequestWithUser extends ExpressRequest {
@@ -86,8 +86,9 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Post('email/verification/request')
   @HttpCode(HttpStatus.ACCEPTED)
-  @Throttle({ short: { ttl: 15 * 60 * 1000, limit: 3 } })
+  @SkipThrottle({ short: true })
   async requestEmailVerification(@Request() req: AuthenticatedRequest) {
+    this.cookies.assertTrustedOrigin(req);
     await this.recovery.requestEmailVerification(req.user.userId);
     return {
       message: 'Nếu email chưa được xác minh, chúng tôi đã gửi hướng dẫn.',

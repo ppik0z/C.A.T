@@ -1,4 +1,5 @@
 import { DrizzleService } from '../database/drizzle.service';
+import { HttpException, ServiceUnavailableException } from '@nestjs/common';
 import type { EmailSender } from '../email/email-sender';
 import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 import { AuthActionTokenService } from './auth-action-token.service';
@@ -21,10 +22,12 @@ const createDrizzleMock = (user: unknown) => ({
 describe('AuthRecoveryService', () => {
   const actionTokens = {
     wasIssuedRecently: jest.fn().mockResolvedValue(false),
+    hasReachedIssueLimit: jest.fn().mockResolvedValue(false),
     issue: jest.fn().mockResolvedValue({
       id: '8a845e9d-10ab-4c16-b8a7-0fc60e313514',
       rawToken: 'A'.repeat(43),
     }),
+    discard: jest.fn().mockResolvedValue(undefined),
     consumeEmailVerification: jest.fn(),
     consumePasswordReset: jest.fn(),
   };
@@ -75,6 +78,36 @@ describe('AuthRecoveryService', () => {
           'https://chat.example.com/reset-password?token=',
         ),
       }),
+    );
+  });
+
+  it('rate limits repeated verification emails per account', async () => {
+    actionTokens.wasIssuedRecently.mockResolvedValueOnce(true);
+
+    await expect(
+      createService({
+        email: 'user@example.com',
+        isEmailVerified: false,
+      }).requestEmailVerification(7),
+    ).rejects.toMatchObject<HttpException>({
+      status: 429,
+    });
+
+    expect(emailSender.send).not.toHaveBeenCalled();
+  });
+
+  it('discards the token when verification delivery fails', async () => {
+    emailSender.send.mockRejectedValueOnce(new Error('provider unavailable'));
+
+    await expect(
+      createService({
+        email: 'user@example.com',
+        isEmailVerified: false,
+      }).requestEmailVerification(7),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(actionTokens.discard).toHaveBeenCalledWith(
+      '8a845e9d-10ab-4c16-b8a7-0fc60e313514',
     );
   });
 

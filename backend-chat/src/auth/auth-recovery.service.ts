@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import { users } from '../database/schema';
@@ -25,6 +32,10 @@ import { assertPasswordFitsBcrypt } from './password-policy';
 import { PasswordHasherService } from './password-hasher.service';
 
 const EMAIL_REQUEST_COOLDOWN_MS = 60 * 1000;
+const EMAIL_REQUEST_WINDOW_MS = 15 * 60 * 1000;
+const EMAIL_REQUEST_WINDOW_LIMIT = 3;
+const EMAIL_REQUEST_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const EMAIL_REQUEST_DAILY_LIMIT = 5;
 const MIN_FORGOT_RESPONSE_MS = 300;
 
 @Injectable()
@@ -51,14 +62,16 @@ export class AuthRecoveryService {
       .limit(1);
 
     if (!user?.email || user.isEmailVerified) return;
-    if (
-      await this.actionTokens.wasIssuedRecently(
+    const rateLimit = await this.getEmailIssueRateLimit(
+      userId,
+      AUTH_ACTION_PURPOSE.VERIFY_EMAIL,
+    );
+    if (rateLimit) {
+      this.throwEmailRateLimit(
         userId,
         AUTH_ACTION_PURPOSE.VERIFY_EMAIL,
-        EMAIL_REQUEST_COOLDOWN_MS,
-      )
-    ) {
-      return;
+        rateLimit,
+      );
     }
 
     const action = await this.actionTokens.issue(
@@ -70,9 +83,19 @@ export class AuthRecoveryService {
     const template = buildEmailVerificationEmail(
       this.createPublicUrl('/verify-email', action.rawToken),
     );
-    await this.emailSender.send(
-      this.toEmail(user.email, template, `verify-${action.id}`),
-    );
+    try {
+      await this.emailSender.send(
+        this.toEmail(user.email, template, `verify-${action.id}`),
+      );
+    } catch (error) {
+      await this.actionTokens.discard(action.id).catch(() => undefined);
+      this.logger.error(
+        `Could not send verification email for user ${userId}: ${this.getErrorName(error)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Chưa thể gửi email xác minh. Vui lòng thử lại sau.',
+      );
+    }
   }
 
   async verifyEmail(rawToken: string) {
@@ -94,13 +117,16 @@ export class AuthRecoveryService {
         .limit(1);
 
       if (!user?.email || !user.isEmailVerified) return;
-      if (
-        await this.actionTokens.wasIssuedRecently(
+      const rateLimit = await this.getEmailIssueRateLimit(
+        user.id,
+        AUTH_ACTION_PURPOSE.RESET_PASSWORD,
+      );
+      if (rateLimit) {
+        this.logEmailRateLimit(
           user.id,
           AUTH_ACTION_PURPOSE.RESET_PASSWORD,
-          EMAIL_REQUEST_COOLDOWN_MS,
-        )
-      ) {
+          rateLimit.retryAfterSeconds,
+        );
         return;
       }
 
@@ -115,7 +141,8 @@ export class AuthRecoveryService {
       );
       void this.emailSender
         .send(this.toEmail(user.email, template, `reset-${action.id}`))
-        .catch((error: unknown) => {
+        .catch(async (error: unknown) => {
+          await this.actionTokens.discard(action.id).catch(() => undefined);
           this.logger.error(
             `Could not send password reset email: ${this.getErrorName(error)}`,
           );
@@ -155,6 +182,82 @@ export class AuthRecoveryService {
           `Could not send password changed email: ${this.getErrorName(error)}`,
         );
       });
+  }
+
+  private async getEmailIssueRateLimit(
+    userId: number,
+    purpose: (typeof AUTH_ACTION_PURPOSE)[keyof typeof AUTH_ACTION_PURPOSE],
+  ) {
+    if (
+      await this.actionTokens.wasIssuedRecently(
+        userId,
+        purpose,
+        EMAIL_REQUEST_COOLDOWN_MS,
+      )
+    ) {
+      return {
+        retryAfterSeconds: Math.ceil(EMAIL_REQUEST_COOLDOWN_MS / 1000),
+        message: 'Vui lòng chờ 60 giây trước khi gửi lại email.',
+      };
+    }
+
+    const [windowLimitReached, dailyLimitReached] = await Promise.all([
+      this.actionTokens.hasReachedIssueLimit(
+        userId,
+        purpose,
+        EMAIL_REQUEST_WINDOW_MS,
+        EMAIL_REQUEST_WINDOW_LIMIT,
+      ),
+      this.actionTokens.hasReachedIssueLimit(
+        userId,
+        purpose,
+        EMAIL_REQUEST_DAILY_WINDOW_MS,
+        EMAIL_REQUEST_DAILY_LIMIT,
+      ),
+    ]);
+
+    if (dailyLimitReached) {
+      return {
+        retryAfterSeconds: Math.ceil(EMAIL_REQUEST_DAILY_WINDOW_MS / 1000),
+        message:
+          'Bạn đã đạt giới hạn 5 email trong 24 giờ. Vui lòng thử lại sau.',
+      };
+    }
+    if (windowLimitReached) {
+      return {
+        retryAfterSeconds: Math.ceil(EMAIL_REQUEST_WINDOW_MS / 1000),
+        message:
+          'Bạn đã đạt giới hạn 3 email trong 15 phút. Vui lòng thử lại sau.',
+      };
+    }
+    return null;
+  }
+
+  private throwEmailRateLimit(
+    userId: number,
+    purpose: string,
+    rateLimit: { retryAfterSeconds: number; message: string },
+  ): never {
+    this.logEmailRateLimit(userId, purpose, rateLimit.retryAfterSeconds);
+    throw new HttpException(
+      {
+        statusCode: HttpStatus.TOO_MANY_REQUESTS,
+        code: 'AUTH_EMAIL_RATE_LIMITED',
+        message: rateLimit.message,
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private logEmailRateLimit(
+    userId: number,
+    purpose: string,
+    retryAfterSeconds: number,
+  ) {
+    this.logger.warn(
+      `Email rate limit exceeded user=${userId} purpose=${purpose} retryAfter=${retryAfterSeconds}s`,
+    );
   }
 
   private createPublicUrl(path: string, rawToken: string) {
