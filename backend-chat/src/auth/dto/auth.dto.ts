@@ -32,10 +32,17 @@ export class RegisterDto {
 }
 
 export class LoginDto {
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
-  identifier!: string;
+  identifier?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  username?: string;
 
   @IsString()
   @IsNotEmpty()

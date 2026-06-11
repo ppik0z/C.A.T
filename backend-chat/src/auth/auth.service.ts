@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -99,7 +100,11 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, userAgent?: string): Promise<AuthResult> {
-    const { identifier, password } = loginDto;
+    const { password } = loginDto;
+    const identifier = loginDto.identifier ?? loginDto.username;
+    if (!identifier) {
+      throw new BadRequestException('Email hoặc username không được để trống.');
+    }
     const normalizedIdentifier = identifier.trim().toLowerCase();
     const passwordWithinLimit =
       Buffer.byteLength(password, 'utf8') <= BCRYPT_MAX_PASSWORD_BYTES;

@@ -72,9 +72,10 @@ describe('AuthService', () => {
   });
 
   it.each([
-    ['username', '  Test.User  '],
-    ['email', '  Test.User@Example.COM  '],
-  ])('logs in with a normalized %s', async (_kind, identifier) => {
+    ['username', { identifier: '  Test.User  ' }],
+    ['email', { identifier: '  Test.User@Example.COM  ' }],
+    ['legacy username field', { username: '  Test.User  ' }],
+  ])('logs in with a normalized %s', async (_kind, credentials) => {
     const limit = where.mock.results[0]?.value.limit as jest.Mock | undefined;
     if (limit) limit.mockResolvedValue([{ id: 42, password: 'hash' }]);
     else {
@@ -85,7 +86,7 @@ describe('AuthService', () => {
     verifyPassword.mockResolvedValue(true);
 
     const result = await service.login({
-      identifier,
+      ...credentials,
       password: 'valid-password',
     });
 
