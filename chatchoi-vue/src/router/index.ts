@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 
+export const loadLoginView = () => import("../views/LoginView.vue");
+
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -12,7 +14,7 @@ export const router = createRouter({
     {
       path: "/login",
       name: "login",
-      component: () => import("../views/LoginView.vue"),
+      component: loadLoginView,
       meta: { guestOnly: true },
     },
     {

@@ -2,6 +2,7 @@
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppBootstrapSkeleton from "./components/organisms/AppBootstrapSkeleton.vue";
+import { loadLoginView } from "./router";
 import { useAuthStore } from "./stores/auth";
 
 const authStore = useAuthStore();
@@ -15,6 +16,7 @@ const isRedirectingForAuth = computed(
     (authStore.status === "authenticated" && route.meta.guestOnly === true),
 );
 
+void loadLoginView();
 void authStore.bootstrap();
 
 watch(
