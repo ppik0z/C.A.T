@@ -10,6 +10,8 @@ import { PasswordHasherService } from './password-hasher.service';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { getJwtModuleOptions } from './auth.constants';
 import { AuthIdentityService } from './auth-identity.service';
+import { EMAIL_SENDER } from '../email/email-sender';
+import { ResendEmailSender } from '../email/resend-email-sender.service';
 
 @Module({
   imports: [
@@ -25,7 +27,18 @@ import { AuthIdentityService } from './auth-identity.service';
     AuthSessionService,
     AuthIdentityService,
     PasswordHasherService,
+    ResendEmailSender,
+    {
+      provide: EMAIL_SENDER,
+      useExisting: ResendEmailSender,
+    },
   ],
-  exports: [JwtModule, AuthService, AuthSessionService, AuthIdentityService, PasswordHasherService],
+  exports: [
+    JwtModule,
+    AuthService,
+    AuthSessionService,
+    AuthIdentityService,
+    PasswordHasherService,
+  ],
 })
-export class AuthModule { }
+export class AuthModule {}
