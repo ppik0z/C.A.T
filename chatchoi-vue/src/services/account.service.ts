@@ -1,5 +1,12 @@
 import { apiRequest } from './apiClient';
-import type { AccountMe, PublicUserProfile, UpdateProfileRequest, UpdateSettingsRequest } from '../types/account';
+import type {
+  AccountMe,
+  PublicUserProfile,
+  UpdatePasswordRequest,
+  UpdatePasswordResponse,
+  UpdateProfileRequest,
+  UpdateSettingsRequest,
+} from '../types/account';
 
 export const fetchAccountMe = () => apiRequest<AccountMe>('/account/me');
 
@@ -19,6 +26,14 @@ export const uploadAccountAvatar = (file: File) => {
   const formData = new FormData();
   formData.append('file', file);
   return apiRequest<AccountMe>('/account/avatar', { method: 'PUT', body: formData });
+};
+
+export const updateAccountPassword = (input: UpdatePasswordRequest) => {
+  return apiRequest<UpdatePasswordResponse>('/account/password', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 };
 
 export const fetchPublicProfile = (userId: number) => apiRequest<PublicUserProfile>(`/users/${userId}/profile`);

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { conversations } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 
 export interface MessageCreatedEvent {
     id: number;
@@ -34,6 +34,9 @@ export class MessagesListener {
                 lastMessageType: payload.type,
                 updatedAt: new Date(), 
             })
-            .where(eq(conversations.id, payload.conversationId));
+            .where(and(
+                eq(conversations.id, payload.conversationId),
+                lt(conversations.lastMessageIndex, payload.conversationIndex),
+            ));
     }
 }

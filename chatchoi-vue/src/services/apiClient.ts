@@ -6,8 +6,40 @@ export interface ApiRequestOptions extends RequestInit {
   retryOnUnauthorized?: boolean;
 }
 
+interface ApiErrorPayload {
+  message?: string | string[];
+  code?: string;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export const isAuthenticationError = (error: unknown): error is ApiError => {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+};
+
 export const apiRequest = async <T>(path: string, options: ApiRequestOptions = {}): Promise<T> => {
-  const response = await request(path, options);
+  let response: Response;
+  try {
+    response = await request(path, options);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new ApiError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra mạng và thử lại.', 0);
+  }
+
   if (response.status === 401 && options.auth !== false && options.retryOnUnauthorized !== false) {
     const token = await refreshAccessToken();
     if (token) {
@@ -32,9 +64,9 @@ const request = (path: string, options: ApiRequestOptions) => {
 
 const parseResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { message?: string | string[] } | null;
+    const payload = await response.json().catch(() => null) as ApiErrorPayload | null;
     const message = Array.isArray(payload?.message) ? payload.message.join(' ') : payload?.message;
-    throw new Error(message ?? 'Không thể xử lý yêu cầu.');
+    throw new ApiError(message ?? 'Không thể xử lý yêu cầu.', response.status, payload?.code);
   }
   return await response.json() as T;
 };

@@ -38,7 +38,7 @@ interface UpdateMediaConnectionPayload extends CallIdPayload {
 }
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway()
 export class CallsGateway implements OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private readonly logger = new Logger(CallsGateway.name);

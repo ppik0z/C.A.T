@@ -1,6 +1,7 @@
 let accessToken: string | null = null;
 let refreshHandler: (() => Promise<string | null>) | null = null;
 let unauthorizedHandler: (() => void) | null = null;
+const REFRESH_LOCK_NAME = 'chatchoi-session-refresh';
 
 export const getAccessToken = () => accessToken;
 
@@ -18,6 +19,14 @@ export const configureSessionRuntime = (input: {
 
 export const refreshAccessToken = async () => {
   return refreshHandler ? refreshHandler() : null;
+};
+
+export const withRefreshLock = async <T>(task: () => Promise<T>): Promise<T> => {
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    return task();
+  }
+
+  return navigator.locks.request(REFRESH_LOCK_NAME, { mode: 'exclusive' }, task);
 };
 
 export const handleUnauthorized = () => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue';
+import { Minimize2, MonitorSmartphone, Phone, Video } from '@lucide/vue';
 import Avatar from '../atoms/Avatar.vue';
 import CallControlButton from '../atoms/CallControlButton.vue';
 import CallParticipantTile from '../molecules/CallParticipantTile.vue';
@@ -141,32 +142,33 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="isVisible"
-      class="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950 text-white sm:bg-black/70 sm:p-4 sm:backdrop-blur-md"
     >
-      <section class="w-full max-w-4xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-lg bg-surface-container-lowest shadow-2xl flex flex-col">
-        <header class="px-5 py-4 border-b border-outline-variant flex items-center justify-between gap-3">
+      <section class="flex h-full w-full flex-col overflow-hidden bg-neutral-950 shadow-2xl sm:h-[min(46rem,calc(100dvh-2rem))] sm:max-w-5xl sm:rounded-[2rem] sm:border sm:border-white/10">
+        <header class="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur-xl sm:px-5 sm:py-4">
           <div class="flex items-center gap-3 min-w-0">
             <Avatar :avatar-url="avatarUrl" :name="title" size="lg" />
             <div class="min-w-0">
-              <h2 class="text-lg font-bold text-on-surface truncate">{{ title }}</h2>
-              <p class="text-sm text-secondary truncate">
+              <h2 class="truncate text-base font-bold text-white sm:text-lg">{{ title }}</h2>
+              <p class="truncate text-sm text-white/70">
                 {{ kind === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại' }} · {{ statusText }}
               </p>
-              <p v-if="mediaStatusText" class="text-xs text-secondary truncate">{{ mediaStatusText }}</p>
+              <p v-if="mediaStatusText" class="truncate text-xs text-white/55">{{ mediaStatusText }}</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
             <button
               v-if="call"
-              class="h-9 w-9 rounded-full text-on-surface-variant hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary flex items-center justify-center"
+              class="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40"
               type="button"
               aria-label="Thu nhỏ"
               @click="handleMinimize"
             >
-              <span class="material-symbols-outlined text-[20px]">picture_in_picture_alt</span>
+              <Minimize2 class="h-4 w-4" aria-hidden="true" />
             </button>
-            <span class="material-symbols-outlined text-primary text-[28px]">
-              {{ kind === 'video' ? 'videocam' : 'call' }}
+            <span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary">
+              <Video v-if="kind === 'video'" class="h-5 w-5" aria-hidden="true" />
+              <Phone v-else class="h-5 w-5" aria-hidden="true" />
             </span>
           </div>
         </header>
@@ -178,11 +180,11 @@ onBeforeUnmount(() => {
           {{ callMediaStore.error }}
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto bg-background/60 p-4 sm:p-6">
+        <div class="flex-1 min-h-0 overflow-y-auto bg-neutral-950 p-3 sm:p-5">
           <div v-if="isTakenOver" class="min-h-72 flex flex-col items-center justify-center text-center gap-4">
-            <span class="material-symbols-outlined text-[48px] text-secondary">devices</span>
-            <p class="text-lg font-bold text-on-surface">Đang hoạt động ở nơi khác</p>
-            <p class="text-sm text-secondary max-w-xs">Cuộc gọi đang kết nối trên một tab hoặc thiết bị khác. Bạn có thể chuyển về đây.</p>
+            <MonitorSmartphone class="h-12 w-12 text-white/60" aria-hidden="true" />
+            <p class="text-lg font-bold text-white">Đang hoạt động ở nơi khác</p>
+            <p class="max-w-xs text-sm text-white/65">Cuộc gọi đang kết nối trên một tab hoặc thiết bị khác. Bạn có thể chuyển về đây.</p>
             <button
               class="mt-2 h-10 px-6 rounded-full bg-primary text-on-primary text-sm font-bold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
               type="button"
@@ -204,15 +206,15 @@ onBeforeUnmount(() => {
 
           <div v-else class="min-h-72 flex flex-col items-center justify-center text-center">
             <Avatar :avatar-url="avatarUrl" :name="title" size="xl" />
-            <p class="mt-4 text-xl font-bold text-on-surface">{{ title }}</p>
-            <p class="mt-1 text-sm text-secondary">{{ statusText }}</p>
+            <p class="mt-4 text-xl font-bold text-white">{{ title }}</p>
+            <p class="mt-1 text-sm text-white/65">{{ statusText }}</p>
           </div>
         </div>
 
-        <footer class="px-5 py-4 border-t border-outline-variant bg-surface-container-lowest flex items-center justify-center gap-3">
+        <footer class="flex items-center justify-center gap-3 border-t border-white/10 bg-black/45 px-4 py-4 backdrop-blur-xl sm:px-5">
           <button
             v-if="call && pageCount > 1"
-            class="h-11 w-11 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary"
+            class="h-11 w-11 rounded-full border border-white/15 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-40"
             type="button"
             aria-label="Trang trước"
             :disabled="callMediaStore.videoPageIndex === 0"
@@ -237,7 +239,7 @@ onBeforeUnmount(() => {
           <CallControlButton icon="call_end" label="Rời cuộc gọi" tone="danger" @click="handleLeave" />
           <button
             v-if="call && pageCount > 1"
-            class="h-11 w-11 rounded-full border border-outline-variant text-on-surface hover:bg-surface-container-high focus:outline-none focus:ring-2 focus:ring-primary"
+            class="h-11 w-11 rounded-full border border-white/15 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-40"
             type="button"
             aria-label="Trang sau"
             :disabled="callMediaStore.videoPageIndex >= pageCount - 1"

@@ -68,6 +68,13 @@ export class MediaUploadService {
         };
     }
 
+    async deleteUploadedFile(publicId: string, resourceType: string) {
+        await cloudinary.uploader.destroy(publicId, {
+            resource_type: resourceType || 'image',
+            invalidate: true,
+        });
+    }
+
     private resolveMessageType(mimeType: string): ChatMessageType {
         if (IMAGE_MIME_TYPES.has(mimeType)) return 'image';
         if (VIDEO_MIME_TYPES.has(mimeType)) return 'video';

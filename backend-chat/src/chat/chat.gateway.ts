@@ -16,7 +16,7 @@ import { HybridThrottlerGuard } from '../common/guards/hybrid-throttler.guard';
 import { PresenceService } from 'src/presence/presence.service';
 import { FriendshipsService } from 'src/friendships/friendships.service';
 import { SkipThrottle } from '@nestjs/throttler';
-import { conversationMembers } from '../database/schema';
+import { conversationMembers, conversations } from '../database/schema';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../database/drizzle.service';
 import { ReadStateService } from '../read-state/read-state.service';
@@ -25,10 +25,16 @@ import { ConversationsService } from '../conversations/conversations.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import type { PublicUserProfileDto, PublicUserSummaryDto } from '../profiles/profiles.service';
+import {
+    AUTH_SESSION_REVOKED_EVENT,
+    AUTH_USER_SESSIONS_REVOKED_EVENT,
+    type AuthSessionRevokedEvent,
+    type AuthUserSessionsRevokedEvent,
+} from '../auth/auth-session.events';
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway()
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private offlineTimers = new Map<number, NodeJS.Timeout>();
@@ -52,7 +58,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (!userId) return;
 
         // noti_channel
-        await client.join(`user_${userId}`);
+        await Promise.all([
+            client.join(`user_${userId}`),
+            client.join(`session_${client.user.sessionId}`),
+        ]);
 
         if (this.offlineTimers.has(userId)) {
             clearTimeout(this.offlineTimers.get(userId));
@@ -128,6 +137,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         conversationIndex: number;
         createdAt: Date;
         clientTempId?: string;
+        clientMessageId?: string | null;
+        replyToMessageId?: number | null;
+        mentionedUserIds?: number[];
         sender: PublicUserSummaryDto;
     }) {
         this.server.to(`conv_${payload.conversationId}`).emit('new_message', {
@@ -150,6 +162,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 lastMessageType: payload.type,
             });
         });
+
+        payload.mentionedUserIds?.filter((userId) => userId !== payload.senderId).forEach((userId) => {
+            this.server.to(`user_${userId}`).emit('mention_received', {
+                conversationId: payload.conversationId,
+                messageId: payload.id,
+                senderId: payload.senderId,
+                senderName: payload.senderName,
+            });
+        });
+    }
+
+    @OnEvent(AUTH_SESSION_REVOKED_EVENT)
+    disconnectRevokedSession({ sessionId }: AuthSessionRevokedEvent) {
+        this.server.in(`session_${sessionId}`).disconnectSockets(true);
+    }
+
+    @OnEvent(AUTH_USER_SESSIONS_REVOKED_EVENT)
+    disconnectRevokedUserSessions({ userId }: AuthUserSessionsRevokedEvent) {
+        this.server.in(`user_${userId}`).disconnectSockets(true);
     }
 
 
@@ -163,7 +194,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content?: string, clientTempId?: string, type?: 'text' | 'gif', fileUrl?: string },
+        @MessageBody() data: { conversationId: number; content?: string, clientTempId?: string, clientMessageId?: string, type?: 'text' | 'gif', fileUrl?: string, replyToMessageId?: number, mentionedUserIds?: number[] },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const senderId = client.user.userId;
@@ -178,8 +209,64 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 content: data.content,
                 fileUrl: data.fileUrl,
                 clientTempId: data.clientTempId,
+                clientMessageId: data.clientMessageId,
+                replyToMessageId: data.replyToMessageId,
+                mentionedUserIds: data.mentionedUserIds,
             },
         );
+    }
+
+    @SubscribeMessage('message:reaction:set')
+    async handleSetReaction(
+        @MessageBody() data: { conversationId: number; messageId: number; emoji: string },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        const delta = await this.messagesService.setReaction(client.user.userId, data);
+        this.server.to(`conv_${data.conversationId}`).emit('message:reaction:updated', delta);
+        return delta;
+    }
+
+    @SubscribeMessage('message:reaction:remove')
+    async handleRemoveReaction(
+        @MessageBody() data: { conversationId: number; messageId: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        const delta = await this.messagesService.removeReaction(client.user.userId, data);
+        this.server.to(`conv_${data.conversationId}`).emit('message:reaction:updated', delta);
+        return delta;
+    }
+
+    @SubscribeMessage('message:recall')
+    async handleRecallMessage(
+        @MessageBody() data: { conversationId: number; messageId: number },
+        @ConnectedSocket() client: AuthenticatedSocket,
+    ) {
+        const delta = await this.messagesService.recallMessage(client.user.userId, data);
+        this.server.to(`conv_${data.conversationId}`).emit('message:recalled', delta);
+        if (delta.lastMessage) {
+            const [conversation] = await this.drizzle.db
+                .select({ lastMessageIndex: conversations.lastMessageIndex })
+                .from(conversations)
+                .where(eq(conversations.id, data.conversationId))
+                .limit(1);
+            const members = await this.drizzle.db
+                .select({ userId: conversationMembers.userId })
+                .from(conversationMembers)
+                .where(eq(conversationMembers.conversationId, data.conversationId));
+
+            members.forEach((member) => {
+                this.server.to(`user_${member.userId}`).emit('update_conversation_list', {
+                    conversationId: data.conversationId,
+                    lastMessageContent: delta.lastMessage?.content ?? 'Tin nhắn đã được thu hồi',
+                    senderName: client.user.displayName || client.user.username,
+                    lastMessageId: data.messageId,
+                    lastMessageIndex: conversation?.lastMessageIndex ?? 0,
+                    lastMessageType: 'text',
+                    isRecallUpdate: true,
+                });
+            });
+        }
+        return delta;
     }
 
     @OnEvent('user.profile.updated')

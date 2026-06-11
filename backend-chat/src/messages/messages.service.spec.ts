@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { MessagesService } from './messages.service';
 import { ProfilesService } from '../profiles/profiles.service';
+import { MediaUploadService } from './media-upload.service';
 
 describe('MessagesService', () => {
   let service: MessagesService;
@@ -23,6 +24,10 @@ describe('MessagesService', () => {
           provide: ProfilesService,
           useValue: { getPublicSummary: jest.fn() },
         },
+        {
+          provide: MediaUploadService,
+          useValue: { deleteUploadedFile: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -38,6 +43,11 @@ describe('MessagesService', () => {
     const insert = jest.fn()
       .mockReturnValueOnce({ values: jest.fn().mockResolvedValue([{ insertId: 15 }]) })
       .mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+    const update = jest.fn().mockReturnValue({
+      set: jest.fn().mockReturnValue({
+        where: jest.fn().mockResolvedValue(undefined),
+      }),
+    });
     const select = jest.fn()
       .mockReturnValueOnce({
         from: () => ({
@@ -53,7 +63,7 @@ describe('MessagesService', () => {
       });
     const db = {
       transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
-        const result = await callback({ insert, select });
+        const result = await callback({ insert, select, update });
         sequence.push('commit');
         return result;
       },
@@ -71,8 +81,19 @@ describe('MessagesService', () => {
         avatar: null,
       }),
     };
-    const messageService = new MessagesService({ db } as never, eventEmitter as never, profilesService as never);
+    const mediaUploadService = {
+      deleteUploadedFile: jest.fn(),
+    };
+    const messageService = new MessagesService({ db } as never, eventEmitter as never, profilesService as never, mediaUploadService as never);
     jest.spyOn(messageService, 'validateMember').mockResolvedValue({ isAdmin: false });
+    jest.spyOn(messageService as never, 'getSerializedMessage').mockResolvedValue({
+      id: 15,
+      conversationId: 9,
+      conversationIndex: 3,
+      senderId: 7,
+      senderName: 'Sender',
+      previewContent: 'Hello',
+    } as never);
 
     await messageService.sendMessage(7, 9, 'Hello');
 

@@ -5,9 +5,13 @@ import { createClient } from 'redis';
 import { JwtService } from '@nestjs/jwt';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import type { JwtPayload, AuthenticatedSocket } from '../common';
-import { DrizzleService } from '../database/drizzle.service';
-import { users } from '../database/schema';
-import { eq } from 'drizzle-orm';
+import { AuthIdentityService } from '../auth/auth-identity.service';
+import {
+    ACCESS_TOKEN_ALGORITHM,
+    ACCESS_TOKEN_AUDIENCE,
+    ACCESS_TOKEN_ISSUER,
+} from '../auth/auth.constants';
+import { resolveCorsOrigin } from '../auth/auth-origin.policy';
 
 export class AuthIoAdapter extends IoAdapter {
     private readonly logger = new Logger(AuthIoAdapter.name);
@@ -31,9 +35,15 @@ export class AuthIoAdapter extends IoAdapter {
     }
 
     createIOServer(port: number, options?: Partial<ServerOptions>): Server {
-        const server = super.createIOServer(port, options) as unknown as Server;
+        const server = super.createIOServer(port, {
+            ...options,
+            cors: {
+                origin: resolveCorsOrigin,
+                credentials: true,
+            },
+        }) as unknown as Server;
         const jwtService = this.app.get<JwtService>(JwtService);
-        const drizzle = this.app.get<DrizzleService>(DrizzleService);
+        const identities = this.app.get<AuthIdentityService>(AuthIdentityService);
 
         // Gắn Adapter để scale-out
         server.adapter(this.adapterConstructor);
@@ -47,29 +57,20 @@ export class AuthIoAdapter extends IoAdapter {
                 return;
             }
 
-            jwtService.verifyAsync<JwtPayload>(token)
+            jwtService.verifyAsync<JwtPayload>(token, {
+                algorithms: [ACCESS_TOKEN_ALGORITHM],
+                audience: ACCESS_TOKEN_AUDIENCE,
+                issuer: ACCESS_TOKEN_ISSUER,
+            })
                 .then(async (payload) => {
-                    const [user] = await drizzle.db
-                        .select({
-                            userId: users.id,
-                            username: users.username,
-                            displayName: users.displayName,
-                        })
-                        .from(users)
-                        .where(eq(users.id, payload.userId))
-                        .limit(1);
-
-                    if (!user) throw new Error('User not found');
-                    (socket as AuthenticatedSocket).user = {
-                        userId: user.userId,
-                        username: user.username,
-                        displayName: user.displayName,
-                        sessionId: payload.sid,
-                    };
+                    const identity = await identities.resolve(payload);
+                    if (!identity) throw new Error('Session not found');
+                    (socket as AuthenticatedSocket).user = identity;
+                    this.disconnectWhenTokenExpires(socket, payload);
                     next();
                 })
                 .catch(() => {
-                    next(new Error('Unauthorized - Token lỏ!'));
+                    next(new Error('Unauthorized - Phiên đăng nhập không hợp lệ.'));
                 });
         });
 
@@ -87,5 +88,16 @@ export class AuthIoAdapter extends IoAdapter {
         }
 
         return undefined;
+    }
+
+    private disconnectWhenTokenExpires(socket: Socket, payload: JwtPayload) {
+        if (!payload.exp) {
+            socket.disconnect(true);
+            return;
+        }
+
+        const remainingLifetimeMs = Math.max(0, payload.exp * 1000 - Date.now());
+        const expiryTimer = setTimeout(() => socket.disconnect(true), remainingLifetimeMs);
+        socket.once('disconnect', () => clearTimeout(expiryTimer));
     }
 }

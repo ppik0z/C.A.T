@@ -28,6 +28,7 @@ export type ChatMessageType = 'text' | 'image' | 'video' | 'document' | 'gif' | 
 export interface ChatMessage {
   id: number;
   clientTempId?: string;
+  clientMessageId?: string | null;
   conversationId?: number;
   conversationIndex?: number;
   type?: ChatMessageType;
@@ -51,12 +52,31 @@ export interface ChatMessage {
   originalFileSizeBytes?: number;
   compressedFileSizeBytes?: number;
   canRetry?: boolean;
+  recalledAt?: string | Date | null;
+  recalledByUserId?: number | null;
+  replyToMessageId?: number | null;
+  replyTo?: ReplySnapshot | null;
+  reactions?: MessageReactionSummary[];
   sender?: {
     id: number;
     username: string;
     displayName?: string | null;
     avatar?: string | null;
   };
+}
+
+export interface ReplySnapshot {
+  id: number;
+  senderName: string;
+  type: ChatMessageType | string;
+  contentPreview: string;
+  recalled: boolean;
+}
+
+export interface MessageReactionSummary {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
 }
 
 export interface LastMessage {
@@ -94,6 +114,7 @@ export interface ConversationListUpdate {
   lastMessageId: number;
   lastMessageIndex: number;
   lastMessageType?: ChatMessageType | string;
+  isRecallUpdate?: boolean;
 }
 
 export type MessageDeliveryStatus = 'sent' | 'delivered';
@@ -176,4 +197,22 @@ export interface LoadMessagesSuccessPayload {
   messageStatuses?: MessageStatusSnapshot[];
   memberReadStates?: MemberReadState[];
   pageInfo?: MessagePageInfo;
+}
+
+export interface MessageReactionUpdate {
+  conversationId: number;
+  messageId: number;
+  reactions: MessageReactionSummary[];
+}
+
+export interface MessageRecallUpdate {
+  conversationId: number;
+  messageId: number;
+  recalledAt: string | Date;
+  recalledByUserId: number;
+  lastMessage?: {
+    id: number;
+    content: string;
+    type: ChatMessageType | string;
+  };
 }
