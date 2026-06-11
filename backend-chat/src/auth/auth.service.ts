@@ -99,7 +99,8 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, userAgent?: string): Promise<AuthResult> {
-    const { username, password } = loginDto;
+    const { identifier, password } = loginDto;
+    const normalizedIdentifier = identifier.trim().toLowerCase();
     const passwordWithinLimit =
       Buffer.byteLength(password, 'utf8') <= BCRYPT_MAX_PASSWORD_BYTES;
 
@@ -109,7 +110,12 @@ export class AuthService {
         password: users.password,
       })
       .from(users)
-      .where(eq(users.username, this.normalizeUsername(username)))
+      .where(
+        or(
+          eq(users.username, normalizedIdentifier),
+          eq(users.email, normalizedIdentifier),
+        ),
+      )
       .limit(1);
 
     const passwordMatches =
