@@ -9,11 +9,16 @@ const route = useRoute();
 const router = useRouter();
 const isLoggedIn = computed(() => authStore.status === "authenticated");
 const isPublicAuthAction = computed(() => route.meta.publicAuthAction === true);
+const isRedirectingForAuth = computed(
+  () =>
+    (authStore.status === "guest" && route.meta.requiresAuth === true) ||
+    (authStore.status === "authenticated" && route.meta.guestOnly === true),
+);
 
 void authStore.bootstrap();
 
 watch(
-  [() => authStore.status, () => route.fullPath],
+  [() => authStore.status, () => route.name],
   async ([status]) => {
     if (status === "authenticated" && route.meta.guestOnly) {
       await router.replace("/");
@@ -29,7 +34,9 @@ watch(
   <RouterView v-if="isPublicAuthAction" />
   <AppBootstrapSkeleton
     v-else-if="
-      authStore.status === 'unknown' || authStore.status === 'refreshing'
+      authStore.status === 'unknown' ||
+      authStore.status === 'refreshing' ||
+      isRedirectingForAuth
     "
   />
   <main
