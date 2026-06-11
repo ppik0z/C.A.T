@@ -216,7 +216,7 @@ export class AccountService {
   async updatePassword(userId: number, data: UpdatePasswordDto) {
     const { currentPassword, newPassword } = data;
     if (!currentPassword || !newPassword)
-      throw new BadRequestException('Missing password fields');
+      throw new BadRequestException('Vui lòng nhập đầy đủ mật khẩu.');
     assertPasswordFitsBcrypt(newPassword);
 
     const user = await this.drizzle.db.query.users.findFirst({
@@ -228,7 +228,12 @@ export class AccountService {
       currentPassword,
       user.password,
     );
-    if (!isMatch) throw new BadRequestException('Incorrect current password');
+    if (!isMatch)
+      throw new BadRequestException('Mật khẩu hiện tại không chính xác.');
+    if (currentPassword === newPassword)
+      throw new BadRequestException(
+        'Mật khẩu mới phải khác mật khẩu hiện tại.',
+      );
 
     const hashedPassword = await this.passwordHasher.hash(newPassword);
     await this.drizzle.db
@@ -238,7 +243,9 @@ export class AccountService {
     await this.sessions.revokeAllForUser(userId);
     await this.pushSubscriptions.revokeAllForUser(userId);
 
-    return { message: 'Password updated successfully' };
+    return {
+      message: 'Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại.',
+    };
   }
 
   private async emitPublicProfileUpdated(userId: number) {

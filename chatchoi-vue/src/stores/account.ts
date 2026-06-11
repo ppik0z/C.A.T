@@ -1,13 +1,25 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { fetchAccountMe, patchAccountProfile, patchAccountSettings, uploadAccountAvatar } from '../services/account.service';
-import type { AccountMe, UpdateProfileRequest, UpdateSettingsRequest } from '../types/account';
+import {
+  fetchAccountMe,
+  patchAccountProfile,
+  patchAccountSettings,
+  updateAccountPassword,
+  uploadAccountAvatar,
+} from '../services/account.service';
+import type {
+  AccountMe,
+  UpdatePasswordRequest,
+  UpdateProfileRequest,
+  UpdateSettingsRequest,
+} from '../types/account';
 import { useChatStore } from './chat';
 
 export const useAccountStore = defineStore('account', () => {
   const me = ref<AccountMe | null>(null);
   const isLoading = ref(false);
   const isSaving = ref(false);
+  const isChangingPassword = ref(false);
   const error = ref<string | null>(null);
   const settings = computed(() => me.value?.settings ?? null);
 
@@ -76,6 +88,16 @@ export const useAccountStore = defineStore('account', () => {
     }
   };
 
+  const changePassword = async (input: UpdatePasswordRequest) => {
+    isChangingPassword.value = true;
+    error.value = null;
+    try {
+      return await updateAccountPassword(input);
+    } finally {
+      isChangingPassword.value = false;
+    }
+  };
+
   const clear = () => {
     me.value = null;
     error.value = null;
@@ -86,11 +108,13 @@ export const useAccountStore = defineStore('account', () => {
     settings,
     isLoading,
     isSaving,
+    isChangingPassword,
     error,
     fetchAccount,
     updateProfile,
     updateAvatar,
     updateSettings,
+    changePassword,
     clear,
   };
 });

@@ -9,8 +9,27 @@ import { PushSubscriptionsService } from '../push-notifications/push-subscriptio
 
 describe('AccountService', () => {
   let service: AccountService;
+  let findUser: jest.Mock;
+  let updateWhere: jest.Mock;
+  let verifyPassword: jest.Mock;
+  let hashPassword: jest.Mock;
+  let revokeSessions: jest.Mock;
+  let revokePushSubscriptions: jest.Mock;
 
   beforeEach(async () => {
+    findUser = jest.fn().mockResolvedValue({
+      email: 'test@example.com',
+      phone: '0123456789',
+      isEmailVerified: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    updateWhere = jest.fn().mockResolvedValue(undefined);
+    verifyPassword = jest.fn();
+    hashPassword = jest.fn();
+    revokeSessions = jest.fn();
+    revokePushSubscriptions = jest.fn();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AccountService,
@@ -20,18 +39,17 @@ describe('AccountService', () => {
             db: {
               query: {
                 users: {
-                  findFirst: jest.fn().mockResolvedValue({
-                    email: 'test@example.com',
-                    phone: '0123456789',
-                    isEmailVerified: true,
-                    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-                    updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-                  }),
+                  findFirst: findUser,
                 },
                 userSettings: {
                   findFirst: jest.fn().mockResolvedValue(null),
                 },
               },
+              update: jest.fn().mockReturnValue({
+                set: jest.fn().mockReturnValue({
+                  where: updateWhere,
+                }),
+              }),
             },
           },
         },
@@ -52,15 +70,15 @@ describe('AccountService', () => {
         },
         {
           provide: AuthSessionService,
-          useValue: { revokeAllForUser: jest.fn() },
+          useValue: { revokeAllForUser: revokeSessions },
         },
         {
           provide: PasswordHasherService,
-          useValue: { hash: jest.fn(), verify: jest.fn() },
+          useValue: { hash: hashPassword, verify: verifyPassword },
         },
         {
           provide: PushSubscriptionsService,
-          useValue: { revokeAllForUser: jest.fn() },
+          useValue: { revokeAllForUser: revokePushSubscriptions },
         },
         {
           provide: EventEmitter2,
@@ -85,5 +103,63 @@ describe('AccountService', () => {
       presence: 'online',
       settings: null,
     });
+  });
+
+  it('changes the password and revokes every active session', async () => {
+    findUser.mockResolvedValue({ id: 7, password: 'current-hash' });
+    verifyPassword.mockResolvedValue(true);
+    hashPassword.mockResolvedValue('new-hash');
+
+    await expect(
+      service.updatePassword(7, {
+        currentPassword: 'current-password',
+        newPassword: 'new-password',
+      }),
+    ).resolves.toEqual({
+      message: 'Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại.',
+    });
+
+    expect(verifyPassword).toHaveBeenCalledWith(
+      'current-password',
+      'current-hash',
+    );
+    expect(hashPassword).toHaveBeenCalledWith('new-password');
+    expect(updateWhere).toHaveBeenCalled();
+    expect(revokeSessions).toHaveBeenCalledWith(7);
+    expect(revokePushSubscriptions).toHaveBeenCalledWith(7);
+  });
+
+  it('rejects an incorrect current password without changing sessions', async () => {
+    findUser.mockResolvedValue({ id: 7, password: 'current-hash' });
+    verifyPassword.mockResolvedValue(false);
+
+    await expect(
+      service.updatePassword(7, {
+        currentPassword: 'wrong-password',
+        newPassword: 'new-password',
+      }),
+    ).rejects.toThrow('Mật khẩu hiện tại không chính xác.');
+
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(updateWhere).not.toHaveBeenCalled();
+    expect(revokeSessions).not.toHaveBeenCalled();
+    expect(revokePushSubscriptions).not.toHaveBeenCalled();
+  });
+
+  it('rejects reusing the current password', async () => {
+    findUser.mockResolvedValue({ id: 7, password: 'current-hash' });
+    verifyPassword.mockResolvedValue(true);
+
+    await expect(
+      service.updatePassword(7, {
+        currentPassword: 'same-password',
+        newPassword: 'same-password',
+      }),
+    ).rejects.toThrow('Mật khẩu mới phải khác mật khẩu hiện tại.');
+
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(updateWhere).not.toHaveBeenCalled();
+    expect(revokeSessions).not.toHaveBeenCalled();
+    expect(revokePushSubscriptions).not.toHaveBeenCalled();
   });
 });

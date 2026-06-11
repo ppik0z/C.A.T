@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import PasswordField from "@/components/atoms/PasswordField.vue";
 import PreferenceRow from "@/components/molecules/PreferenceRow.vue";
 import { useAccountStore } from "@/stores/account";
 import { resolveDisplayName, formatUsername } from "@/utils/userPresentation";
@@ -28,12 +29,21 @@ const draftProfile = ref({
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 const isSendingVerification = ref(false);
+const isChangingPassword = ref(false);
+const passwordForm = ref({
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
+const passwordError = ref<string | null>(null);
 const verificationFeedback = ref<{
   type: "success" | "error";
   message: string;
 } | null>(null);
 
 const displayName = computed(() => resolveDisplayName(accountStore.me));
+const BCRYPT_MAX_PASSWORD_BYTES = 72;
+const getUtf8ByteLength = (value: string) => new TextEncoder().encode(value).length;
 
 onMounted(async () => {
   await accountStore.fetchAccount();
@@ -96,6 +106,66 @@ const sendVerificationEmail = async () => {
     };
   } finally {
     isSendingVerification.value = false;
+  }
+};
+
+const resetPasswordForm = () => {
+  passwordForm.value = {
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+  passwordError.value = null;
+};
+
+const closePasswordForm = () => {
+  isChangingPassword.value = false;
+  resetPasswordForm();
+};
+
+const togglePasswordForm = () => {
+  if (isChangingPassword.value) {
+    closePasswordForm();
+    return;
+  }
+  isChangingPassword.value = true;
+  passwordError.value = null;
+};
+
+const getPasswordValidationError = () => {
+  const { currentPassword, newPassword, confirmPassword } = passwordForm.value;
+  if (currentPassword.length < 8 || newPassword.length < 8) {
+    return "Mật khẩu phải có ít nhất 8 ký tự.";
+  }
+  if (
+    getUtf8ByteLength(currentPassword) > BCRYPT_MAX_PASSWORD_BYTES ||
+    getUtf8ByteLength(newPassword) > BCRYPT_MAX_PASSWORD_BYTES
+  ) {
+    return "Mật khẩu không được vượt quá 72 byte.";
+  }
+  if (newPassword !== confirmPassword) {
+    return "Mật khẩu xác nhận không khớp.";
+  }
+  if (newPassword === currentPassword) {
+    return "Mật khẩu mới phải khác mật khẩu hiện tại.";
+  }
+  return null;
+};
+
+const handleChangePassword = async () => {
+  passwordError.value = getPasswordValidationError();
+  if (passwordError.value) return;
+
+  try {
+    await accountStore.changePassword({
+      currentPassword: passwordForm.value.currentPassword,
+      newPassword: passwordForm.value.newPassword,
+    });
+    resetPasswordForm();
+    await authStore.logout();
+  } catch (caught) {
+    passwordError.value =
+      caught instanceof Error ? caught.message : "Không thể đổi mật khẩu.";
   }
 };
 </script>
@@ -230,10 +300,79 @@ const sendVerificationEmail = async () => {
             :title="$t('settings.account.password.title')"
             :description="$t('settings.account.password.description')"
           >
-            <Button disabled type="button" variant="outline">{{
-              $t("settings.account.password.action")
-            }}</Button>
+            <Button
+              type="button"
+              variant="outline"
+              @click="togglePasswordForm"
+            >
+              {{
+                isChangingPassword
+                  ? "Đóng"
+                  : $t("settings.account.password.action")
+              }}
+            </Button>
           </PreferenceRow>
+          <form
+            v-if="isChangingPassword"
+            class="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+            @submit.prevent="handleChangePassword"
+          >
+            <div class="grid gap-4">
+              <PasswordField
+                id="current-password"
+                v-model="passwordForm.currentPassword"
+                autocomplete="current-password"
+                :disabled="accountStore.isChangingPassword"
+                label="Mật khẩu hiện tại"
+              />
+              <PasswordField
+                id="new-account-password"
+                v-model="passwordForm.newPassword"
+                autocomplete="new-password"
+                :disabled="accountStore.isChangingPassword"
+                label="Mật khẩu mới"
+              />
+              <PasswordField
+                id="confirm-account-password"
+                v-model="passwordForm.confirmPassword"
+                autocomplete="new-password"
+                :disabled="accountStore.isChangingPassword"
+                label="Xác nhận mật khẩu mới"
+              />
+            </div>
+
+            <p class="mt-3 text-xs font-semibold leading-5 text-on-surface-variant">
+              Mật khẩu cần ít nhất 8 ký tự. Sau khi đổi thành công, bạn sẽ được đăng xuất khỏi tất cả thiết bị.
+            </p>
+            <p
+              v-if="passwordError"
+              class="mt-3 rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error"
+              role="alert"
+            >
+              {{ passwordError }}
+            </p>
+
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                :disabled="accountStore.isChangingPassword"
+                type="button"
+                variant="ghost"
+                @click="closePasswordForm"
+              >
+                Hủy
+              </Button>
+              <Button
+                :disabled="accountStore.isChangingPassword"
+                type="submit"
+              >
+                {{
+                  accountStore.isChangingPassword
+                    ? "Đang đổi mật khẩu..."
+                    : "Đổi mật khẩu"
+                }}
+              </Button>
+            </div>
+          </form>
           <Separator />
           <PreferenceRow
             icon="logout"
