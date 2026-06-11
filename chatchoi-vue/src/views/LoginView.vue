@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "../stores/auth";
 import { useRouter } from "vue-router";
+import BrandLogo from "@/components/atoms/BrandLogo.vue";
 
 type AuthMode = "login" | "register";
 
@@ -77,6 +78,7 @@ const submit = async () => {
       aria-labelledby="auth-title"
     >
       <div class="text-center mb-6">
+        <BrandLogo alt="" class="mx-auto mb-3 size-14 rounded-2xl shadow-sm" />
         <h1 id="auth-title" class="text-3xl font-bold text-primary mb-2">
           CHATCHOI
         </h1>
