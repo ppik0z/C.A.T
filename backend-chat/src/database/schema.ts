@@ -8,6 +8,7 @@ import {
   longtext,
   index,
   uniqueIndex,
+  type AnyMySqlColumn,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { relations } from 'drizzle-orm';
@@ -245,6 +246,12 @@ export const messages = mysqlTable(
     fileFormat: varchar('fileFormat', { length: 50 }),
     fileWidth: int('fileWidth'),
     fileHeight: int('fileHeight'),
+    fileThumbnailUrl: text('fileThumbnailUrl'),
+    fileDurationSeconds: int('fileDurationSeconds'),
+    callSessionId: int('callSessionId').references(
+      (): AnyMySqlColumn => callSessions.id,
+      { onDelete: 'set null' },
+    ),
     senderId: int('senderId')
       .notNull()
       .references(() => users.id),
@@ -270,6 +277,7 @@ export const messages = mysqlTable(
       t.conversationIndex,
     ),
     index('idx_message_reply_to').on(t.replyToMessageId),
+    index('idx_message_call_session').on(t.callSessionId),
   ],
 );
 
@@ -477,6 +485,10 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.conversationId],
     references: [conversations.id],
   }),
+  callSession: one(callSessions, {
+    fields: [messages.callSessionId],
+    references: [callSessions.id],
+  }),
   statuses: many(messageStatuses),
   reactions: many(messageReactions),
 }));
@@ -520,6 +532,7 @@ export const callSessionsRelations = relations(
       fields: [callSessions.startedByUserId],
       references: [users.id],
     }),
+    messages: many(messages),
     participants: many(callParticipants),
   }),
 );
