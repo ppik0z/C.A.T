@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue';
-import { Minimize2, MonitorSmartphone, Phone, Video } from '@lucide/vue';
+import { ChevronLeft, ChevronRight, Minimize2, MonitorSmartphone, Phone, Video } from '@lucide/vue';
 import Avatar from '../atoms/Avatar.vue';
 import CallControlButton from '../atoms/CallControlButton.vue';
 import CallParticipantTile from '../molecules/CallParticipantTile.vue';
@@ -33,6 +33,7 @@ const avatarUrl = computed(() => {
 });
 
 const kind = computed(() => call.value?.kind ?? pending.value?.kind ?? 'audio');
+const isVideoCall = computed(() => kind.value === 'video');
 const joinedParticipants = computed(() => {
   return call.value?.participants.filter((participant) => participant.status === 'joined') ?? [];
 });
@@ -47,6 +48,13 @@ const displayedParticipants = computed(() => {
 });
 const pageCount = computed(() => {
   return Math.max(1, Math.ceil(joinedParticipants.value.length / callMediaStore.videoPageSize));
+});
+const participantGridClass = computed(() => {
+  const count = displayedParticipants.value.length;
+  if (count <= 1) return 'grid-cols-1';
+  if (count === 2) return 'grid-cols-1 sm:grid-cols-2';
+  if (count <= 4) return 'grid-cols-2';
+  return 'grid-cols-2 lg:grid-cols-3';
 });
 const localParticipant = computed(() => {
   const myId = chatStore.myId;
@@ -142,46 +150,43 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="isVisible"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950 text-white sm:bg-black/70 sm:p-4 sm:backdrop-blur-md"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950 text-white sm:bg-black/75 sm:p-3 sm:backdrop-blur-xl"
     >
-      <section class="flex h-full w-full flex-col overflow-hidden bg-neutral-950 shadow-2xl sm:h-[min(46rem,calc(100dvh-2rem))] sm:max-w-5xl sm:rounded-[2rem] sm:border sm:border-white/10">
-        <header class="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur-xl sm:px-5 sm:py-4">
-          <div class="flex items-center gap-3 min-w-0">
-            <Avatar :avatar-url="avatarUrl" :name="title" size="lg" />
-            <div class="min-w-0">
-              <h2 class="truncate text-base font-bold text-white sm:text-lg">{{ title }}</h2>
-              <p class="truncate text-sm text-white/70">
-                {{ kind === 'video' ? 'Cuộc gọi video' : 'Cuộc gọi thoại' }} · {{ statusText }}
-              </p>
-              <p v-if="mediaStatusText" class="truncate text-xs text-white/55">{{ mediaStatusText }}</p>
-            </div>
+      <section class="relative flex h-full w-full flex-col overflow-hidden bg-neutral-950 shadow-2xl sm:h-[min(52rem,calc(100dvh-1.5rem))] sm:max-w-6xl sm:rounded-[2rem] sm:border sm:border-white/10">
+        <div
+          v-if="!isVideoCall"
+          class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_28%,color-mix(in_srgb,var(--color-primary)_32%,transparent),transparent_46%),linear-gradient(180deg,#18181b_0%,#09090b_100%)]"
+          aria-hidden="true"
+        ></div>
+
+        <header class="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 bg-gradient-to-b from-black/70 to-transparent px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6 sm:pt-5">
+          <div class="min-w-0">
+            <h2 class="truncate text-base font-bold text-white sm:text-lg">{{ title }}</h2>
+            <p class="truncate text-sm text-white/70">
+              {{ isVideoCall ? 'Cuộc gọi video' : 'Cuộc gọi thoại' }} · {{ statusText }}
+            </p>
+            <p v-if="mediaStatusText" class="truncate text-xs text-white/55">{{ mediaStatusText }}</p>
           </div>
-          <div class="flex items-center gap-2">
-            <button
-              v-if="call"
-              class="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-white/40"
-              type="button"
-              aria-label="Thu nhỏ"
-              @click="handleMinimize"
-            >
-              <Minimize2 class="h-4 w-4" aria-hidden="true" />
-            </button>
-            <span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary">
-              <Video v-if="kind === 'video'" class="h-5 w-5" aria-hidden="true" />
-              <Phone v-else class="h-5 w-5" aria-hidden="true" />
-            </span>
-          </div>
+          <button
+            v-if="call"
+            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-md transition hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            type="button"
+            aria-label="Thu nhỏ"
+            @click="handleMinimize"
+          >
+            <Minimize2 :size="19" aria-hidden="true" />
+          </button>
         </header>
 
         <div
           v-if="callMediaStore.error"
-          class="border-b border-error/30 bg-error-container px-5 py-2 text-sm text-on-error-container"
+          class="absolute inset-x-4 top-24 z-30 rounded-xl border border-error/30 bg-error-container px-4 py-2 text-sm text-on-error-container shadow-lg sm:inset-x-6"
         >
           {{ callMediaStore.error }}
         </div>
 
-        <div class="flex-1 min-h-0 overflow-y-auto bg-neutral-950 p-3 sm:p-5">
-          <div v-if="isTakenOver" class="min-h-72 flex flex-col items-center justify-center text-center gap-4">
+        <main class="relative z-10 min-h-0 flex-1">
+          <div v-if="isTakenOver" class="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
             <MonitorSmartphone class="h-12 w-12 text-white/60" aria-hidden="true" />
             <p class="text-lg font-bold text-white">Đang hoạt động ở nơi khác</p>
             <p class="max-w-xs text-sm text-white/65">Cuộc gọi đang kết nối trên một tab hoặc thiết bị khác. Bạn có thể chuyển về đây.</p>
@@ -194,7 +199,13 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <div v-else-if="displayedParticipants.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div
+            v-else-if="isVideoCall && displayedParticipants.length > 0"
+            :class="[
+              'grid h-full auto-rows-fr gap-2 overflow-y-auto px-2 pb-28 pt-24 sm:gap-3 sm:px-3 sm:pb-32',
+              participantGridClass,
+            ]"
+          >
             <CallParticipantTile
               v-for="participant in displayedParticipants"
               :key="participant.userId"
@@ -204,48 +215,61 @@ onBeforeUnmount(() => {
             />
           </div>
 
-          <div v-else class="min-h-72 flex flex-col items-center justify-center text-center">
-            <Avatar :avatar-url="avatarUrl" :name="title" size="xl" />
-            <p class="mt-4 text-xl font-bold text-white">{{ title }}</p>
-            <p class="mt-1 text-sm text-white/65">{{ statusText }}</p>
+          <div v-else class="flex h-full flex-col items-center justify-center px-6 pb-28 pt-24 text-center sm:pb-32">
+            <div class="rounded-full bg-white/8 p-2 shadow-[0_28px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/10">
+              <Avatar :avatar-url="avatarUrl" :name="title" size="2xl" />
+            </div>
+            <p class="mt-6 max-w-md truncate text-2xl font-bold text-white sm:text-3xl">{{ title }}</p>
+            <p class="mt-2 text-sm font-medium text-white/65">{{ statusText }}</p>
+            <span class="mt-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white/85">
+              <Video v-if="isVideoCall" :size="20" aria-hidden="true" />
+              <Phone v-else :size="20" aria-hidden="true" />
+            </span>
           </div>
-        </div>
+        </main>
 
-        <footer class="flex items-center justify-center gap-3 border-t border-white/10 bg-black/45 px-4 py-4 backdrop-blur-xl sm:px-5">
+        <footer class="absolute inset-x-0 bottom-0 z-20 flex items-end justify-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-12 sm:gap-5 sm:pb-6">
           <button
             v-if="call && pageCount > 1"
-            class="h-11 w-11 rounded-full border border-white/15 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-40"
+            class="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-40"
             type="button"
             aria-label="Trang trước"
             :disabled="callMediaStore.videoPageIndex === 0"
             @click="callMediaStore.previousVideoPage(call)"
           >
-            <span class="material-symbols-outlined text-[22px]">chevron_left</span>
+            <ChevronLeft :size="21" />
           </button>
-          <CallControlButton
-            v-if="call"
-            :active="Boolean(localParticipant?.micEnabled)"
-            :icon="localParticipant?.micEnabled ? 'mic' : 'mic_off'"
-            label="Bật/tắt micro"
-            @click="handleToggleMic"
-          />
-          <CallControlButton
-            v-if="call"
-            :active="Boolean(localParticipant?.cameraEnabled)"
-            :icon="localParticipant?.cameraEnabled ? 'videocam' : 'videocam_off'"
-            label="Bật/tắt camera"
-            @click="handleToggleCamera"
-          />
-          <CallControlButton icon="call_end" label="Rời cuộc gọi" tone="danger" @click="handleLeave" />
+          <div v-if="call" class="flex flex-col items-center gap-1.5">
+            <CallControlButton
+              :active="Boolean(localParticipant?.micEnabled)"
+              :icon="localParticipant?.micEnabled ? 'mic' : 'mic_off'"
+              label="Bật/tắt micro"
+              @click="handleToggleMic"
+            />
+            <span class="text-[11px] font-semibold text-white/70">Micro</span>
+          </div>
+          <div v-if="call" class="flex flex-col items-center gap-1.5">
+            <CallControlButton
+              :active="Boolean(localParticipant?.cameraEnabled)"
+              :icon="localParticipant?.cameraEnabled ? 'videocam' : 'videocam_off'"
+              label="Bật/tắt camera"
+              @click="handleToggleCamera"
+            />
+            <span class="text-[11px] font-semibold text-white/70">Camera</span>
+          </div>
+          <div class="flex flex-col items-center gap-1.5">
+            <CallControlButton icon="call_end" label="Rời cuộc gọi" tone="danger" @click="handleLeave" />
+            <span class="text-[11px] font-semibold text-white/70">Kết thúc</span>
+          </div>
           <button
             v-if="call && pageCount > 1"
-            class="h-11 w-11 rounded-full border border-white/15 text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:opacity-40"
+            class="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 disabled:opacity-40"
             type="button"
             aria-label="Trang sau"
             :disabled="callMediaStore.videoPageIndex >= pageCount - 1"
             @click="callMediaStore.nextVideoPage(call)"
           >
-            <span class="material-symbols-outlined text-[22px]">chevron_right</span>
+            <ChevronRight :size="21" />
           </button>
         </footer>
       </section>

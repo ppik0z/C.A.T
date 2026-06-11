@@ -8,7 +8,7 @@ interface Props {
   avatarUrl?: string | null;
   isOnline?: boolean;
   showStatus?: boolean;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -22,6 +22,7 @@ const sizeClass = computed(() => {
   if (props.size === 'sm') return 'w-8 h-8 text-xs';
   if (props.size === 'lg') return 'w-12 h-12 text-sm';
   if (props.size === 'xl') return 'w-24 h-24 text-2xl';
+  if (props.size === '2xl') return 'w-32 h-32 text-3xl sm:w-40 sm:h-40 sm:text-4xl';
   return 'w-10 h-10 text-sm';
 });
 

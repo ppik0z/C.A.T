@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button';
+import { Mic, MicOff, PhoneOff, Video, VideoOff } from '@lucide/vue';
+import { computed } from 'vue';
 
 interface Props {
-  icon: string;
+  icon: 'mic' | 'mic_off' | 'videocam' | 'videocam_off' | 'call_end';
   label: string;
   active?: boolean;
   tone?: 'neutral' | 'primary' | 'danger';
@@ -13,25 +14,31 @@ const props = withDefaults(defineProps<Props>(), {
   tone: 'neutral',
 });
 
-const variantByTone = {
-  neutral: 'secondary',
-  primary: 'default',
-  danger: 'destructive',
-} as const;
+const iconComponent = computed(() => {
+  if (props.icon === 'mic') return Mic;
+  if (props.icon === 'mic_off') return MicOff;
+  if (props.icon === 'videocam') return Video;
+  if (props.icon === 'videocam_off') return VideoOff;
+  return PhoneOff;
+});
 </script>
 
 <template>
-  <Button
+  <button
     :aria-label="props.label"
     :title="props.label"
     :class="[
-      'h-12 w-12 rounded-full',
-      props.tone === 'neutral' && props.active ? 'bg-primary-container text-primary hover:bg-primary-container' : '',
+      'flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95',
+      props.tone === 'danger'
+        ? 'bg-red-500 text-white hover:bg-red-600'
+        : props.tone === 'primary'
+          ? 'bg-primary text-on-primary hover:brightness-95'
+          : props.active
+            ? 'bg-white/16 text-white hover:bg-white/24'
+            : 'bg-white text-neutral-900 hover:bg-white/90',
     ]"
-    size="icon"
     type="button"
-    :variant="props.tone === 'neutral' && props.active ? 'secondary' : variantByTone[props.tone]"
   >
-    <span class="material-symbols-outlined text-[24px]">{{ props.icon }}</span>
-  </Button>
+    <component :is="iconComponent" :size="23" :stroke-width="2.2" />
+  </button>
 </template>
