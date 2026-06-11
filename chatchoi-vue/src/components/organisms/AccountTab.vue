@@ -1,25 +1,34 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
-import PreferenceRow from '@/components/molecules/PreferenceRow.vue';
-import { useAccountStore } from '@/stores/account';
-import { resolveDisplayName, formatUsername } from '@/utils/userPresentation';
-import ProfileCardContent from '@/components/molecules/ProfileCardContent.vue';
-import { useAuthStore } from '@/stores/auth';
+import { ref, computed, onMounted } from "vue";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import PreferenceRow from "@/components/molecules/PreferenceRow.vue";
+import { useAccountStore } from "@/stores/account";
+import { resolveDisplayName, formatUsername } from "@/utils/userPresentation";
+import ProfileCardContent from "@/components/molecules/ProfileCardContent.vue";
+import { useAuthStore } from "@/stores/auth";
+import { requestEmailVerification } from "@/services/auth.service";
 
 const accountStore = useAccountStore();
 const authStore = useAuthStore();
 
 const isEditing = ref(false);
 const draftProfile = ref({
-  displayName: '',
-  bio: '',
-  customStatus: '',
+  displayName: "",
+  bio: "",
+  customStatus: "",
 });
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
+const isSendingVerification = ref(false);
+const verificationMessage = ref<string | null>(null);
 
 const displayName = computed(() => resolveDisplayName(accountStore.me));
 
@@ -30,9 +39,9 @@ onMounted(async () => {
 
 const syncDrafts = () => {
   draftProfile.value = {
-    displayName: accountStore.me?.displayName || '',
-    bio: accountStore.me?.bio || '',
-    customStatus: accountStore.me?.customStatus || '',
+    displayName: accountStore.me?.displayName || "",
+    bio: accountStore.me?.bio || "",
+    customStatus: accountStore.me?.customStatus || "",
   };
 };
 
@@ -61,7 +70,23 @@ const handleSave = async () => {
     await accountStore.updateProfile(draftProfile.value);
     isEditing.value = false;
   } catch (error) {
-    console.error('Failed to save profile', error);
+    console.error("Failed to save profile", error);
+  }
+};
+
+const sendVerificationEmail = async () => {
+  isSendingVerification.value = true;
+  verificationMessage.value = null;
+  try {
+    const result = await requestEmailVerification();
+    verificationMessage.value = result.message;
+  } catch (caught) {
+    verificationMessage.value =
+      caught instanceof Error
+        ? caught.message
+        : "Không thể gửi email xác minh.";
+  } finally {
+    isSendingVerification.value = false;
   }
 };
 </script>
@@ -75,18 +100,38 @@ const handleSave = async () => {
           :avatar-url="accountStore.me?.avatar"
           :banner="accountStore.me?.banner"
           :bio="isEditing ? draftProfile.bio : accountStore.me?.bio"
-          :custom-status="isEditing ? draftProfile.customStatus : accountStore.me?.customStatus"
+          :custom-status="
+            isEditing
+              ? draftProfile.customStatus
+              : accountStore.me?.customStatus
+          "
           eyebrow="Giới thiệu"
           :is-online="accountStore.me?.presence === 'online'"
-          :name="isEditing ? (draftProfile.displayName || accountStore.me?.username || 'User') : displayName"
-          :status-label="accountStore.me?.presence === 'online' ? 'Online' : 'Offline'"
+          :name="
+            isEditing
+              ? draftProfile.displayName || accountStore.me?.username || 'User'
+              : displayName
+          "
+          :status-label="
+            accountStore.me?.presence === 'online' ? 'Online' : 'Offline'
+          "
           :username="formatUsername(accountStore.me?.username)"
         />
         <div class="px-4 pb-4">
-          <button class="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-container/30" type="button" @click="triggerFileInput">
-            {{ isUploading ? 'Đang tải ảnh...' : 'Đổi ảnh đại diện' }}
+          <button
+            class="w-full rounded-lg border border-outline-variant px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-container/30"
+            type="button"
+            @click="triggerFileInput"
+          >
+            {{ isUploading ? "Đang tải ảnh..." : "Đổi ảnh đại diện" }}
           </button>
-          <input ref="fileInput" class="hidden" type="file" accept="image/*" @change="handleFileChange" />
+          <input
+            ref="fileInput"
+            class="hidden"
+            type="file"
+            accept="image/*"
+            @change="handleFileChange"
+          />
         </div>
       </CardContent>
     </Card>
@@ -95,51 +140,150 @@ const handleSave = async () => {
     <Card>
       <CardHeader class="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>{{ $t('settings.account.title') }}</CardTitle>
-          <CardDescription>{{ $t('settings.account.description') }}</CardDescription>
+          <CardTitle>{{ $t("settings.account.title") }}</CardTitle>
+          <CardDescription>{{
+            $t("settings.account.description")
+          }}</CardDescription>
         </div>
-        <Button v-if="!isEditing" @click="isEditing = true" variant="outline">Chỉnh sửa hồ sơ</Button>
+        <Button v-if="!isEditing" @click="isEditing = true" variant="outline"
+          >Chỉnh sửa hồ sơ</Button
+        >
       </CardHeader>
       <CardContent>
         <template v-if="!isEditing">
-          <PreferenceRow icon="person" :title="$t('settings.account.displayName.title')" :description="$t('settings.account.displayName.description')">
+          <PreferenceRow
+            icon="person"
+            :title="$t('settings.account.displayName.title')"
+            :description="$t('settings.account.displayName.description')"
+          >
             <span class="font-semibold text-on-surface">{{ displayName }}</span>
           </PreferenceRow>
           <Separator />
-          <PreferenceRow icon="info" title="Giới thiệu bản thân" description="Một đoạn ngắn mô tả về bạn.">
-            <span class="font-semibold text-on-surface line-clamp-2 max-w-[200px] text-right">{{ accountStore.me?.bio || 'Chưa cập nhật' }}</span>
+          <PreferenceRow
+            icon="info"
+            title="Giới thiệu bản thân"
+            description="Một đoạn ngắn mô tả về bạn."
+          >
+            <span
+              class="font-semibold text-on-surface line-clamp-2 max-w-[200px] text-right"
+              >{{ accountStore.me?.bio || "Chưa cập nhật" }}</span
+            >
           </PreferenceRow>
           <Separator />
-          <PreferenceRow icon="lock" :title="$t('settings.account.password.title')" :description="$t('settings.account.password.description')">
-            <Button disabled type="button" variant="outline">{{ $t('settings.account.password.action') }}</Button>
+          <PreferenceRow
+            icon="mail"
+            title="Email"
+            :description="
+              accountStore.me?.isEmailVerified ? 'Đã xác minh' : 'Chưa xác minh'
+            "
+          >
+            <div class="text-right">
+              <p
+                class="max-w-[220px] truncate text-sm font-semibold text-on-surface"
+              >
+                {{ accountStore.me?.email || "Chưa cập nhật" }}
+              </p>
+              <Button
+                v-if="
+                  accountStore.me?.email && !accountStore.me.isEmailVerified
+                "
+                class="mt-2"
+                :disabled="isSendingVerification"
+                size="sm"
+                type="button"
+                variant="outline"
+                @click="sendVerificationEmail"
+              >
+                {{
+                  isSendingVerification ? "Đang gửi..." : "Gửi email xác minh"
+                }}
+              </Button>
+            </div>
+          </PreferenceRow>
+          <p
+            v-if="verificationMessage"
+            class="mb-3 rounded-lg bg-primary-container px-3 py-2 text-sm font-semibold text-on-primary-container"
+            aria-live="polite"
+          >
+            {{ verificationMessage }}
+          </p>
+          <Separator />
+          <PreferenceRow
+            icon="lock"
+            :title="$t('settings.account.password.title')"
+            :description="$t('settings.account.password.description')"
+          >
+            <Button disabled type="button" variant="outline">{{
+              $t("settings.account.password.action")
+            }}</Button>
           </PreferenceRow>
           <Separator />
-          <PreferenceRow icon="logout" :title="$t('settings.account.logout.title')" :description="$t('settings.account.logout.description')">
-            <Button type="button" variant="destructive" @click="authStore.logout()">{{ $t('settings.account.logout.action') }}</Button>
+          <PreferenceRow
+            icon="logout"
+            :title="$t('settings.account.logout.title')"
+            :description="$t('settings.account.logout.description')"
+          >
+            <Button
+              type="button"
+              variant="destructive"
+              @click="authStore.logout()"
+              >{{ $t("settings.account.logout.action") }}</Button
+            >
           </PreferenceRow>
         </template>
-        
+
         <template v-else>
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-bold text-on-surface mb-1">Tên hiển thị</label>
-              <input v-model="draftProfile.displayName" class="w-full h-10 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm focus:ring-2 focus:ring-primary" placeholder="Tên hiển thị..." />
+              <label class="block text-sm font-bold text-on-surface mb-1"
+                >Tên hiển thị</label
+              >
+              <input
+                v-model="draftProfile.displayName"
+                class="w-full h-10 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Tên hiển thị..."
+              />
             </div>
             <div>
-              <label class="block text-sm font-bold text-on-surface mb-1">Trạng thái tuỳ chỉnh</label>
-              <input v-model="draftProfile.customStatus" class="w-full h-10 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm focus:ring-2 focus:ring-primary" placeholder="Đang code..." />
+              <label class="block text-sm font-bold text-on-surface mb-1"
+                >Trạng thái tuỳ chỉnh</label
+              >
+              <input
+                v-model="draftProfile.customStatus"
+                class="w-full h-10 rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm focus:ring-2 focus:ring-primary"
+                placeholder="Đang code..."
+              />
             </div>
             <div>
-              <label class="block text-sm font-bold text-on-surface mb-1">Giới thiệu bản thân</label>
-              <textarea v-model="draftProfile.bio" class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-sm focus:ring-2 focus:ring-primary" rows="3" placeholder="Đôi nét về bạn..."></textarea>
+              <label class="block text-sm font-bold text-on-surface mb-1"
+                >Giới thiệu bản thân</label
+              >
+              <textarea
+                v-model="draftProfile.bio"
+                class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-sm focus:ring-2 focus:ring-primary"
+                rows="3"
+                placeholder="Đôi nét về bạn..."
+              ></textarea>
             </div>
             <div class="flex justify-end gap-2 pt-4">
-              <Button variant="ghost" @click="isEditing = false; syncDrafts()">Hủy</Button>
-              <Button :disabled="accountStore.isSaving" @click="handleSave">{{ accountStore.isSaving ? 'Đang lưu...' : 'Lưu thay đổi' }}</Button>
+              <Button
+                variant="ghost"
+                @click="
+                  isEditing = false;
+                  syncDrafts();
+                "
+                >Hủy</Button
+              >
+              <Button :disabled="accountStore.isSaving" @click="handleSave">{{
+                accountStore.isSaving ? "Đang lưu..." : "Lưu thay đổi"
+              }}</Button>
             </div>
           </div>
         </template>
-        <p v-if="accountStore.error" class="mt-4 rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error">
+        <p
+          v-if="accountStore.error"
+          class="mt-4 rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error"
+        >
           {{ accountStore.error }}
         </p>
       </CardContent>
