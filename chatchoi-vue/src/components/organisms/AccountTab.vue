@@ -29,6 +29,9 @@ const draftProfile = ref({
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 const isSendingVerification = ref(false);
+const isEditingEmail = ref(false);
+const emailDraft = ref("");
+const emailError = ref<string | null>(null);
 const isChangingPassword = ref(false);
 const passwordForm = ref({
   currentPassword: "",
@@ -106,6 +109,59 @@ const sendVerificationEmail = async () => {
     };
   } finally {
     isSendingVerification.value = false;
+  }
+};
+
+const openEmailForm = () => {
+  emailDraft.value = accountStore.me?.email ?? "";
+  emailError.value = null;
+  verificationFeedback.value = null;
+  isEditingEmail.value = true;
+};
+
+const closeEmailForm = () => {
+  emailDraft.value = accountStore.me?.email ?? "";
+  emailError.value = null;
+  isEditingEmail.value = false;
+};
+
+const handleUpdateEmail = async () => {
+  const normalizedEmail = emailDraft.value.trim().toLowerCase();
+  emailError.value = null;
+  verificationFeedback.value = null;
+
+  if (!normalizedEmail) {
+    emailError.value = "Vui lòng nhập địa chỉ email.";
+    return;
+  }
+  if (normalizedEmail === accountStore.me?.email?.toLowerCase()) {
+    emailError.value = "Email mới không thay đổi.";
+    return;
+  }
+
+  try {
+    const account = await accountStore.updateProfile({ email: normalizedEmail });
+    emailDraft.value = account.email ?? normalizedEmail;
+    isEditingEmail.value = false;
+
+    try {
+      await requestEmailVerification();
+      verificationFeedback.value = {
+        type: "success",
+        message: `Đã cập nhật email thành ${emailDraft.value}. Hãy kiểm tra hộp thư để xác minh.`,
+      };
+    } catch (caught) {
+      verificationFeedback.value = {
+        type: "error",
+        message:
+          caught instanceof Error
+            ? `Email đã được cập nhật nhưng chưa thể gửi thư xác minh: ${caught.message}`
+            : "Email đã được cập nhật nhưng chưa thể gửi thư xác minh.",
+      };
+    }
+  } catch (caught) {
+    emailError.value =
+      caught instanceof Error ? caught.message : "Không thể cập nhật email.";
   }
 };
 
@@ -253,34 +309,106 @@ const handleChangePassword = async () => {
             icon="mail"
             title="Email"
             :description="
-              accountStore.me?.isEmailVerified ? 'Đã xác minh' : 'Chưa xác minh'
+              accountStore.me?.email
+                ? accountStore.me.isEmailVerified
+                  ? 'Đã xác minh'
+                  : 'Chưa xác minh'
+                : 'Chưa thêm email'
             "
           >
-            <div class="text-right">
+            <div class="flex max-w-[240px] flex-col items-end gap-2 text-right">
               <p
                 class="max-w-[220px] truncate text-sm font-semibold text-on-surface"
               >
                 {{ accountStore.me?.email || "Chưa cập nhật" }}
               </p>
+              <div class="flex flex-wrap justify-end gap-2">
+                <Button
+                  v-if="
+                    accountStore.me?.email && !accountStore.me.isEmailVerified
+                  "
+                  :disabled="isSendingVerification || accountStore.isSaving"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  @click="sendVerificationEmail"
+                >
+                  {{
+                    isSendingVerification
+                      ? "Đang gửi..."
+                      : "Gửi lại xác minh"
+                  }}
+                </Button>
+                <Button
+                  :disabled="accountStore.isSaving"
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  @click="isEditingEmail ? closeEmailForm() : openEmailForm()"
+                >
+                  {{
+                    isEditingEmail
+                      ? "Đóng"
+                      : accountStore.me?.email
+                        ? "Chỉnh sửa"
+                        : "Thêm email"
+                  }}
+                </Button>
+              </div>
+            </div>
+          </PreferenceRow>
+          <form
+            v-if="isEditingEmail"
+            class="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+            @submit.prevent="handleUpdateEmail"
+          >
+            <label
+              class="mb-1.5 block text-sm font-bold text-on-surface"
+              for="account-email"
+            >
+              {{ accountStore.me?.email ? "Email mới" : "Địa chỉ email" }}
+            </label>
+            <input
+              id="account-email"
+              v-model="emailDraft"
+              autocomplete="email"
+              class="h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="accountStore.isSaving"
+              maxlength="255"
+              placeholder="tenban@example.com"
+              required
+              type="email"
+            />
+            <p class="mt-2 text-xs font-semibold leading-5 text-on-surface-variant">
+              Email mới cần được xác minh trước khi dùng để khôi phục mật khẩu.
+            </p>
+            <p
+              v-if="emailError"
+              class="mt-3 rounded-lg bg-error-container px-3 py-2 text-sm font-semibold text-error"
+              role="alert"
+            >
+              {{ emailError }}
+            </p>
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
-                v-if="
-                  accountStore.me?.email && !accountStore.me.isEmailVerified
-                "
-                class="mt-2"
-                :disabled="isSendingVerification"
-                size="sm"
+                :disabled="accountStore.isSaving"
                 type="button"
-                variant="outline"
-                @click="sendVerificationEmail"
+                variant="ghost"
+                @click="closeEmailForm"
               >
+                Hủy
+              </Button>
+              <Button :disabled="accountStore.isSaving" type="submit">
                 {{
-                  isSendingVerification
-                    ? "Đang gửi..."
-                    : "Gửi lại email xác minh"
+                  accountStore.isSaving
+                    ? "Đang lưu email..."
+                    : accountStore.me?.email
+                      ? "Cập nhật email"
+                      : "Thêm email"
                 }}
               </Button>
             </div>
-          </PreferenceRow>
+          </form>
           <p
             v-if="verificationFeedback"
             :class="[

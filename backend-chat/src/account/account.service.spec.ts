@@ -10,6 +10,7 @@ import { PushSubscriptionsService } from '../push-notifications/push-subscriptio
 describe('AccountService', () => {
   let service: AccountService;
   let findUser: jest.Mock;
+  let updateSet: jest.Mock;
   let updateWhere: jest.Mock;
   let verifyPassword: jest.Mock;
   let hashPassword: jest.Mock;
@@ -25,6 +26,9 @@ describe('AccountService', () => {
       updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     });
     updateWhere = jest.fn().mockResolvedValue(undefined);
+    updateSet = jest.fn().mockReturnValue({
+      where: updateWhere,
+    });
     verifyPassword = jest.fn();
     hashPassword = jest.fn();
     revokeSessions = jest.fn();
@@ -46,9 +50,7 @@ describe('AccountService', () => {
                 },
               },
               update: jest.fn().mockReturnValue({
-                set: jest.fn().mockReturnValue({
-                  where: updateWhere,
-                }),
+                set: updateSet,
               }),
             },
           },
@@ -103,6 +105,43 @@ describe('AccountService', () => {
       presence: 'online',
       settings: null,
     });
+  });
+
+  it('normalizes a changed email and requires verification again', async () => {
+    findUser
+      .mockResolvedValueOnce({ email: 'old@example.com' })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        email: 'new@example.com',
+        phone: '0123456789',
+        isEmailVerified: false,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      });
+
+    await expect(
+      service.updateProfile(7, { email: '  New@Example.COM  ' }),
+    ).resolves.toMatchObject({
+      email: 'new@example.com',
+      isEmailVerified: false,
+    });
+
+    expect(updateSet).toHaveBeenCalledWith({
+      email: 'new@example.com',
+      isEmailVerified: false,
+    });
+  });
+
+  it('rejects an email owned by another account', async () => {
+    findUser
+      .mockResolvedValueOnce({ email: 'old@example.com' })
+      .mockResolvedValueOnce({ id: 9 });
+
+    await expect(
+      service.updateProfile(7, { email: 'used@example.com' }),
+    ).rejects.toThrow('Email đã được sử dụng.');
+
+    expect(updateSet).not.toHaveBeenCalled();
   });
 
   it('changes the password and revokes every active session', async () => {
