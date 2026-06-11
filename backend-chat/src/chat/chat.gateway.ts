@@ -8,7 +8,7 @@ import {
     OnGatewayDisconnect
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
-import { MessagesService } from '../messages/messages.service';
+import { MessagesService, type CallEventSnapshot } from '../messages/messages.service';
 import { UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from 'src/common/index';
 import type { AuthenticatedSocket } from 'src/common/index';
@@ -131,6 +131,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         fileFormat?: string | null;
         fileWidth?: number | null;
         fileHeight?: number | null;
+        fileThumbnailUrl?: string | null;
+        fileDurationSeconds?: number | null;
+        callSessionId?: number | null;
+        callEvent?: CallEventSnapshot | null;
         conversationId: number;
         senderId: number;
         senderName: string;
@@ -142,15 +146,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         mentionedUserIds?: number[];
         sender: PublicUserSummaryDto;
     }) {
-        this.server.to(`conv_${payload.conversationId}`).emit('new_message', {
-            ...payload,
-            sender: payload.sender,
-        });
-
         const members = await this.drizzle.db
             .select({ userId: conversationMembers.userId })
             .from(conversationMembers)
             .where(eq(conversationMembers.conversationId, payload.conversationId));
+
+        if (payload.callEvent) {
+            const participantStatusByUserId = new Map(
+                payload.callEvent.participants.map((participant) => [participant.userId, participant.status]),
+            );
+            members.forEach((member) => {
+                this.server.to(`user_${member.userId}`).emit('new_message', {
+                    ...payload,
+                    callEvent: {
+                        ...payload.callEvent,
+                        currentUserStatus: participantStatusByUserId.get(member.userId) ?? 'none',
+                    },
+                });
+            });
+        } else {
+            this.server.to(`conv_${payload.conversationId}`).emit('new_message', payload);
+        }
 
         members.forEach((member) => {
             this.server.to(`user_${member.userId}`).emit('update_conversation_list', {

@@ -17,6 +17,8 @@ export interface UploadedMedia {
     fileFormat: string | null;
     fileWidth: number | null;
     fileHeight: number | null;
+    fileThumbnailUrl: string | null;
+    fileDurationSeconds: number | null;
 }
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -53,6 +55,7 @@ export class MediaUploadService {
         this.assertFileSize(file, type);
 
         const result = await this.uploadBuffer(file, conversationId);
+        const isVideo = type === 'video';
 
         return {
             type,
@@ -65,6 +68,8 @@ export class MediaUploadService {
             fileFormat: result.format ?? null,
             fileWidth: result.width ?? null,
             fileHeight: result.height ?? null,
+            fileThumbnailUrl: isVideo ? this.buildVideoThumbnailUrl(result.public_id) : null,
+            fileDurationSeconds: isVideo ? this.normalizeDuration(result.duration) : null,
         };
     }
 
@@ -116,5 +121,26 @@ export class MediaUploadService {
 
             Readable.from(file.buffer).pipe(uploadStream);
         });
+    }
+
+    private buildVideoThumbnailUrl(publicId: string) {
+        return cloudinary.url(publicId, {
+            resource_type: 'video',
+            secure: true,
+            format: 'jpg',
+            transformation: [
+                {
+                    start_offset: 0,
+                    width: 1280,
+                    crop: 'limit',
+                    quality: 'auto',
+                },
+            ],
+        });
+    }
+
+    private normalizeDuration(duration: number | undefined) {
+        if (!Number.isFinite(duration) || !duration || duration < 0) return null;
+        return Math.max(1, Math.ceil(duration));
     }
 }

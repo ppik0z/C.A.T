@@ -1,7 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt } from 'drizzle-orm';
-import { conversationMembers, conversations, messageReactions, messages, messageStatuses, users } from '../database/schema';
+import {
+    callParticipants,
+    callSessions,
+    conversationMembers,
+    conversations,
+    messageReactions,
+    messages,
+    messageStatuses,
+    users,
+} from '../database/schema';
 import { DrizzleService } from '../database/drizzle.service';
 import { ProfilesService, type PublicUserSummaryDto } from '../profiles/profiles.service';
 import { MediaUploadService, type ChatMessageType, type UploadedMedia } from './media-upload.service';
@@ -32,6 +41,7 @@ export interface CreateMediaMessageInput {
 export interface CreateCallEventMessageInput {
     conversationId: number;
     senderId: number;
+    callSessionId: number;
     content: string;
 }
 
@@ -56,6 +66,28 @@ export interface ReplySnapshot {
     recalled: boolean;
 }
 
+export type CallEventSessionStatus = 'ended' | 'missed' | 'cancelled';
+export type CallEventParticipantStatus = 'ringing' | 'joined' | 'left' | 'declined' | 'missed';
+
+export interface CallEventParticipantSnapshot {
+    userId: number;
+    status: CallEventParticipantStatus;
+}
+
+export interface CallEventSnapshot {
+    callId: number;
+    kind: 'audio' | 'video';
+    status: CallEventSessionStatus;
+    endedReason: string | null;
+    startedAt: Date;
+    answeredAt: Date | null;
+    endedAt: Date | null;
+    durationSeconds: number;
+    startedByUserId: number;
+    currentUserStatus: CallEventParticipantStatus | 'none';
+    participants: CallEventParticipantSnapshot[];
+}
+
 export interface SerializedMessage {
     id: number;
     clientTempId?: string;
@@ -71,6 +103,10 @@ export interface SerializedMessage {
     fileFormat: string | null;
     fileWidth: number | null;
     fileHeight: number | null;
+    fileThumbnailUrl: string | null;
+    fileDurationSeconds: number | null;
+    callSessionId: number | null;
+    callEvent: CallEventSnapshot | null;
     conversationId: number;
     senderId: number;
     senderName: string;
@@ -249,6 +285,8 @@ export class MessagesService {
             fileFormat: input.media.fileFormat,
             fileWidth: input.media.fileWidth,
             fileHeight: input.media.fileHeight,
+            fileThumbnailUrl: input.media.fileThumbnailUrl,
+            fileDurationSeconds: input.media.fileDurationSeconds,
             replyToMessageId: input.replyToMessageId,
             mentionedUserIds,
         });
@@ -262,6 +300,7 @@ export class MessagesService {
             sender,
             type: 'call_event',
             content: input.content.trim(),
+            callSessionId: input.callSessionId,
         });
     }
 
@@ -282,6 +321,9 @@ export class MessagesService {
         fileFormat?: string | null;
         fileWidth?: number | null;
         fileHeight?: number | null;
+        fileThumbnailUrl?: string | null;
+        fileDurationSeconds?: number | null;
+        callSessionId?: number;
         replyToMessageId?: number;
         mentionedUserIds?: number[];
     }) {
@@ -325,6 +367,9 @@ export class MessagesService {
                 fileFormat: input.fileFormat ?? null,
                 fileWidth: input.fileWidth ?? null,
                 fileHeight: input.fileHeight ?? null,
+                fileThumbnailUrl: input.fileThumbnailUrl ?? null,
+                fileDurationSeconds: input.fileDurationSeconds ?? null,
+                callSessionId: input.callSessionId ?? null,
                 replyToMessageId: input.replyToMessageId ?? null,
                 conversationIndex: nextIndex,
             });
@@ -721,9 +766,10 @@ export class MessagesService {
         if (rows.length === 0) return [];
 
         const messageIds = rows.map((row) => row.id);
-        const [reactionMap, replyMap] = await Promise.all([
+        const [reactionMap, replyMap, callEventMap] = await Promise.all([
             this.getReactionSummaries(messageIds, currentUserId),
             this.getReplySnapshots(rows),
+            this.getCallEventSnapshots(rows, currentUserId),
         ]);
 
         return rows.map((row) => {
@@ -754,6 +800,10 @@ export class MessagesService {
                 fileFormat: recalled ? null : row.fileFormat,
                 fileWidth: recalled ? null : row.fileWidth,
                 fileHeight: recalled ? null : row.fileHeight,
+                fileThumbnailUrl: recalled ? null : row.fileThumbnailUrl,
+                fileDurationSeconds: recalled ? null : row.fileDurationSeconds,
+                callSessionId: recalled ? null : row.callSessionId,
+                callEvent: recalled || !row.callSessionId ? null : callEventMap[row.callSessionId] ?? null,
                 conversationId: row.conversationId,
                 senderId: row.senderId,
                 senderName: sender.displayName || sender.username,
@@ -823,6 +873,69 @@ export class MessagesService {
                 recalled,
             }];
         })) as Record<number, ReplySnapshot>;
+    }
+
+    private async getCallEventSnapshots(rows: MessageRow[], currentUserId: number) {
+        const callSessionIds = [...new Set(
+            rows
+                .filter((row) => row.type === 'call_event')
+                .map((row) => row.callSessionId)
+                .filter((id): id is number => Boolean(id)),
+        )];
+        if (callSessionIds.length === 0) return {} as Record<number, CallEventSnapshot>;
+
+        const [sessionRows, participantRows] = await Promise.all([
+            this.drizzle.db
+                .select({
+                    id: callSessions.id,
+                    kind: callSessions.kind,
+                    status: callSessions.status,
+                    endedReason: callSessions.endedReason,
+                    startedAt: callSessions.startedAt,
+                    answeredAt: callSessions.answeredAt,
+                    endedAt: callSessions.endedAt,
+                    startedByUserId: callSessions.startedByUserId,
+                })
+                .from(callSessions)
+                .where(inArray(callSessions.id, callSessionIds)),
+            this.drizzle.db
+                .select({
+                    callSessionId: callParticipants.callSessionId,
+                    userId: callParticipants.userId,
+                    status: callParticipants.status,
+                })
+                .from(callParticipants)
+                .where(inArray(callParticipants.callSessionId, callSessionIds)),
+        ]);
+
+        const participantsByCallId = participantRows.reduce<Record<number, CallEventParticipantSnapshot[]>>(
+            (grouped, participant) => {
+                grouped[participant.callSessionId] ??= [];
+                grouped[participant.callSessionId].push({
+                    userId: participant.userId,
+                    status: this.normalizeCallParticipantStatus(participant.status),
+                });
+                return grouped;
+            },
+            {},
+        );
+
+        return Object.fromEntries(sessionRows.map((session) => {
+            const participants = participantsByCallId[session.id] ?? [];
+            return [session.id, {
+                callId: session.id,
+                kind: session.kind === 'video' ? 'video' : 'audio',
+                status: this.normalizeCallSessionStatus(session.status),
+                endedReason: session.endedReason,
+                startedAt: session.startedAt,
+                answeredAt: session.answeredAt,
+                endedAt: session.endedAt,
+                durationSeconds: this.getCallDurationSeconds(session.answeredAt, session.endedAt),
+                startedByUserId: session.startedByUserId,
+                currentUserStatus: participants.find((participant) => participant.userId === currentUserId)?.status ?? 'none',
+                participants,
+            } satisfies CallEventSnapshot];
+        })) as Record<number, CallEventSnapshot>;
     }
 
     private buildPageInfo(
@@ -928,6 +1041,23 @@ export class MessagesService {
     private normalizeSearchLimit(limit: number | undefined) {
         if (!limit || limit < 1) return 20;
         return Math.min(Math.floor(limit), 50);
+    }
+
+    private normalizeCallSessionStatus(status: string): CallEventSessionStatus {
+        if (status === 'missed' || status === 'cancelled') return status;
+        return 'ended';
+    }
+
+    private normalizeCallParticipantStatus(status: string): CallEventParticipantStatus {
+        if (status === 'ringing' || status === 'joined' || status === 'declined' || status === 'missed') {
+            return status;
+        }
+        return 'left';
+    }
+
+    private getCallDurationSeconds(answeredAt: Date | null, endedAt: Date | null) {
+        if (!answeredAt || !endedAt) return 0;
+        return Math.max(0, Math.round((endedAt.getTime() - answeredAt.getTime()) / 1000));
     }
 
     private escapeLike(value: string) {

@@ -22,6 +22,7 @@ describe('CallsService', () => {
         update: jest.Mock;
     };
     let eventEmitter: { emit: jest.Mock };
+    let messagesService: { createCallEventMessage: jest.Mock };
     let callLockService: {
         withCallLock: jest.Mock;
         withConversationCreateLock: jest.Mock;
@@ -110,6 +111,7 @@ describe('CallsService', () => {
             update: jest.fn(() => chain()),
         };
         eventEmitter = { emit: jest.fn() };
+        messagesService = { createCallEventMessage: jest.fn() };
         callLockService = {
             withCallLock: jest.fn(async (_callId: number, task: () => Promise<unknown>) => task()),
             withConversationCreateLock: jest.fn(async (_conversationId: number, task: () => Promise<unknown>) => task()),
@@ -130,7 +132,7 @@ describe('CallsService', () => {
                 },
                 {
                     provide: MessagesService,
-                    useValue: { createCallEventMessage: jest.fn() },
+                    useValue: messagesService,
                 },
                 {
                     provide: EventEmitter2,
@@ -202,6 +204,11 @@ describe('CallsService', () => {
                 ended: true,
             }),
         );
+        expect(messagesService.createCallEventMessage).toHaveBeenCalledWith(expect.objectContaining({
+            conversationId: 20,
+            senderId: 1,
+            callSessionId: 10,
+        }));
     });
 
     it('does not clear another participant joined key during heartbeat', async () => {
