@@ -191,8 +191,10 @@ export const friendships = mysqlTable(
 export const conversations = mysqlTable('conversations', {
   id: int('id').autoincrement().primaryKey(),
   name: varchar('name', { length: 255 }),
+  description: varchar('description', { length: 500 }),
   isGroup: boolean('isGroup').notNull().default(false),
   avatarGroup: varchar('avatarGroup', { length: 255 }),
+  avatarGroupPublicId: varchar('avatarGroupPublicId', { length: 255 }),
   lastMessageId: int('lastMessageId'),
   lastMessageIndex: int('lastMessageIndex').notNull().default(0),
   lastMessageContent: text('lastMessageContent'),

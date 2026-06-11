@@ -5,23 +5,26 @@ import { conversationMembers, conversations, users } from '../database/schema';
 import { and, asc, desc, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { PresenceService } from '../presence/presence.service';
 import { aliasedTable } from 'drizzle-orm';
+import { GroupAvatarService } from './group-avatar.service';
 
 interface CreateGroupInput {
     name: string;
-    avatarGroup?: string | null;
+    description?: string | null;
     memberIds: number[];
 }
 
 interface UpdateGroupInput {
     name?: string;
-    avatarGroup?: string | null;
+    description?: string | null;
 }
 
 interface ConversationRow {
     id: number;
     name: string | null;
+    description: string | null;
     isGroup: boolean;
     avatarGroup: string | null;
+    avatarGroupPublicId: string | null;
     lastMessageId: number | null;
     lastMessageIndex: number;
     lastMessageContent: string | null;
@@ -61,6 +64,7 @@ export class ConversationsService {
         private drizzle: DrizzleService,
         private presenceService: PresenceService,
         private eventEmitter: EventEmitter2,
+        private groupAvatarService: GroupAvatarService,
     ) { }
 
     //----getConversation(tự tạo phòng nếu chưa có)----
@@ -116,8 +120,10 @@ export class ConversationsService {
             .select({
                 id: conversations.id,
                 name: conversations.name,
+                description: conversations.description,
                 isGroup: conversations.isGroup,
                 avatarGroup: conversations.avatarGroup,
+                avatarGroupPublicId: conversations.avatarGroupPublicId,
                 lastMessageId: conversations.lastMessageId,
                 lastMessageIndex: conversations.lastMessageIndex,
                 lastMessageContent: conversations.lastMessageContent,
@@ -156,6 +162,7 @@ export class ConversationsService {
             return {
                 id: conv.id,
                 name: conv.name,
+                description: conv.description,
                 isGroup: conv.isGroup,
                 avatarGroup: conv.avatarGroup,
                 unreadCount: conv.unreadCount,
@@ -184,9 +191,15 @@ export class ConversationsService {
         }));
     }
 
-    async createGroup(creatorId: number, input: CreateGroupInput) {
+    async createGroup(
+        creatorId: number,
+        input: CreateGroupInput,
+        avatar?: Express.Multer.File,
+    ) {
         const name = input.name?.trim();
         if (!name) throw new BadRequestException('Tên nhóm không được để trống.');
+        if (name.length > 100) throw new BadRequestException('Tên nhóm không được vượt quá 100 ký tự.');
+        const description = this.normalizeDescription(input.description);
 
         const selectedMemberIds = this.uniqueIds(input.memberIds).filter((id) => id !== creatorId);
         if (selectedMemberIds.length < 2) {
@@ -209,30 +222,42 @@ export class ConversationsService {
             throw new BadRequestException('Danh sách thành viên có người dùng không tồn tại.');
         }
 
-        const conversationId = await this.drizzle.db.transaction(async (tx) => {
-            const [newConv] = await tx.insert(conversations).values({
-                name,
-                isGroup: true,
-                avatarGroup: input.avatarGroup?.trim() || null,
+        const uploadedAvatar = avatar
+            ? await this.groupAvatarService.upload(avatar)
+            : null;
+
+        let conversationId: number;
+        try {
+            conversationId = await this.drizzle.db.transaction(async (tx) => {
+                const [newConv] = await tx.insert(conversations).values({
+                    name,
+                    description,
+                    isGroup: true,
+                    avatarGroup: uploadedAvatar?.url ?? null,
+                    avatarGroupPublicId: uploadedAvatar?.publicId ?? null,
+                });
+
+                await tx.insert(conversationMembers).values([
+                    {
+                        userId: creatorId,
+                        username: creator.username,
+                        conversationId: newConv.insertId,
+                        isAdmin: true,
+                    },
+                    ...invitedUsers.map((user) => ({
+                        userId: user.id,
+                        username: user.username,
+                        conversationId: newConv.insertId,
+                        isAdmin: false,
+                    })),
+                ]);
+
+                return newConv.insertId;
             });
-
-            await tx.insert(conversationMembers).values([
-                {
-                    userId: creatorId,
-                    username: creator.username,
-                    conversationId: newConv.insertId,
-                    isAdmin: true,
-                },
-                ...invitedUsers.map((user) => ({
-                    userId: user.id,
-                    username: user.username,
-                    conversationId: newConv.insertId,
-                    isAdmin: false,
-                })),
-            ]);
-
-            return newConv.insertId;
-        });
+        } catch (error) {
+            await this.groupAvatarService.remove(uploadedAvatar?.publicId).catch(() => undefined);
+            throw error;
+        }
 
         this.emitConversationUpsert([creatorId, ...selectedMemberIds], conversationId);
         return this.buildConversationForUser(creatorId, conversationId);
@@ -249,23 +274,56 @@ export class ConversationsService {
         };
     }
 
-    async updateGroup(currentUserId: number, conversationId: number, input: UpdateGroupInput) {
+    async updateGroup(
+        currentUserId: number,
+        conversationId: number,
+        input: UpdateGroupInput,
+        avatar?: Express.Multer.File,
+    ) {
         await this.ensureGroupAdmin(currentUserId, conversationId);
 
-        const values: { name?: string; avatarGroup?: string | null } = {};
+        const values: {
+            name?: string;
+            description?: string | null;
+            avatarGroup?: string;
+            avatarGroupPublicId?: string;
+        } = {};
         if (input.name !== undefined) {
             const name = input.name.trim();
             if (!name) throw new BadRequestException('Tên nhóm không được để trống.');
+            if (name.length > 100) throw new BadRequestException('Tên nhóm không được vượt quá 100 ký tự.');
             values.name = name;
         }
-        if (input.avatarGroup !== undefined) {
-            values.avatarGroup = input.avatarGroup?.trim() || null;
+        if (input.description !== undefined) {
+            values.description = this.normalizeDescription(input.description);
         }
-        if (Object.keys(values).length === 0) {
+        if (Object.keys(values).length === 0 && !avatar) {
             throw new BadRequestException('Không có thông tin nhóm để cập nhật.');
         }
 
-        await this.drizzle.db.update(conversations).set(values).where(eq(conversations.id, conversationId));
+        const uploaded = avatar ? await this.groupAvatarService.upload(avatar) : null;
+        if (uploaded) {
+            values.avatarGroup = uploaded.url;
+            values.avatarGroupPublicId = uploaded.publicId;
+        }
+        const [current] = uploaded
+            ? await this.drizzle.db
+                .select({ publicId: conversations.avatarGroupPublicId })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1)
+            : [{ publicId: null }];
+        try {
+            await this.drizzle.db
+                .update(conversations)
+                .set(values)
+                .where(eq(conversations.id, conversationId));
+        } catch (error) {
+            await this.groupAvatarService.remove(uploaded?.publicId).catch(() => undefined);
+            throw error;
+        }
+
+        await this.groupAvatarService.remove(current?.publicId).catch(() => undefined);
         this.emitConversationUpsert(await this.getConversationMemberIds(conversationId), conversationId);
         return this.getConversationDetail(currentUserId, conversationId);
     }
@@ -319,7 +377,13 @@ export class ConversationsService {
 
         const remainingMembers = membersBefore.filter((id) => id !== targetUserId);
         if (remainingMembers.length === 0) {
+            const [group] = await this.drizzle.db
+                .select({ avatarPublicId: conversations.avatarGroupPublicId })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1);
             await this.drizzle.db.delete(conversations).where(eq(conversations.id, conversationId));
+            await this.groupAvatarService.remove(group?.avatarPublicId).catch(() => undefined);
             this.eventEmitter.emit('conversation.removed', { userId: targetUserId, conversationId });
             return { removed: true };
         }
@@ -360,6 +424,7 @@ export class ConversationsService {
         return {
             id: summary.id,
             name: summary.name,
+            description: summary.description,
             isGroup: summary.isGroup,
             avatarGroup: summary.avatarGroup,
             unreadCount: summary.unreadCount,
@@ -397,8 +462,10 @@ export class ConversationsService {
             .select({
                 id: conversations.id,
                 name: conversations.name,
+                description: conversations.description,
                 isGroup: conversations.isGroup,
                 avatarGroup: conversations.avatarGroup,
+                avatarGroupPublicId: conversations.avatarGroupPublicId,
                 lastMessageId: conversations.lastMessageId,
                 lastMessageIndex: conversations.lastMessageIndex,
                 lastMessageContent: conversations.lastMessageContent,
@@ -507,5 +574,13 @@ export class ConversationsService {
 
     private uniqueIds(ids: number[] | undefined) {
         return [...new Set((ids ?? []).filter((id) => Number.isInteger(id) && id > 0))];
+    }
+
+    private normalizeDescription(value: string | null | undefined) {
+        const description = value?.trim() || null;
+        if (description && description.length > 500) {
+            throw new BadRequestException('Mô tả nhóm không được vượt quá 500 ký tự.');
+        }
+        return description;
     }
 }

@@ -43,6 +43,13 @@
       "when": 1781166598751,
       "tag": "0005_sad_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1781202360234,
+      "tag": "0006_dapper_wolf_cub",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { PresenceService } from '../presence/presence.service';
 import { ConversationsService } from './conversations.service';
+import { GroupAvatarService } from './group-avatar.service';
 
 describe('ConversationsService', () => {
   let service: ConversationsService;
@@ -22,6 +23,13 @@ describe('ConversationsService', () => {
         {
           provide: EventEmitter2,
           useValue: { emit: jest.fn() },
+        },
+        {
+          provide: GroupAvatarService,
+          useValue: {
+            upload: jest.fn(),
+            remove: jest.fn(),
+          },
         },
       ],
     }).compile();
