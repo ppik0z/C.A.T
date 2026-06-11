@@ -141,7 +141,7 @@ watch(
   <div
     v-else
     :class="[
-      'flex gap-3 sm:gap-4 max-w-[min(82%,42rem)] animate-slide-in',
+      'flex gap-2 sm:gap-3 max-w-[min(90%,40rem)] sm:max-w-[min(78%,40rem)] animate-slide-in',
       props.isOwn ? 'flex-row-reverse ml-auto' : 'mr-auto',
     ]"
   >
@@ -156,7 +156,7 @@ watch(
       <div
         v-if="props.message.replyTo"
         :class="[
-          'max-w-[min(100%,22rem)] rounded-2xl border border-outline-variant bg-surface-container-high px-3 py-2 text-on-surface-variant shadow-sm',
+          'max-w-[min(100%,22rem)] rounded-2xl border border-outline-variant/70 bg-surface-container-lowest/90 px-3 py-2 text-on-surface-variant shadow-sm backdrop-blur-sm',
           props.isOwn ? 'rounded-br-md mr-2' : 'rounded-bl-md ml-2',
         ]"
       >
@@ -170,13 +170,13 @@ watch(
 
       <div
         :class="[
-          'p-3 sm:p-4 shadow-sm break-words',
+          'px-3.5 py-2.5 sm:px-4 sm:py-3 break-words',
           props.isOwn
-            ? 'bg-primary text-on-primary rounded-2xl rounded-br-none shadow-md'
-            : 'bg-surface-container-highest text-on-surface-variant rounded-2xl rounded-bl-none',
+            ? 'bg-chat-accent text-chat-on-accent rounded-[1.25rem] rounded-br-md'
+            : 'bg-chat-incoming text-on-surface rounded-[1.25rem] rounded-bl-md',
         ]"
       >
-        <p v-if="!props.isOwn" class="text-[11px] font-semibold opacity-70 mb-1 uppercase tracking-wider">
+        <p v-if="!props.isOwn" class="text-[11px] font-semibold text-on-surface-variant mb-1">
           {{ getSenderName(props.message) }}
         </p>
         <p v-if="props.message.recalledAt" class="text-sm italic opacity-75">
@@ -252,7 +252,7 @@ watch(
         </button>
       </div>
 
-      <div :class="['flex items-center gap-1 text-xs text-secondary', props.isOwn ? 'flex-row-reverse' : '']">
+      <div :class="['flex items-center gap-1 px-1 text-[11px] text-on-surface-variant', props.isOwn ? 'flex-row-reverse' : '']">
         <span
           v-if="['sending', 'compressing', 'uploading'].includes(props.message.localStatus ?? '')"
           class="upload-spinner"
@@ -261,7 +261,7 @@ watch(
         <span :class="props.message.localStatus === 'failed' ? 'text-error' : ''">
           {{ getFooterStatusText(props.message) }}
         </span>
-        <span v-if="props.isOwn" class="material-symbols-outlined text-[16px] text-primary">done_all</span>
+        <span v-if="props.isOwn" class="material-symbols-outlined text-[15px] text-chat-accent">done_all</span>
       </div>
     </div>
 

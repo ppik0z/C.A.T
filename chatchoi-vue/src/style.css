@@ -34,6 +34,10 @@
   --color-warning: var(--theme-warning);
   --color-warning-container: var(--theme-warning-container);
   --color-on-warning-container: var(--theme-on-warning-container);
+  --color-chat-accent: var(--theme-chat-accent);
+  --color-chat-on-accent: var(--theme-chat-on-accent);
+  --color-chat-incoming: var(--theme-chat-incoming);
+  --color-chat-canvas: var(--theme-chat-canvas);
   --color-bg-light: var(--theme-background);
   --color-bg-dark: var(--theme-background);
   --color-surface-dark: var(--theme-surface-container-high);
@@ -48,31 +52,31 @@
 
 @layer base {
   :root {
-    --theme-primary: #005b7e;
-    --theme-primary-container: #c5e7ff;
+    --theme-primary: #0866ff;
+    --theme-primary-container: #e7f0ff;
     --theme-on-primary: #ffffff;
-    --theme-on-primary-container: #e3f2ff;
-    --theme-secondary: #6a5f07;
-    --theme-secondary-container: #f4e483;
-    --theme-on-secondary-container: #71650f;
-    --theme-tertiary: #7b4643;
-    --theme-tertiary-container: #ffdad7;
+    --theme-on-primary-container: #0646b3;
+    --theme-secondary: #5f6673;
+    --theme-secondary-container: #e9edf3;
+    --theme-on-secondary-container: #303640;
+    --theme-tertiary: #6d5bd0;
+    --theme-tertiary-container: #eeeaff;
     --theme-error: #ba1a1a;
     --theme-on-error: #ffffff;
     --theme-error-container: #ffdad6;
-    --theme-background: #f9f9ff;
-    --theme-on-background: #0a1b35;
-    --theme-surface: #f9f9ff;
+    --theme-background: #f5f7fb;
+    --theme-on-background: #1c1e21;
+    --theme-surface: #f5f7fb;
     --theme-surface-container-lowest: #ffffff;
-    --theme-surface-container-low: #f0f3ff;
-    --theme-surface-container: #e8eeff;
-    --theme-surface-container-high: #dfe8ff;
-    --theme-surface-container-highest: #d6e3ff;
-    --theme-surface-dim: #cadafd;
-    --theme-outline: #747688;
-    --theme-outline-variant: #c4c5d9;
-    --theme-on-surface: #0a1b35;
-    --theme-on-surface-variant: #434656;
+    --theme-surface-container-low: #f7f8fa;
+    --theme-surface-container: #f0f2f5;
+    --theme-surface-container-high: #e9edf2;
+    --theme-surface-container-highest: #e4e7eb;
+    --theme-surface-dim: #d6dae0;
+    --theme-outline: #727985;
+    --theme-outline-variant: #d8dde4;
+    --theme-on-surface: #1c1e21;
+    --theme-on-surface-variant: #59616c;
     --theme-success: #12805c;
     --theme-success-container: #d8f5e8;
     --theme-on-success: #ffffff;
@@ -80,6 +84,43 @@
     --theme-warning: #8a5a00;
     --theme-warning-container: #ffe2a9;
     --theme-on-warning-container: #5f3d00;
+    --theme-chat-accent: #0a7cff;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #e9edf2;
+    --theme-chat-canvas: #f8f9fc;
+    --theme-chat-glow: rgb(10 124 255 / 0.055);
+  }
+
+  :root[data-theme-preset="dark"] {
+    --theme-chat-accent: #248bf5;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #2a2f35;
+    --theme-chat-canvas: #111519;
+    --theme-chat-glow: rgb(36 139 245 / 0.08);
+  }
+
+  :root[data-theme-preset="midnight"] {
+    --theme-chat-accent: #3b82f6;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #222a3d;
+    --theme-chat-canvas: #0c1120;
+    --theme-chat-glow: rgb(59 130 246 / 0.09);
+  }
+
+  :root[data-theme-preset="mint"] {
+    --theme-chat-accent: #0f8064;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #e5f0e9;
+    --theme-chat-canvas: #f5faf7;
+    --theme-chat-glow: rgb(15 128 100 / 0.055);
+  }
+
+  :root[data-theme-preset="rose"] {
+    --theme-chat-accent: #a85266;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #f3e5e9;
+    --theme-chat-canvas: #fff8fa;
+    --theme-chat-glow: rgb(168 82 102 / 0.055);
   }
 
   html,
@@ -133,6 +174,13 @@
   .thin-scrollbar::-webkit-scrollbar-thumb {
     background: var(--theme-surface-dim);
     border-radius: 10px;
+  }
+
+  .chat-thread-surface {
+    background-color: var(--theme-chat-canvas);
+    background-image:
+      radial-gradient(circle at 18% 12%, var(--theme-chat-glow), transparent 28rem),
+      radial-gradient(circle at 82% 78%, var(--theme-chat-glow), transparent 30rem);
   }
 
   .left-sidebar {

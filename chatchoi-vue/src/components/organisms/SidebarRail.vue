@@ -13,9 +13,12 @@ const authStore = useAuthStore();
 
 interface Props {
   activeSection: AppSection;
+  hideMobile?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  hideMobile: false,
+});
 const emit = defineEmits<{
   navigate: [section: AppSection];
 }>();
@@ -31,7 +34,10 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
 </script>
 
 <template>
-  <nav class="fixed inset-x-0 bottom-0 z-50 h-16 bg-surface-container-lowest border-t border-outline-variant shadow-[0_-8px_24px_rgba(10,27,53,0.08)] md:hidden">
+  <nav
+    v-if="!props.hideMobile"
+    class="fixed inset-x-0 bottom-0 z-50 h-16 bg-surface-container-lowest border-t border-outline-variant shadow-[0_-8px_24px_rgba(10,27,53,0.08)] md:hidden"
+  >
     <div class="h-full grid grid-cols-5 items-center px-2">
       <a
         v-for="item in navItems"

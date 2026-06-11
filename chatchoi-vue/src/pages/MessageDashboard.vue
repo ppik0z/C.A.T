@@ -110,10 +110,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen w-full relative bg-background text-on-background overflow-hidden">
-    <SidebarRail :active-section="activeSection" @navigate="handleNavigate" />
+  <div class="flex h-dvh w-full relative bg-background text-on-background overflow-hidden md:h-screen">
+    <SidebarRail
+      :active-section="activeSection"
+      :hide-mobile="showMobileChat"
+      @navigate="handleNavigate"
+    />
 
-    <main v-if="activeSection === 'messages'" class="flex flex-1 min-w-0 h-[calc(100dvh-4rem)] overflow-hidden md:h-screen md:pl-20">
+    <main
+      v-if="activeSection === 'messages'"
+      :class="[
+        'flex flex-1 min-w-0 overflow-hidden md:h-screen md:pl-20',
+        showMobileChat ? 'h-dvh' : 'h-[calc(100dvh-4rem)]',
+      ]"
+    >
       <div
         :class="[
           'h-full min-w-0 w-full lg:w-[clamp(300px,30vw,360px)] lg:shrink-0',
