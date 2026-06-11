@@ -13,7 +13,7 @@ export interface RegisterInput {
 }
 
 export interface LoginInput {
-  username: string;
+  identifier: string;
   password: string;
 }
 

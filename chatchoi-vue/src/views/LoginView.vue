@@ -10,6 +10,7 @@ type AuthMode = "login" | "register";
 const authStore = useAuthStore();
 const router = useRouter();
 const mode = ref<AuthMode>("login");
+const loginIdentifier = ref("");
 const username = ref("");
 const email = ref("");
 const displayName = ref("");
@@ -29,27 +30,29 @@ const switchMode = (nextMode: AuthMode) => {
 
 const submit = async () => {
   localError.value = null;
-  const normalizedUsername = username.value.trim().toLowerCase();
-  if (!/^[a-z0-9._]{4,20}$/.test(normalizedUsername)) {
-    localError.value =
-      "Username chỉ gồm chữ, số, dấu chấm hoặc gạch dưới và dài từ 4 đến 20 ký tự.";
-    return;
-  }
-  if (mode.value === "register" && password.value !== confirmPassword.value) {
-    localError.value = "Mật khẩu xác nhận không khớp.";
-    return;
-  }
 
   isLoading.value = true;
   try {
     if (mode.value === "login") {
       await authStore.login({
-        username: normalizedUsername,
+        identifier: loginIdentifier.value.trim().toLowerCase(),
         password: password.value,
       });
       await router.replace("/");
       return;
     }
+
+    const normalizedUsername = username.value.trim().toLowerCase();
+    if (!/^[a-z0-9._]{4,20}$/.test(normalizedUsername)) {
+      localError.value =
+        "Username chỉ gồm chữ, số, dấu chấm hoặc gạch dưới và dài từ 4 đến 20 ký tự.";
+      return;
+    }
+    if (password.value !== confirmPassword.value) {
+      localError.value = "Mật khẩu xác nhận không khớp.";
+      return;
+    }
+
     await authStore.register({
       username: normalizedUsername,
       email: email.value.trim().toLowerCase(),
@@ -120,7 +123,27 @@ const submit = async () => {
       </div>
 
       <form class="space-y-4" :aria-busy="isLoading" @submit.prevent="submit">
-        <div>
+        <div v-if="mode === 'login'">
+          <label
+            class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant"
+            for="login-identifier"
+            >Email hoặc username</label
+          >
+          <Input
+            id="login-identifier"
+            v-model="loginIdentifier"
+            autocapitalize="none"
+            autocomplete="username"
+            class="h-12 rounded-xl bg-surface-container-low px-4 text-base"
+            :disabled="isLoading"
+            maxlength="255"
+            placeholder="you@example.com hoặc username"
+            required
+            spellcheck="false"
+          />
+        </div>
+
+        <div v-else>
           <label
             class="mb-1 ml-1 block text-xs font-bold uppercase text-on-surface-variant"
             for="username"
