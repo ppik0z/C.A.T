@@ -46,11 +46,21 @@ const displayedParticipants = computed(() => {
   const waiting = call.value.participants.filter((participant) => participant.status !== 'joined');
   return [...visibleJoinedParticipants.value, ...waiting];
 });
+const stageParticipants = computed(() => {
+  if (!isVideoCall.value || conversation.value?.isGroup || chatStore.myId === null) {
+    return displayedParticipants.value;
+  }
+
+  const remoteParticipants = displayedParticipants.value.filter((participant) => {
+    return participant.userId !== chatStore.myId;
+  });
+  return remoteParticipants.length > 0 ? remoteParticipants : displayedParticipants.value;
+});
 const pageCount = computed(() => {
   return Math.max(1, Math.ceil(joinedParticipants.value.length / callMediaStore.videoPageSize));
 });
 const participantGridClass = computed(() => {
-  const count = displayedParticipants.value.length;
+  const count = stageParticipants.value.length;
   if (count <= 1) return 'grid-cols-1';
   if (count === 2) return 'grid-cols-1 sm:grid-cols-2';
   if (count <= 4) return 'grid-cols-2';
@@ -60,6 +70,14 @@ const localParticipant = computed(() => {
   const myId = chatStore.myId;
   if (!myId || !call.value) return null;
   return call.value.participants.find((participant) => participant.userId === myId) ?? null;
+});
+const showLocalPreview = computed(() => {
+  return Boolean(
+    isVideoCall.value
+      && call.value
+      && !conversation.value?.isGroup
+      && localParticipant.value,
+  );
 });
 const statusText = computed(() => {
   if (pending.value && !call.value) return 'Đang tạo cuộc gọi...';
@@ -200,14 +218,14 @@ onBeforeUnmount(() => {
           </div>
 
           <div
-            v-else-if="isVideoCall && displayedParticipants.length > 0"
+            v-else-if="isVideoCall && stageParticipants.length > 0"
             :class="[
               'grid h-full auto-rows-fr gap-2 overflow-y-auto px-2 pb-28 pt-24 sm:gap-3 sm:px-3 sm:pb-32',
               participantGridClass,
             ]"
           >
             <CallParticipantTile
-              v-for="participant in displayedParticipants"
+              v-for="participant in stageParticipants"
               :key="participant.userId"
               :participant="participant"
               :video-track="callMediaStore.getVideoTrackForUser(participant.userId)"
@@ -227,6 +245,18 @@ onBeforeUnmount(() => {
             </span>
           </div>
         </main>
+
+        <div
+          v-if="showLocalPreview && localParticipant"
+          class="absolute bottom-32 right-3 z-20 aspect-[3/4] w-28 overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/15 sm:bottom-36 sm:right-5 sm:w-40"
+        >
+          <CallParticipantTile
+            compact
+            :participant="localParticipant"
+            :video-track="callMediaStore.getVideoTrackForUser(localParticipant.userId)"
+            :is-active-speaker="callMediaStore.isActiveSpeaker(localParticipant.userId)"
+          />
+        </div>
 
         <footer class="absolute inset-x-0 bottom-0 z-20 flex items-end justify-center gap-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-12 sm:gap-5 sm:pb-6">
           <button
