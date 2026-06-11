@@ -19,7 +19,7 @@ const getConversationLabel = (conversationId: number) => {
 </script>
 
 <template>
-  <div class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 flex flex-col gap-3 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-4 sm:w-[24rem]">
+  <div class="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[140] flex flex-col gap-3 sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-4 sm:w-[24rem]">
     <div
       v-for="call in incomingCalls"
       :key="call.id"

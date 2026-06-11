@@ -168,7 +168,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="isVisible"
-      class="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950 text-white sm:bg-black/75 sm:p-3 sm:backdrop-blur-xl"
+      class="fixed inset-0 z-[140] flex items-center justify-center bg-neutral-950 text-white sm:bg-black/75 sm:p-3 sm:backdrop-blur-xl"
     >
       <section class="relative flex h-full w-full flex-col overflow-hidden bg-neutral-950 shadow-2xl sm:h-[min(52rem,calc(100dvh-1.5rem))] sm:max-w-6xl sm:rounded-[2rem] sm:border sm:border-white/10">
         <div

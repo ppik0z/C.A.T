@@ -136,7 +136,7 @@ const handleLeave = () => {
       <div
         v-if="isVisible && call"
         ref="playerEl"
-        class="fixed z-40 select-none touch-none"
+        class="fixed z-[80] select-none touch-none"
         :style="{ right: `${pos.right}px`, bottom: `${pos.bottom}px` }"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
