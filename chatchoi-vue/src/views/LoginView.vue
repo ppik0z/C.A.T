@@ -83,7 +83,7 @@ const submit = async () => {
           CHATCHOI
         </h1>
         <p class="text-on-surface-variant text-sm">
-          Kết nối và trò chuyện theo cách của bạn
+          :3
         </p>
       </div>
 
@@ -139,7 +139,7 @@ const submit = async () => {
             class="h-12 rounded-xl bg-surface-container-low px-4 text-base"
             :disabled="isLoading"
             maxlength="255"
-            placeholder="you@example.com hoặc username"
+            placeholder="Nhập email hoặc username"
             required
             spellcheck="false"
           />
