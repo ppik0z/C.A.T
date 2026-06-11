@@ -1,4 +1,4 @@
-export type ThemePresetId = 'default' | 'dark' | 'midnight' | 'mint' | 'rose';
+export type ThemePresetId = 'default' | 'messenger' | 'dark' | 'midnight' | 'mint' | 'rose';
 
 export interface ThemeColorTokens {
   primary: string;
@@ -49,7 +49,47 @@ export const themePresets: ThemePreset[] = [
   {
     id: 'default',
     name: 'Chatchoi',
-    description: 'Sáng, sạch, cân bằng cho chat hằng ngày.',
+    description: 'Tông tím thương hiệu, đồng bộ với logo Chatchoi.',
+    isDark: false,
+    colors: {
+      primary: '#6750a4',
+      primaryContainer: '#e9ddff',
+      onPrimary: '#ffffff',
+      onPrimaryContainer: '#4f378b',
+      secondary: '#625b71',
+      secondaryContainer: '#e8def8',
+      onSecondaryContainer: '#4a4458',
+      tertiary: '#7d5260',
+      tertiaryContainer: '#ffd8e4',
+      error: '#ba1a1a',
+      onError: '#ffffff',
+      errorContainer: '#ffdad6',
+      background: '#faf8ff',
+      onBackground: '#1d1b20',
+      surface: '#faf8ff',
+      surfaceContainerLowest: '#ffffff',
+      surfaceContainerLow: '#f7f2fa',
+      surfaceContainer: '#f1ecf4',
+      surfaceContainerHigh: '#ebe6ee',
+      surfaceContainerHighest: '#e6e0e9',
+      surfaceDim: '#ded8e1',
+      outline: '#79747e',
+      outlineVariant: '#cac4d0',
+      onSurface: '#1d1b20',
+      onSurfaceVariant: '#49454f',
+      success: '#147d58',
+      successContainer: '#d0f5df',
+      onSuccess: '#ffffff',
+      onSuccessContainer: '#083d2a',
+      warning: '#805b00',
+      warningContainer: '#ffdea5',
+      onWarningContainer: '#4d3700',
+    },
+  },
+  {
+    id: 'messenger',
+    name: 'Messenger',
+    description: 'Xanh trung tính, sáng và quen thuộc cho hội thoại.',
     isDark: false,
     colors: {
       primary: '#0866ff',

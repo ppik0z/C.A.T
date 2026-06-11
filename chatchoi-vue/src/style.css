@@ -52,38 +52,46 @@
 
 @layer base {
   :root {
-    --theme-primary: #0866ff;
-    --theme-primary-container: #e7f0ff;
+    --theme-primary: #6750a4;
+    --theme-primary-container: #e9ddff;
     --theme-on-primary: #ffffff;
-    --theme-on-primary-container: #0646b3;
-    --theme-secondary: #5f6673;
-    --theme-secondary-container: #e9edf3;
-    --theme-on-secondary-container: #303640;
-    --theme-tertiary: #6d5bd0;
-    --theme-tertiary-container: #eeeaff;
+    --theme-on-primary-container: #4f378b;
+    --theme-secondary: #625b71;
+    --theme-secondary-container: #e8def8;
+    --theme-on-secondary-container: #4a4458;
+    --theme-tertiary: #7d5260;
+    --theme-tertiary-container: #ffd8e4;
     --theme-error: #ba1a1a;
     --theme-on-error: #ffffff;
     --theme-error-container: #ffdad6;
-    --theme-background: #f5f7fb;
-    --theme-on-background: #1c1e21;
-    --theme-surface: #f5f7fb;
+    --theme-background: #faf8ff;
+    --theme-on-background: #1d1b20;
+    --theme-surface: #faf8ff;
     --theme-surface-container-lowest: #ffffff;
-    --theme-surface-container-low: #f7f8fa;
-    --theme-surface-container: #f0f2f5;
-    --theme-surface-container-high: #e9edf2;
-    --theme-surface-container-highest: #e4e7eb;
-    --theme-surface-dim: #d6dae0;
-    --theme-outline: #727985;
-    --theme-outline-variant: #d8dde4;
-    --theme-on-surface: #1c1e21;
-    --theme-on-surface-variant: #59616c;
-    --theme-success: #12805c;
-    --theme-success-container: #d8f5e8;
+    --theme-surface-container-low: #f7f2fa;
+    --theme-surface-container: #f1ecf4;
+    --theme-surface-container-high: #ebe6ee;
+    --theme-surface-container-highest: #e6e0e9;
+    --theme-surface-dim: #ded8e1;
+    --theme-outline: #79747e;
+    --theme-outline-variant: #cac4d0;
+    --theme-on-surface: #1d1b20;
+    --theme-on-surface-variant: #49454f;
+    --theme-success: #147d58;
+    --theme-success-container: #d0f5df;
     --theme-on-success: #ffffff;
-    --theme-on-success-container: #083d2b;
-    --theme-warning: #8a5a00;
-    --theme-warning-container: #ffe2a9;
-    --theme-on-warning-container: #5f3d00;
+    --theme-on-success-container: #083d2a;
+    --theme-warning: #805b00;
+    --theme-warning-container: #ffdea5;
+    --theme-on-warning-container: #4d3700;
+    --theme-chat-accent: #6750a4;
+    --theme-chat-on-accent: #ffffff;
+    --theme-chat-incoming: #eee9f2;
+    --theme-chat-canvas: #fbf9ff;
+    --theme-chat-glow: rgb(103 80 164 / 0.065);
+  }
+
+  :root[data-theme-preset="messenger"] {
     --theme-chat-accent: #0a7cff;
     --theme-chat-on-accent: #ffffff;
     --theme-chat-incoming: #e9edf2;

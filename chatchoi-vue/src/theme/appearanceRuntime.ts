@@ -11,6 +11,8 @@ const storageKeyTheme = 'chatchoi.themePresetId';
 const storageKeyFont = 'chatchoi.fontChoice';
 const storageKeyFontSize = 'chatchoi.fontSize';
 const storageKeyDensity = 'chatchoi.messageDensity';
+const storageKeyAppearanceVersion = 'chatchoi.appearanceVersion';
+const currentAppearanceVersion = '2';
 
 const tokenCssVariables: Record<keyof ThemeColorTokens, string> = {
   primary: '--theme-primary',
@@ -122,6 +124,7 @@ export const setAppearanceRuntime = (presetId: ThemePresetId, font: FontChoice, 
     localStorage.setItem(storageKeyFont, font);
     localStorage.setItem(storageKeyFontSize, fontSize);
     localStorage.setItem(storageKeyDensity, density);
+    localStorage.setItem(storageKeyAppearanceVersion, currentAppearanceVersion);
   }
 };
 
@@ -137,6 +140,11 @@ export const initializeAppearance = () => {
     storedFont = localStorage.getItem(storageKeyFont);
     storedFontSize = localStorage.getItem(storageKeyFontSize);
     storedDensity = localStorage.getItem(storageKeyDensity);
+
+    const storedAppearanceVersion = localStorage.getItem(storageKeyAppearanceVersion);
+    if (storedAppearanceVersion === null && storedPresetId === 'default') {
+      storedPresetId = 'messenger';
+    }
   }
 
   const presetId = storedPresetId ? resolveThemePreset(storedPresetId).id : defaultThemePresetId;
