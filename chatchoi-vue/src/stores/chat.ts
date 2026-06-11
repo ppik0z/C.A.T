@@ -4,6 +4,7 @@ import { jwtDecode } from 'jwt-decode';
 import { fetchConversationDetail } from '../services/conversation.service';
 import { prepareMediaForUpload } from '../services/mediaProcessing.service';
 import { uploadMediaMessage } from '../services/message.service';
+import { inspectLocalMedia } from '../services/localMediaMetadata.service';
 import type {
     ChatMessage,
     ChatMessageType,
@@ -60,7 +61,22 @@ const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): Cha
     if (clientKey) {
         const tempIndex = messages.findIndex((item) => item.clientMessageId === clientKey || item.clientTempId === clientKey);
         if (tempIndex !== -1) {
-            return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: undefined } : item);
+            return messages.map((item, index) => {
+                if (index !== tempIndex) return item;
+
+                return {
+                    ...item,
+                    ...message,
+                    fileWidth: message.fileWidth ?? item.fileWidth,
+                    fileHeight: message.fileHeight ?? item.fileHeight,
+                    fileDurationSeconds: message.fileDurationSeconds ?? item.fileDurationSeconds,
+                    localStatus: undefined,
+                    uploadProgress: undefined,
+                    compressionProgress: undefined,
+                    uploadError: undefined,
+                    canRetry: false,
+                };
+            });
         }
     }
 
@@ -545,6 +561,7 @@ export const useChatStore = defineStore('chat', {
             const conversationId = this.currentConversationId;
             const replyTo = this.replyTarget;
             const previewUrl = URL.createObjectURL(file);
+            const mediaMetadata = await inspectLocalMedia(file, previewUrl);
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
@@ -557,6 +574,9 @@ export const useChatStore = defineStore('chat', {
                 fileName: file.name,
                 fileMimeType: file.type,
                 fileSizeBytes: file.size,
+                fileWidth: mediaMetadata.width,
+                fileHeight: mediaMetadata.height,
+                fileDurationSeconds: mediaMetadata.durationSeconds,
                 originalFileSizeBytes: file.size,
                 uploadProgress: 0,
                 compressionProgress: 0,

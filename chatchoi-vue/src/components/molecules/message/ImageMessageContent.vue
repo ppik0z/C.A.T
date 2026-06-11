@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { ChatMessage } from '../../../types/chat';
 import { getMediaAspectRatio } from '../../../utils/mediaPresentation';
+import MediaUploadOverlay from './MediaUploadOverlay.vue';
 
 interface Props {
   message: ChatMessage;
@@ -36,5 +37,6 @@ const aspectRatio = computed(() => getMediaAspectRatio(
       decoding="async"
       loading="lazy"
     />
+    <MediaUploadOverlay :message="props.message" />
   </button>
 </template>

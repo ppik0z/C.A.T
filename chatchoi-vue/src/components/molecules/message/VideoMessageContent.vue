@@ -3,6 +3,7 @@ import { Play } from '@lucide/vue';
 import { computed } from 'vue';
 import type { ChatMessage } from '../../../types/chat';
 import { formatMediaDuration, getMediaAspectRatio } from '../../../utils/mediaPresentation';
+import MediaUploadOverlay from './MediaUploadOverlay.vue';
 
 interface Props {
   message: ChatMessage;
@@ -60,5 +61,6 @@ const duration = computed(() => formatMediaDuration(props.message.fileDurationSe
     >
       {{ duration }}
     </span>
+    <MediaUploadOverlay :message="props.message" />
   </button>
 </template>
