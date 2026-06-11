@@ -28,7 +28,10 @@ const draftProfile = ref({
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 const isSendingVerification = ref(false);
-const verificationMessage = ref<string | null>(null);
+const verificationFeedback = ref<{
+  type: "success" | "error";
+  message: string;
+} | null>(null);
 
 const displayName = computed(() => resolveDisplayName(accountStore.me));
 
@@ -76,15 +79,21 @@ const handleSave = async () => {
 
 const sendVerificationEmail = async () => {
   isSendingVerification.value = true;
-  verificationMessage.value = null;
+  verificationFeedback.value = null;
   try {
     const result = await requestEmailVerification();
-    verificationMessage.value = result.message;
+    verificationFeedback.value = {
+      type: "success",
+      message: result.message,
+    };
   } catch (caught) {
-    verificationMessage.value =
-      caught instanceof Error
-        ? caught.message
-        : "Không thể gửi email xác minh.";
+    verificationFeedback.value = {
+      type: "error",
+      message:
+        caught instanceof Error
+          ? caught.message
+          : "Không thể gửi email xác minh.",
+    };
   } finally {
     isSendingVerification.value = false;
   }
@@ -195,17 +204,25 @@ const sendVerificationEmail = async () => {
                 @click="sendVerificationEmail"
               >
                 {{
-                  isSendingVerification ? "Đang gửi..." : "Gửi email xác minh"
+                  isSendingVerification
+                    ? "Đang gửi..."
+                    : "Gửi lại email xác minh"
                 }}
               </Button>
             </div>
           </PreferenceRow>
           <p
-            v-if="verificationMessage"
-            class="mb-3 rounded-lg bg-primary-container px-3 py-2 text-sm font-semibold text-on-primary-container"
+            v-if="verificationFeedback"
+            :class="[
+              'mb-3 rounded-lg px-3 py-2 text-sm font-semibold',
+              verificationFeedback.type === 'error'
+                ? 'bg-error-container text-error'
+                : 'bg-primary-container text-on-primary-container',
+            ]"
             aria-live="polite"
+            :role="verificationFeedback.type === 'error' ? 'alert' : 'status'"
           >
-            {{ verificationMessage }}
+            {{ verificationFeedback.message }}
           </p>
           <Separator />
           <PreferenceRow
