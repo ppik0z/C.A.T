@@ -4,12 +4,14 @@ import { Input } from '@/components/ui/input';
 interface Props {
   placeholder?: string;
   icon?: string;
+  maxlength?: number;
 }
 
 const model = defineModel<string>({ required: true });
 const props = withDefaults(defineProps<Props>(), {
   placeholder: '',
   icon: undefined,
+  maxlength: undefined,
 });
 </script>
 
@@ -28,6 +30,7 @@ const props = withDefaults(defineProps<Props>(), {
         props.icon ? 'pl-11' : 'pl-4',
       ]"
       :placeholder="props.placeholder"
+      :maxlength="props.maxlength"
     />
   </label>
 </template>

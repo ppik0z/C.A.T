@@ -115,6 +115,7 @@ export interface LastMessage {
 export interface Conversation {
   id: number;
   name: string | null;
+  description?: string | null;
   isGroup: boolean;
   avatarGroup: string | null;
   unreadCount: number;
