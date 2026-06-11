@@ -46,3 +46,12 @@ export interface UpdateSettingsRequest {
   notificationSound?: boolean;
   showNotificationPreview?: boolean;
 }
+
+export interface UpdatePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdatePasswordResponse {
+  message: string;
+}

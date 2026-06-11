@@ -75,14 +75,6 @@ export class PushSubscriptionsService {
     return { revoked: true as const };
   }
 
-  async revokeForSerializedSession(serializedToken: string | null) {
-    if (!serializedToken) return;
-    const [authSessionId] = serializedToken.split('.');
-    if (!authSessionId) return;
-
-    await this.revokeForSession(authSessionId);
-  }
-
   async revokeForSession(authSessionId: string) {
     await this.drizzle.db
       .update(pushSubscriptions)

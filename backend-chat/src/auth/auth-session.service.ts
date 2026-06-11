@@ -1,14 +1,40 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleService } from '../database/drizzle.service';
 import { authSessions } from '../database/schema';
+import {
+  AUTH_SESSION_REVOKED_EVENT,
+  AUTH_USER_SESSIONS_REVOKED_EVENT,
+  type AuthSessionRevokedEvent,
+  type AuthUserSessionsRevokedEvent,
+} from './auth-session.events';
 
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_SECRET_BYTES = 32;
+const REFRESH_SECRET_LENGTH = 43;
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REFRESH_SECRET_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+type RotationOutcome =
+  | {
+      status: 'rotated';
+      sessionId: string;
+      userId: number;
+      refreshToken: string;
+    }
+  | {
+      status: 'invalid';
+      revokedSessionId?: string;
+    };
 
 @Injectable()
 export class AuthSessionService {
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async create(userId: number, userAgent?: string) {
     const id = randomUUID();
@@ -25,34 +51,102 @@ export class AuthSessionService {
 
   async rotate(serializedToken: string) {
     const { id, secret } = this.parse(serializedToken);
-    const [session] = await this.drizzle.db
-      .select()
-      .from(authSessions)
-      .where(and(
-        eq(authSessions.id, id),
-        isNull(authSessions.revokedAt),
-        gt(authSessions.expiresAt, new Date()),
-      ))
-      .limit(1);
+    const outcome = await this.drizzle.db.transaction<RotationOutcome>(async (tx) => {
+      const [session] = await tx
+        .select({
+          id: authSessions.id,
+          userId: authSessions.userId,
+          refreshTokenHash: authSessions.refreshTokenHash,
+          previousRefreshTokenHash: authSessions.previousRefreshTokenHash,
+          expiresAt: authSessions.expiresAt,
+          revokedAt: authSessions.revokedAt,
+        })
+        .from(authSessions)
+        .where(eq(authSessions.id, id))
+        .limit(1)
+        .for('update');
 
-    if (!session || !this.matches(secret, session.refreshTokenHash)) {
-      if (session) await this.revoke(id);
+      const now = new Date();
+      if (!session || session.revokedAt || session.expiresAt <= now) {
+        return { status: 'invalid' };
+      }
+
+      if (!this.matches(secret, session.refreshTokenHash)) {
+        if (
+          !session.previousRefreshTokenHash
+          || !this.matches(secret, session.previousRefreshTokenHash)
+        ) {
+          return { status: 'invalid' };
+        }
+
+        await tx
+          .update(authSessions)
+          .set({ revokedAt: now })
+          .where(and(eq(authSessions.id, id), isNull(authSessions.revokedAt)));
+        return { status: 'invalid', revokedSessionId: id };
+      }
+
+      const nextSecret = this.createSecret();
+      await tx
+        .update(authSessions)
+        .set({
+          previousRefreshTokenHash: session.refreshTokenHash,
+          refreshTokenHash: this.hash(nextSecret),
+          lastUsedAt: now,
+          rotatedAt: now,
+          expiresAt: new Date(now.getTime() + REFRESH_TTL_MS),
+        })
+        .where(eq(authSessions.id, id));
+
+      return {
+        status: 'rotated',
+        sessionId: session.id,
+        userId: session.userId,
+        refreshToken: this.serialize(id, nextSecret),
+      };
+    });
+
+    if (outcome.status === 'invalid') {
+      if (outcome.revokedSessionId) {
+        this.emitSessionRevoked(outcome.revokedSessionId);
+      }
       throw new UnauthorizedException('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.');
     }
 
-    const nextSecret = this.createSecret();
-    await this.drizzle.db
-      .update(authSessions)
-      .set({ refreshTokenHash: this.hash(nextSecret), lastUsedAt: new Date() })
-      .where(eq(authSessions.id, id));
-
-    return { sessionId: session.id, userId: session.userId, refreshToken: this.serialize(id, nextSecret) };
+    return outcome;
   }
 
   async revokeSerialized(serializedToken: string | null) {
-    if (!serializedToken) return;
-    const [id] = serializedToken.split('.');
-    if (id) await this.revoke(id);
+    const parsed = this.tryParse(serializedToken);
+    if (!parsed) return null;
+
+    const revokedSessionId = await this.drizzle.db.transaction<string | null>(async (tx) => {
+      const [session] = await tx
+        .select({
+          id: authSessions.id,
+          refreshTokenHash: authSessions.refreshTokenHash,
+          revokedAt: authSessions.revokedAt,
+        })
+        .from(authSessions)
+        .where(eq(authSessions.id, parsed.id))
+        .limit(1)
+        .for('update');
+
+      if (!session || session.revokedAt || !this.matches(parsed.secret, session.refreshTokenHash)) {
+        return null;
+      }
+
+      await tx
+        .update(authSessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(authSessions.id, session.id), isNull(authSessions.revokedAt)));
+      return session.id;
+    });
+
+    if (revokedSessionId) {
+      this.emitSessionRevoked(revokedSessionId);
+    }
+    return revokedSessionId;
   }
 
   async revokeAllForUser(userId: number) {
@@ -60,20 +154,36 @@ export class AuthSessionService {
       .update(authSessions)
       .set({ revokedAt: new Date() })
       .where(and(eq(authSessions.userId, userId), isNull(authSessions.revokedAt)));
-  }
-
-  private async revoke(id: string) {
-    await this.drizzle.db.update(authSessions).set({ revokedAt: new Date() }).where(eq(authSessions.id, id));
+    this.events.emit(AUTH_USER_SESSIONS_REVOKED_EVENT, {
+      userId,
+    } satisfies AuthUserSessionsRevokedEvent);
   }
 
   private parse(serializedToken: string) {
-    const [id, secret] = serializedToken.split('.');
-    if (!id || !secret) throw new UnauthorizedException('Phiên đăng nhập không hợp lệ.');
+    const parsed = this.tryParse(serializedToken);
+    if (!parsed) throw new UnauthorizedException('Phiên đăng nhập không hợp lệ.');
+    return parsed;
+  }
+
+  private tryParse(serializedToken: string | null) {
+    if (!serializedToken) return null;
+    const parts = serializedToken.split('.');
+    if (parts.length !== 2) return null;
+
+    const [id, secret] = parts;
+    if (
+      !SESSION_ID_PATTERN.test(id)
+      || secret.length !== REFRESH_SECRET_LENGTH
+      || !REFRESH_SECRET_PATTERN.test(secret)
+    ) {
+      return null;
+    }
+
     return { id, secret };
   }
 
   private createSecret() {
-    return randomBytes(32).toString('base64url');
+    return randomBytes(REFRESH_SECRET_BYTES).toString('base64url');
   }
 
   private hash(secret: string) {
@@ -88,5 +198,11 @@ export class AuthSessionService {
 
   private serialize(id: string, secret: string) {
     return `${id}.${secret}`;
+  }
+
+  private emitSessionRevoked(sessionId: string) {
+    this.events.emit(AUTH_SESSION_REVOKED_EVENT, {
+      sessionId,
+    } satisfies AuthSessionRevokedEvent);
   }
 }

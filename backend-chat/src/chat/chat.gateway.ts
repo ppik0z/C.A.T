@@ -25,10 +25,16 @@ import { ConversationsService } from '../conversations/conversations.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import Redis from 'ioredis';
 import type { PublicUserProfileDto, PublicUserSummaryDto } from '../profiles/profiles.service';
+import {
+    AUTH_SESSION_REVOKED_EVENT,
+    AUTH_USER_SESSIONS_REVOKED_EVENT,
+    type AuthSessionRevokedEvent,
+    type AuthUserSessionsRevokedEvent,
+} from '../auth/auth-session.events';
 
 
 @UseGuards(WsJwtGuard, HybridThrottlerGuard)
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway()
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private offlineTimers = new Map<number, NodeJS.Timeout>();
@@ -52,7 +58,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (!userId) return;
 
         // noti_channel
-        await client.join(`user_${userId}`);
+        await Promise.all([
+            client.join(`user_${userId}`),
+            client.join(`session_${client.user.sessionId}`),
+        ]);
 
         if (this.offlineTimers.has(userId)) {
             clearTimeout(this.offlineTimers.get(userId));
@@ -162,6 +171,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 senderName: payload.senderName,
             });
         });
+    }
+
+    @OnEvent(AUTH_SESSION_REVOKED_EVENT)
+    disconnectRevokedSession({ sessionId }: AuthSessionRevokedEvent) {
+        this.server.in(`session_${sessionId}`).disconnectSockets(true);
+    }
+
+    @OnEvent(AUTH_USER_SESSIONS_REVOKED_EVENT)
+    disconnectRevokedUserSessions({ userId }: AuthUserSessionsRevokedEvent) {
+        this.server.in(`user_${userId}`).disconnectSockets(true);
     }
 
 

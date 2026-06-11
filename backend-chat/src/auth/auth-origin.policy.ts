@@ -1,5 +1,8 @@
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
-const TRUSTED_DOMAIN = 'dangtuankhai.id.vn';
+const DEFAULT_PRODUCTION_ORIGINS = new Set([
+  'https://dangtuankhai.id.vn',
+  'https://chat.dangtuankhai.id.vn',
+]);
 
 export const isTrustedAuthOrigin = (origin: string | undefined): boolean => {
   if (!origin) return true;
@@ -11,14 +14,11 @@ export const isTrustedAuthOrigin = (origin: string | undefined): boolean => {
     return false;
   }
 
-  if (LOCAL_HOSTNAMES.has(url.hostname)) {
+  if (process.env.NODE_ENV !== 'production' && LOCAL_HOSTNAMES.has(url.hostname)) {
     return url.protocol === 'http:' || url.protocol === 'https:';
   }
 
-  const isTrustedDomain = url.hostname === TRUSTED_DOMAIN || url.hostname.endsWith(`.${TRUSTED_DOMAIN}`);
-  if (isTrustedDomain && url.protocol === 'https:') return true;
-
-  return getConfiguredOrigins().includes(url.origin);
+  return DEFAULT_PRODUCTION_ORIGINS.has(url.origin) || getConfiguredOrigins().includes(url.origin);
 };
 
 export const resolveCorsOrigin = (

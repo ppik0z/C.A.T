@@ -47,12 +47,17 @@ const sendUpload = (
 
     request.onload = async () => {
       if (request.status === 401 && !hasRetried) {
-        const refreshedToken = await refreshAccessToken();
-        if (refreshedToken) {
-          sendUpload(payload, true).then(resolve, reject);
+        try {
+          const refreshedToken = await refreshAccessToken();
+          if (refreshedToken) {
+            sendUpload(payload, true).then(resolve, reject);
+            return;
+          }
+          handleUnauthorized();
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('Không thể làm mới phiên đăng nhập.'));
           return;
         }
-        handleUnauthorized();
       }
       const responsePayload = parseJsonResponse(request.responseText);
       if (request.status < 200 || request.status >= 300) {
