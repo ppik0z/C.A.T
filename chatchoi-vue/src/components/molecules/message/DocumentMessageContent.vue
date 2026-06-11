@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Download, FileText } from '@lucide/vue';
 import type { ChatMessage } from '../../../types/chat';
 import { formatFileSize } from '../../../utils/chatPresentation';
 
@@ -15,12 +16,15 @@ const props = defineProps<Props>();
     :href="props.message.fileUrl"
     target="_blank"
     rel="noreferrer"
-    class="flex min-w-[14rem] items-center gap-3 rounded-xl bg-surface-container-low p-3 text-on-surface"
+    class="group flex min-w-[min(76vw,16rem)] max-w-[22rem] items-center gap-3 rounded-[1.1rem] border border-outline-variant/80 bg-surface-container-lowest p-3 text-on-surface shadow-sm transition hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chat-accent"
   >
-    <span class="material-symbols-outlined text-[28px] text-primary">description</span>
-    <span class="min-w-0">
+    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-container text-primary">
+      <FileText :size="21" />
+    </span>
+    <span class="min-w-0 flex-1">
       <span class="block truncate text-sm font-semibold">{{ props.message.fileName ?? 'Tài liệu' }}</span>
       <span class="block text-xs text-secondary">{{ formatFileSize(props.message.fileSizeBytes) }}</span>
     </span>
+    <Download :size="18" class="shrink-0 text-on-surface-variant transition group-hover:text-primary" />
   </a>
 </template>

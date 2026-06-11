@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
 import { formatMessageTime } from '../../utils/chatPresentation';
 import { resolveDisplayName } from '../../utils/userPresentation';
 import MessageContentRenderer from './message/MessageContentRenderer.vue';
+import MediaLightbox from '../organisms/MediaLightbox.vue';
 
 interface Props {
   message: ChatMessage;
@@ -25,6 +26,7 @@ const copied = ref(false);
 const isMenuOpen = ref(false);
 const isReactionOpen = ref(false);
 const actionRootRef = ref<HTMLElement | null>(null);
+const openMediaKind = ref<'image' | 'video' | null>(null);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
@@ -34,6 +36,10 @@ const getSenderName = (message: ChatMessage) => {
 };
 
 const getMessageType = (message: ChatMessage) => message.type ?? 'text';
+const usesStandaloneSurface = computed(() => {
+  return !props.message.recalledAt
+    && ['image', 'gif', 'video', 'document'].includes(getMessageType(props.message));
+});
 
 const getUploadStatusText = (message: ChatMessage): string => {
   if (message.localStatus === 'compressing' || message.localStatus === 'uploading' || message.localStatus === 'sending') {
@@ -112,6 +118,12 @@ const reactToMessage = (emoji: string) => {
   closeActions();
 };
 
+const openMedia = (kind: 'image' | 'video') => {
+  if (!props.message.fileUrl) return;
+  openMediaKind.value = kind;
+  closeActions();
+};
+
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutsidePointerDown);
   document.removeEventListener('keydown', handleKeydown);
@@ -169,18 +181,28 @@ watch(
         </p>
       </div>
 
+      <p v-if="!props.isOwn" class="px-1 text-[11px] font-semibold text-on-surface-variant">
+        {{ getSenderName(props.message) }}
+      </p>
+
       <div
         :class="[
-          'px-3.5 py-2.5 sm:px-4 sm:py-3 break-words',
-          props.isOwn
-            ? 'bg-chat-accent text-chat-on-accent rounded-[1.25rem] rounded-br-md'
-            : 'bg-chat-incoming text-on-surface rounded-[1.25rem] rounded-bl-md',
+          'break-words',
+          usesStandaloneSurface
+            ? 'bg-transparent p-0'
+            : [
+                'rounded-[1.25rem] px-3.5 py-2.5 sm:px-4 sm:py-3',
+                props.isOwn
+                  ? 'rounded-br-md bg-chat-accent text-chat-on-accent'
+                  : 'rounded-bl-md bg-chat-incoming text-on-surface',
+              ],
         ]"
       >
-        <p v-if="!props.isOwn" class="text-[11px] font-semibold text-on-surface-variant mb-1">
-          {{ getSenderName(props.message) }}
-        </p>
-        <MessageContentRenderer :message="props.message" />
+        <MessageContentRenderer
+          :is-own="props.isOwn"
+          :message="props.message"
+          @open-media="openMedia"
+        />
         <div v-if="props.message.localStatus === 'failed'" class="mt-2">
           <button
             v-if="props.message.canRetry && props.message.clientTempId"
@@ -311,6 +333,16 @@ watch(
       </div>
     </div>
   </div>
+
+  <MediaLightbox
+    v-if="props.message.fileUrl && openMediaKind"
+    :alt="props.message.fileName ?? 'Media message'"
+    :kind="openMediaKind"
+    :open="Boolean(openMediaKind)"
+    :poster="props.message.fileThumbnailUrl"
+    :url="props.message.fileUrl"
+    @close="openMediaKind = null"
+  />
 </template>
 
 <style scoped>

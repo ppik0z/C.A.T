@@ -7,10 +7,17 @@ import VideoMessageContent from './VideoMessageContent.vue';
 
 interface Props {
   message: ChatMessage;
+  isOwn: boolean;
 }
 
 const props = defineProps<Props>();
+const emit = defineEmits<{
+  openMedia: [kind: 'image' | 'video'];
+}>();
 const messageType = computed(() => props.message.type ?? 'text');
+const isStandaloneContent = computed(() => {
+  return ['image', 'gif', 'video', 'document'].includes(messageType.value);
+});
 </script>
 
 <template>
@@ -21,11 +28,13 @@ const messageType = computed(() => props.message.type ?? 'text');
   <ImageMessageContent
     v-else-if="messageType === 'image' || messageType === 'gif'"
     :message="props.message"
+    @open="emit('openMedia', 'image')"
   />
 
   <VideoMessageContent
     v-else-if="messageType === 'video'"
     :message="props.message"
+    @open="emit('openMedia', 'video')"
   />
 
   <DocumentMessageContent
@@ -37,7 +46,14 @@ const messageType = computed(() => props.message.type ?? 'text');
     v-if="props.message.content && !props.message.recalledAt"
     :class="[
       'whitespace-pre-wrap text-sm leading-6 sm:text-base',
-      messageType === 'text' ? '' : 'mt-2',
+      isStandaloneContent
+        ? [
+            'mt-1.5 w-fit max-w-[min(76vw,22rem)] rounded-[1.1rem] px-3.5 py-2',
+            props.isOwn
+              ? 'ml-auto bg-chat-accent text-chat-on-accent'
+              : 'bg-chat-incoming text-on-surface',
+          ]
+        : '',
     ]"
   >
     {{ props.message.content }}
