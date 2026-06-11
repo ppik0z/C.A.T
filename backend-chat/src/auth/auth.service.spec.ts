@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthSessionService } from './auth-session.service';
 import { PasswordHasherService } from './password-hasher.service';
 import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
+import { AuthRecoveryService } from './auth-recovery.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -23,7 +24,12 @@ describe('AuthService', () => {
         },
         {
           provide: AuthSessionService,
-          useValue: { create: jest.fn(), rotate: jest.fn(), revokeSerialized: jest.fn(), revokeAllForUser: jest.fn() },
+          useValue: {
+            create: jest.fn(),
+            rotate: jest.fn(),
+            revokeSerialized: jest.fn(),
+            revokeAllForUser: jest.fn(),
+          },
         },
         {
           provide: PasswordHasherService,
@@ -31,7 +37,14 @@ describe('AuthService', () => {
         },
         {
           provide: PushSubscriptionsService,
-          useValue: { revokeForSession: jest.fn(), revokeAllForUser: jest.fn() },
+          useValue: {
+            revokeForSession: jest.fn(),
+            revokeAllForUser: jest.fn(),
+          },
+        },
+        {
+          provide: AuthRecoveryService,
+          useValue: { requestEmailVerification: jest.fn() },
         },
       ],
     }).compile();

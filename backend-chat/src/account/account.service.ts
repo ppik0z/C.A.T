@@ -21,6 +21,7 @@ import { AuthSessionService } from '../auth/auth-session.service';
 import { PasswordHasherService } from '../auth/password-hasher.service';
 import { PushSubscriptionsService } from '../push-notifications/push-subscriptions.service';
 import { normalizeEmail } from '../auth/email-address';
+import { assertPasswordFitsBcrypt } from '../auth/password-policy';
 
 @Injectable()
 export class AccountService {
@@ -216,6 +217,7 @@ export class AccountService {
     const { currentPassword, newPassword } = data;
     if (!currentPassword || !newPassword)
       throw new BadRequestException('Missing password fields');
+    assertPasswordFitsBcrypt(newPassword);
 
     const user = await this.drizzle.db.query.users.findFirst({
       where: eq(users.id, userId),

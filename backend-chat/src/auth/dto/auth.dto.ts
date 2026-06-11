@@ -41,3 +41,26 @@ export class LoginDto {
   @MaxLength(72)
   password!: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail({}, { message: 'Email không hợp lệ.' })
+  @MaxLength(255)
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/, { message: 'Token không hợp lệ.' })
+  token!: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Mật khẩu phải có ít nhất 8 ký tự.' })
+  @MaxLength(72, { message: 'Mật khẩu tối đa 72 ký tự.' })
+  newPassword!: string;
+}
+
+export class VerifyEmailDto {
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{43}$/, { message: 'Token không hợp lệ.' })
+  token!: string;
+}

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthCookieService } from './auth-cookie.service';
+import { AuthRecoveryService } from './auth-recovery.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -16,6 +17,10 @@ describe('AuthController', () => {
         },
         {
           provide: AuthCookieService,
+          useValue: {},
+        },
+        {
+          provide: AuthRecoveryService,
           useValue: {},
         },
       ],

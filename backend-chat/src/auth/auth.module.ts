@@ -12,6 +12,8 @@ import { getJwtModuleOptions } from './auth.constants';
 import { AuthIdentityService } from './auth-identity.service';
 import { EMAIL_SENDER } from '../email/email-sender';
 import { ResendEmailSender } from '../email/resend-email-sender.service';
+import { AuthActionTokenService } from './auth-action-token.service';
+import { AuthRecoveryService } from './auth-recovery.service';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { ResendEmailSender } from '../email/resend-email-sender.service';
     AuthSessionService,
     AuthIdentityService,
     PasswordHasherService,
+    AuthActionTokenService,
+    AuthRecoveryService,
     ResendEmailSender,
     {
       provide: EMAIL_SENDER,
