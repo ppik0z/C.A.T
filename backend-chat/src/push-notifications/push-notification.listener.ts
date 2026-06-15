@@ -39,6 +39,19 @@ interface ConversationMemberKickedEvent {
   targetUserId: number;
 }
 
+interface CallMutationEvent {
+  callId: number;
+  conversationId: number;
+  memberIds: number[];
+  ringingUserIds: number[];
+  ended: boolean;
+  state: {
+    kind: 'audio' | 'video';
+    isGroup: boolean;
+    startedBy: { id: number; username: string; displayName: string | null; avatar: string | null };
+  };
+}
+
 const MAX_PREVIEW_LENGTH = 120;
 
 @Injectable()
@@ -135,6 +148,54 @@ export class PushNotificationListener {
       body: `${actorName} đã xoá bạn khỏi ${groupName}.`,
       tag: `group-removed:${payload.conversationId}`,
       link: '/',
+      conversationId: String(payload.conversationId),
+    }));
+  }
+
+  @OnEvent('call.started')
+  async handleCallStarted(payload: CallMutationEvent) {
+    const caller = payload.state.startedBy;
+    const name = caller.displayName || caller.username;
+    const isVideo = payload.state.kind === 'video';
+
+    await this.dispatch(payload.ringingUserIds, () => ({
+      type: 'call.incoming',
+      title: name,
+      body: isVideo ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến',
+      icon: caller.avatar ?? undefined,
+      tag: `call:${payload.callId}`,
+      // answerCallId để client tự bắt máy khi mở app từ thông báo.
+      link: `/?conversationId=${payload.conversationId}&answerCallId=${payload.callId}`,
+      conversationId: String(payload.conversationId),
+      callId: String(payload.callId),
+      callKind: payload.state.kind,
+      senderId: String(caller.id),
+      senderName: name,
+    }));
+  }
+
+  @OnEvent('call.ended')
+  async handleCallEnded(payload: CallMutationEvent) {
+    await this.dismissCallNotification(payload);
+  }
+
+  // Decline / leave / hết giờ đổ chuông kết thúc cuộc gọi qua 'call.state_changed'
+  // với ended=true (không phải 'call.ended'), nên cần bắt cả sự kiện này.
+  @OnEvent('call.state_changed')
+  async handleCallStateChanged(payload: CallMutationEvent) {
+    if (payload.ended) await this.dismissCallNotification(payload);
+  }
+
+  private async dismissCallNotification(payload: CallMutationEvent) {
+    // Đóng thông báo cuộc gọi đến đang treo trên thiết bị nền khi cuộc gọi
+    // kết thúc / bị huỷ / hết giờ đổ chuông.
+    await this.dispatch(payload.memberIds, () => ({
+      type: 'call.cancel',
+      title: '',
+      body: '',
+      tag: `call:${payload.callId}`,
+      link: '/',
+      callId: String(payload.callId),
       conversationId: String(payload.conversationId),
     }));
   }

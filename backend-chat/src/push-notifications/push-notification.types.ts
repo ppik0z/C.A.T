@@ -4,7 +4,9 @@ export type PushNotificationType =
   | 'friend.request'
   | 'friend.accept'
   | 'group.added'
-  | 'group.removed';
+  | 'group.removed'
+  | 'call.incoming'
+  | 'call.cancel';
 
 /**
  * Dữ liệu gửi qua FCM dạng data-only. FCM yêu cầu mọi giá trị là string,
@@ -22,4 +24,6 @@ export interface PushNotificationData {
   messageId?: string;
   senderId?: string;
   senderName?: string;
+  callId?: string;
+  callKind?: string;
 }

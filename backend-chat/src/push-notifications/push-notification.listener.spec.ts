@@ -164,4 +164,43 @@ describe('PushNotificationListener', () => {
       },
     ]);
   });
+
+  it('pushes an incoming-call notification to ringing users only', async () => {
+    subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
+      { userId: 8, token: 'callee-token', showNotificationPreview: true },
+    ]);
+
+    await listener.handleCallStarted({
+      callId: 50,
+      conversationId: 9,
+      memberIds: [7, 8],
+      ringingUserIds: [8],
+      ended: false,
+      state: {
+        kind: 'video',
+        isGroup: false,
+        startedBy: { id: 7, username: 'an_nguyen', displayName: 'An', avatar: 'https://cdn/a.png' },
+      },
+    });
+
+    expect(subscriptions.getActiveFcmSubscriptions).toHaveBeenCalledWith([8]);
+    expect(fcmPushProvider.send).toHaveBeenCalledWith([
+      {
+        token: 'callee-token',
+        data: {
+          type: 'call.incoming',
+          title: 'An',
+          body: 'Cuộc gọi video đến',
+          icon: 'https://cdn/a.png',
+          tag: 'call:50',
+          link: '/?conversationId=9&answerCallId=50',
+          conversationId: '9',
+          callId: '50',
+          callKind: 'video',
+          senderId: '7',
+          senderName: 'An',
+        },
+      },
+    ]);
+  });
 });
