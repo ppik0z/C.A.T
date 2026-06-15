@@ -115,11 +115,12 @@ export const useCallStore = defineStore('call', {
       socket.emit('call:leave', { callId });
     },
 
-    updateMediaState(callId: number, input: { micEnabled: boolean; cameraEnabled: boolean }) {
+    updateMediaState(callId: number, input: { micEnabled: boolean; cameraEnabled: boolean; screenShareEnabled?: boolean }) {
       socket.emit('call:update_media', {
         callId,
         micEnabled: input.micEnabled,
         cameraEnabled: input.cameraEnabled,
+        screenShareEnabled: input.screenShareEnabled,
       });
     },
 

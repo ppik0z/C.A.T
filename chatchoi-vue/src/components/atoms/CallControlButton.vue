@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from '@lucide/vue';
+import { Mic, MicOff, PhoneOff, ScreenShare, ScreenShareOff, Video, VideoOff } from '@lucide/vue';
 import { computed } from 'vue';
 
 interface Props {
-  icon: 'mic' | 'mic_off' | 'videocam' | 'videocam_off' | 'call_end';
+  icon: 'mic' | 'mic_off' | 'videocam' | 'videocam_off' | 'screen_share' | 'screen_share_off' | 'call_end';
   label: string;
   active?: boolean;
   tone?: 'neutral' | 'primary' | 'danger';
@@ -19,6 +19,8 @@ const iconComponent = computed(() => {
   if (props.icon === 'mic_off') return MicOff;
   if (props.icon === 'videocam') return Video;
   if (props.icon === 'videocam_off') return VideoOff;
+  if (props.icon === 'screen_share') return ScreenShare;
+  if (props.icon === 'screen_share_off') return ScreenShareOff;
   return PhoneOff;
 });
 </script>

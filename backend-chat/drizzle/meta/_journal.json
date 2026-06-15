@@ -50,6 +50,13 @@
       "when": 1781202360234,
       "tag": "0006_dapper_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1781507007587,
+      "tag": "0007_add_screen_share_enabled",
+      "breakpoints": true
     }
   ]
 }

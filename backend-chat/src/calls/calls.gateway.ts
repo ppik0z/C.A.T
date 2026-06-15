@@ -31,6 +31,7 @@ interface ConversationCallPayload {
 interface UpdateMediaPayload extends CallIdPayload {
     micEnabled: boolean;
     cameraEnabled: boolean;
+    screenShareEnabled?: boolean;
 }
 
 interface UpdateMediaConnectionPayload extends CallIdPayload {
@@ -157,6 +158,7 @@ export class CallsGateway implements OnGatewayDisconnect {
             await this.callsService.updateMediaState(client.user.userId, data.callId, {
                 micEnabled: data.micEnabled,
                 cameraEnabled: data.cameraEnabled,
+                screenShareEnabled: data.screenShareEnabled,
             });
             return { status: 'ack' };
         } catch (error) {

@@ -70,6 +70,7 @@ export default defineConfig(({ mode }) => {
     cacheDir: 'node_modules/.vite',
     server: {
       host: '0.0.0.0',
+      allowedHosts: ['dangtuankhai.id.vn', 'chat.dangtuankhai.id.vn'],
       proxy: apiProxy,
     },
     preview: {

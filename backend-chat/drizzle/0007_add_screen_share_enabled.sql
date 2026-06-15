@@ -1,0 +1,1 @@
+ALTER TABLE `call_participants` ADD `screenShareEnabled` boolean DEFAULT false NOT NULL;

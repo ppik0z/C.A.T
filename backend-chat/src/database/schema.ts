@@ -369,6 +369,7 @@ export const callParticipants = mysqlTable(
     status: varchar('status', { length: 30 }).notNull().default('ringing'),
     micEnabled: boolean('micEnabled').notNull().default(false),
     cameraEnabled: boolean('cameraEnabled').notNull().default(false),
+    screenShareEnabled: boolean('screenShareEnabled').notNull().default(false),
     joinedAt: datetime('joinedAt'),
     leftAt: datetime('leftAt'),
     declinedAt: datetime('declinedAt'),

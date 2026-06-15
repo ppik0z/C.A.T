@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Minimize2, MonitorSmartphone, Phone, Video }
 import Avatar from '../atoms/Avatar.vue';
 import CallControlButton from '../atoms/CallControlButton.vue';
 import CallParticipantTile from '../molecules/CallParticipantTile.vue';
+import CallScreenStage from '../molecules/CallScreenStage.vue';
 import { useCallMediaStore } from '../../stores/call-media';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
@@ -76,7 +77,33 @@ const showLocalPreview = computed(() => {
     isVideoCall.value
       && call.value
       && !conversation.value?.isGroup
-      && localParticipant.value,
+      && localParticipant.value
+      && !hasScreenShare.value,
+  );
+});
+
+// Trình duyệt mobile hầu như không hỗ trợ getDisplayMedia → ẩn nút chia sẻ màn hình.
+const canShareScreen = computed(() => {
+  return typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia);
+});
+const screenSharerUserId = computed(() => callMediaStore.screenShareUserId);
+const screenTrack = computed(() => {
+  return screenSharerUserId.value !== null ? callMediaStore.getScreenTrackForUser(screenSharerUserId.value) : null;
+});
+const hasScreenShare = computed(() => Boolean(screenTrack.value));
+const screenSharer = computed(() => {
+  if (screenSharerUserId.value === null) return null;
+  return call.value?.participants.find((participant) => participant.userId === screenSharerUserId.value) ?? null;
+});
+const isLocalScreenShare = computed(() => {
+  return screenSharerUserId.value !== null && screenSharerUserId.value === chatStore.myId;
+});
+const isMediaConnected = computed(() => {
+  return Boolean(
+    call.value
+      && call.value.provider === 'livekit'
+      && callMediaStore.activeCallId === call.value.id
+      && callMediaStore.isConnected,
   );
 });
 const statusText = computed(() => {
@@ -128,6 +155,16 @@ const handleToggleCamera = () => {
     return;
   }
   callStore.toggleCamera(call.value.id);
+};
+
+const handleToggleScreenShare = () => {
+  if (!call.value || isTakenOver.value || !isMediaConnected.value) return;
+  // Chỉ spotlight một luồng tại một thời điểm: chặn khi người khác đang chia sẻ.
+  if (hasScreenShare.value && !isLocalScreenShare.value) {
+    callMediaStore.setError('Đã có người đang chia sẻ màn hình.');
+    return;
+  }
+  void callMediaStore.setScreenShareEnabled(!localParticipant.value?.screenShareEnabled);
 };
 
 const handleReconnectHere = () => {
@@ -218,6 +255,29 @@ onBeforeUnmount(() => {
           </div>
 
           <div
+            v-else-if="hasScreenShare && screenTrack"
+            class="flex h-full flex-col gap-2 px-2 pb-28 pt-24 sm:gap-3 sm:px-3 sm:pb-32"
+          >
+            <div class="min-h-0 flex-1">
+              <CallScreenStage :screen-track="screenTrack" :sharer="screenSharer" :is-local="isLocalScreenShare" />
+            </div>
+            <div v-if="joinedParticipants.length > 0" class="flex shrink-0 gap-2 overflow-x-auto pb-1">
+              <div
+                v-for="participant in joinedParticipants"
+                :key="participant.userId"
+                class="aspect-video w-28 shrink-0 sm:w-36"
+              >
+                <CallParticipantTile
+                  compact
+                  :participant="participant"
+                  :video-track="callMediaStore.getVideoTrackForUser(participant.userId)"
+                  :is-active-speaker="callMediaStore.isActiveSpeaker(participant.userId)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div
             v-else-if="isVideoCall && stageParticipants.length > 0"
             :class="[
               'grid h-full auto-rows-fr gap-2 overflow-y-auto px-2 pb-28 pt-24 sm:gap-3 sm:px-3 sm:pb-32',
@@ -286,6 +346,19 @@ onBeforeUnmount(() => {
               @click="handleToggleCamera"
             />
             <span class="text-[11px] font-semibold text-white/70">Camera</span>
+          </div>
+          <div
+            v-if="call && canShareScreen && isMediaConnected"
+            class="flex flex-col items-center gap-1.5"
+            :class="{ 'opacity-50': hasScreenShare && !isLocalScreenShare }"
+          >
+            <CallControlButton
+              :active="Boolean(localParticipant?.screenShareEnabled)"
+              :icon="localParticipant?.screenShareEnabled ? 'screen_share' : 'screen_share_off'"
+              label="Chia sẻ màn hình"
+              @click="handleToggleScreenShare"
+            />
+            <span class="text-[11px] font-semibold text-white/70">Màn hình</span>
           </div>
           <div class="flex flex-col items-center gap-1.5">
             <CallControlButton icon="call_end" label="Rời cuộc gọi" tone="danger" @click="handleLeave" />
