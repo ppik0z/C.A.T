@@ -47,6 +47,7 @@ interface PendingMediaUpload {
     clientMessageId: string;
     replyToMessageId?: number;
     mentionedUserIds?: number[];
+    mentionEveryone?: boolean;
 }
 
 type MessageLoadDirection = 'replace' | 'older' | 'newer' | 'anchor';
@@ -507,7 +508,7 @@ export const useChatStore = defineStore('chat', {
             this.replyTarget = null;
         },
 
-        sendMessage(content: string, mentionedUserIds: number[] = []) {
+        sendMessage(content: string, mentionedUserIds: number[] = [], mentionEveryone = false) {
             if (!content.trim() || !this.currentConversationId || !this.myUserName) return;
 
             const clientTempId = crypto.randomUUID();
@@ -546,6 +547,7 @@ export const useChatStore = defineStore('chat', {
                 clientMessageId: clientTempId,
                 replyToMessageId: replyTo?.id,
                 mentionedUserIds,
+                mentionEveryone,
             }, (response: ChatMessage) => {
                 // Nhận phản hồi "savedMsg" từ Server và cập nhật UI 
                 if (response && response.id) {
@@ -554,7 +556,7 @@ export const useChatStore = defineStore('chat', {
             });
         },
 
-        async sendMediaMessage(file: File, caption = '', mentionedUserIds: number[] = []) {
+        async sendMediaMessage(file: File, caption = '', mentionedUserIds: number[] = [], mentionEveryone = false) {
             if (!this.currentConversationId || !this.myUserName) return;
 
             const token = getAccessToken();
@@ -606,6 +608,7 @@ export const useChatStore = defineStore('chat', {
                 clientMessageId: clientTempId,
                 replyToMessageId: replyTo?.id,
                 mentionedUserIds,
+                mentionEveryone,
             });
             this.pushMessage(optimisticMessage);
             this.stopTyping(conversationId);
@@ -678,6 +681,7 @@ export const useChatStore = defineStore('chat', {
                     clientMessageId: pendingUpload.clientMessageId,
                     replyToMessageId: pendingUpload.replyToMessageId,
                     mentionedUserIds: pendingUpload.mentionedUserIds,
+                    mentionEveryone: pendingUpload.mentionEveryone,
                     onProgress: (progress) => {
                         this.updateLocalMessage(pendingUpload.conversationId, clientTempId, {
                             uploadProgress: progress,

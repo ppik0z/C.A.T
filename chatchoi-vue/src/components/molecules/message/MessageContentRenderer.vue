@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ChatMessage } from '../../../types/chat';
+import { buildMentionSegments } from '../../../utils/chatPresentation';
 import DocumentMessageContent from './DocumentMessageContent.vue';
 import ImageMessageContent from './ImageMessageContent.vue';
 import VideoMessageContent from './VideoMessageContent.vue';
@@ -8,6 +9,7 @@ import VideoMessageContent from './VideoMessageContent.vue';
 interface Props {
   message: ChatMessage;
   isOwn: boolean;
+  currentUserId?: number | null;
 }
 
 const props = defineProps<Props>();
@@ -18,6 +20,11 @@ const messageType = computed(() => props.message.type ?? 'text');
 const isStandaloneContent = computed(() => {
   return ['image', 'gif', 'video', 'document'].includes(messageType.value);
 });
+const segments = computed(() =>
+  buildMentionSegments(props.message.content, props.message.mentions, {
+    includeEveryone: props.message.mentionsEveryone,
+  }),
+);
 </script>
 
 <template>
@@ -56,6 +63,12 @@ const isStandaloneContent = computed(() => {
         : '',
     ]"
   >
-    {{ props.message.content }}
+    <template v-for="(segment, index) in segments" :key="index">
+      <span
+        v-if="segment.type === 'mention'"
+        class="font-bold"
+      >{{ segment.text }}</span>
+      <template v-else>{{ segment.text }}</template>
+    </template>
   </p>
 </template>

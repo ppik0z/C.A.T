@@ -6,6 +6,7 @@ import {
     callSessions,
     conversationMembers,
     conversations,
+    messageMentions,
     messageReactions,
     messages,
     messageStatuses,
@@ -26,6 +27,7 @@ export interface SendMessageInput {
     clientMessageId?: string;
     replyToMessageId?: number;
     mentionedUserIds?: number[];
+    mentionEveryone?: boolean;
 }
 
 export interface CreateMediaMessageInput {
@@ -35,6 +37,7 @@ export interface CreateMediaMessageInput {
     clientMessageId?: string;
     replyToMessageId?: number;
     mentionedUserIds?: number[];
+    mentionEveryone?: boolean;
     media: UploadedMedia;
 }
 
@@ -56,6 +59,12 @@ export interface MessageReactionSummary {
     emoji: string;
     count: number;
     reactedByMe: boolean;
+}
+
+export interface MentionSummary {
+    userId: number;
+    username: string;
+    displayName: string | null;
 }
 
 export interface ReplySnapshot {
@@ -119,7 +128,9 @@ export interface SerializedMessage {
     replyTo: ReplySnapshot | null;
     reactions: MessageReactionSummary[];
     previewContent: string;
-    mentionedUserIds?: number[];
+    mentions: MentionSummary[];
+    mentionedUserIds: number[];
+    mentionsEveryone: boolean;
 }
 
 export interface MessagePageInfo {
@@ -217,10 +228,10 @@ export class MessagesService {
         input?: SendMessageInput,
     ) {
         await this.validateMember(senderId, conversationId);
-        const [messageType, sender, mentionedUserIds] = await Promise.all([
+        const [messageType, sender, mention] = await Promise.all([
             Promise.resolve(input?.type ?? 'text'),
             this.profilesService.getPublicSummary(senderId),
-            this.validateMentionedUsers(conversationId, input?.mentionedUserIds ?? []),
+            this.resolveMentions(conversationId, input?.mentionedUserIds ?? [], input?.mentionEveryone ?? false),
         ]);
 
         if (messageType === 'gif') {
@@ -239,7 +250,8 @@ export class MessagesService {
                 clientMessageId: input?.clientMessageId ?? input?.clientTempId ?? clientTempId,
                 fileUrl: gifUrl,
                 replyToMessageId: input?.replyToMessageId,
-                mentionedUserIds,
+                mentionedUserIds: mention.mentionedUserIds,
+                mentionEveryone: mention.mentionEveryone,
             });
         }
 
@@ -257,15 +269,16 @@ export class MessagesService {
             clientTempId: input?.clientTempId ?? clientTempId,
             clientMessageId: input?.clientMessageId ?? input?.clientTempId ?? clientTempId,
             replyToMessageId: input?.replyToMessageId,
-            mentionedUserIds,
+            mentionedUserIds: mention.mentionedUserIds,
+            mentionEveryone: mention.mentionEveryone,
         });
     }
 
     async createMediaMessage(senderId: number, input: CreateMediaMessageInput) {
         await this.validateMember(senderId, input.conversationId);
-        const [sender, mentionedUserIds] = await Promise.all([
+        const [sender, mention] = await Promise.all([
             this.profilesService.getPublicSummary(senderId),
-            this.validateMentionedUsers(input.conversationId, input.mentionedUserIds ?? []),
+            this.resolveMentions(input.conversationId, input.mentionedUserIds ?? [], input.mentionEveryone ?? false),
         ]);
 
         return this.createMessage({
@@ -288,7 +301,8 @@ export class MessagesService {
             fileThumbnailUrl: input.media.fileThumbnailUrl,
             fileDurationSeconds: input.media.fileDurationSeconds,
             replyToMessageId: input.replyToMessageId,
-            mentionedUserIds,
+            mentionedUserIds: mention.mentionedUserIds,
+            mentionEveryone: mention.mentionEveryone,
         });
     }
 
@@ -326,6 +340,7 @@ export class MessagesService {
         callSessionId?: number;
         replyToMessageId?: number;
         mentionedUserIds?: number[];
+        mentionEveryone?: boolean;
     }) {
         const clientMessageId = this.normalizeClientMessageId(input.clientMessageId);
         if (clientMessageId) {
@@ -333,7 +348,6 @@ export class MessagesService {
             if (existing) {
                 return this.getSerializedMessage(input.senderId, existing.conversationId, existing.id, {
                     clientTempId: input.clientTempId,
-                    mentionedUserIds: input.mentionedUserIds,
                 });
             }
         }
@@ -385,6 +399,24 @@ export class MessagesService {
                 status: 'sent',
             })));
 
+            const mentionRows = input.mentionEveryone
+                ? memberIds
+                    .filter((member) => member.userId !== input.senderId)
+                    .map((member) => ({ mentionedUserId: member.userId, mentionType: 'everyone' }))
+                : (input.mentionedUserIds ?? []).map((mentionedUserId) => ({
+                    mentionedUserId,
+                    mentionType: 'user',
+                }));
+
+            if (mentionRows.length > 0) {
+                await tx.insert(messageMentions).values(mentionRows.map((row) => ({
+                    messageId: newMessage.insertId,
+                    conversationId: input.conversationId,
+                    mentionedUserId: row.mentionedUserId,
+                    mentionType: row.mentionType,
+                })));
+            }
+
             await tx.update(conversations)
                 .set({
                     lastMessageId: newMessage.insertId,
@@ -401,7 +433,6 @@ export class MessagesService {
 
         const savedMessage = await this.getSerializedMessage(input.senderId, input.conversationId, messageId, {
             clientTempId: input.clientTempId,
-            mentionedUserIds: input.mentionedUserIds,
         });
         this.eventEmitter.emit('message.created', savedMessage);
         return savedMessage;
@@ -741,7 +772,7 @@ export class MessagesService {
         userId: number,
         conversationId: number,
         messageId: number,
-        options: { clientTempId?: string; mentionedUserIds?: number[] } = {},
+        options: { clientTempId?: string } = {},
     ) {
         const [row] = await this.drizzle.db.query.messages.findMany({
             where: and(eq(messages.id, messageId), eq(messages.conversationId, conversationId)),
@@ -758,7 +789,6 @@ export class MessagesService {
         return {
             ...serialized,
             clientTempId: options.clientTempId,
-            mentionedUserIds: options.mentionedUserIds,
         };
     }
 
@@ -766,10 +796,11 @@ export class MessagesService {
         if (rows.length === 0) return [];
 
         const messageIds = rows.map((row) => row.id);
-        const [reactionMap, replyMap, callEventMap] = await Promise.all([
+        const [reactionMap, replyMap, callEventMap, mentionData] = await Promise.all([
             this.getReactionSummaries(messageIds, currentUserId),
             this.getReplySnapshots(rows),
             this.getCallEventSnapshots(rows, currentUserId),
+            this.getMentionData(messageIds),
         ]);
 
         return rows.map((row) => {
@@ -782,6 +813,8 @@ export class MessagesService {
             };
             const content = recalled ? '' : row.content ?? '';
             const type = recalled ? 'text' : row.type;
+            const mentions = recalled ? [] : mentionData.summaries[row.id] ?? [];
+            const mentionsEveryone = !recalled && mentionData.everyoneMessageIds.has(row.id);
             const previewContent = recalled
                 ? RECALL_PREVIEW
                 : this.getMessagePreview(row.type as MessageType, row.content ?? '', row.fileName ?? undefined);
@@ -816,8 +849,42 @@ export class MessagesService {
                 replyTo: row.replyToMessageId ? replyMap[row.replyToMessageId] ?? null : null,
                 reactions: recalled ? [] : reactionMap[row.id] ?? [],
                 previewContent,
+                mentions,
+                mentionedUserIds: mentions.map((mention) => mention.userId),
+                mentionsEveryone,
             };
         });
+    }
+
+    private async getMentionData(messageIds: number[]) {
+        const empty = { summaries: {} as Record<number, MentionSummary[]>, everyoneMessageIds: new Set<number>() };
+        if (messageIds.length === 0) return empty;
+
+        const rows = await this.drizzle.db
+            .select({
+                messageId: messageMentions.messageId,
+                userId: messageMentions.mentionedUserId,
+                username: users.username,
+                displayName: users.displayName,
+                mentionType: messageMentions.mentionType,
+            })
+            .from(messageMentions)
+            .innerJoin(users, eq(messageMentions.mentionedUserId, users.id))
+            .where(inArray(messageMentions.messageId, messageIds));
+
+        const summaries: Record<number, MentionSummary[]> = {};
+        const everyoneMessageIds = new Set<number>();
+        rows.forEach((row) => {
+            summaries[row.messageId] ??= [];
+            summaries[row.messageId].push({
+                userId: row.userId,
+                username: row.username,
+                displayName: row.displayName,
+            });
+            if (row.mentionType === 'everyone') everyoneMessageIds.add(row.messageId);
+        });
+
+        return { summaries, everyoneMessageIds };
     }
 
     private async getReactionSummaries(messageIds: number[], currentUserId: number) {
@@ -995,9 +1062,17 @@ export class MessagesService {
         return existing;
     }
 
-    private async validateMentionedUsers(conversationId: number, mentionedUserIds: number[]) {
+    private async resolveMentions(
+        conversationId: number,
+        mentionedUserIds: number[],
+        mentionEveryone: boolean,
+    ): Promise<{ mentionedUserIds: number[]; mentionEveryone: boolean }> {
         const uniqueIds = [...new Set(mentionedUserIds.filter((id) => Number.isInteger(id) && id > 0))];
-        if (uniqueIds.length === 0) return [];
+
+        // Không có mention nào: bỏ qua, tránh query thừa.
+        if (!mentionEveryone && uniqueIds.length === 0) {
+            return { mentionedUserIds: [], mentionEveryone: false };
+        }
         if (uniqueIds.length > MAX_MENTIONED_USERS) throw new BadRequestException('Quá nhiều người được mention.');
 
         const [conversation] = await this.drizzle.db
@@ -1008,13 +1083,18 @@ export class MessagesService {
 
         if (!conversation?.isGroup) throw new BadRequestException('Mention chỉ hỗ trợ trong nhóm.');
 
+        // @everyone bao trùm toàn nhóm nên không cần kiểm tra danh sách cụ thể.
+        if (mentionEveryone) {
+            return { mentionedUserIds: [], mentionEveryone: true };
+        }
+
         const members = await this.drizzle.db
             .select({ userId: conversationMembers.userId })
             .from(conversationMembers)
             .where(and(eq(conversationMembers.conversationId, conversationId), inArray(conversationMembers.userId, uniqueIds)));
 
         if (members.length !== uniqueIds.length) throw new BadRequestException('Danh sách mention chứa người không thuộc nhóm.');
-        return uniqueIds;
+        return { mentionedUserIds: uniqueIds, mentionEveryone: false };
     }
 
     private async cleanupRecalledMedia(messageId: number, publicId: string, resourceType: string) {

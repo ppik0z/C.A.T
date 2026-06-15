@@ -11,6 +11,7 @@ export const uploadMediaMessage = async (
     clientMessageId?: string;
     replyToMessageId?: number;
     mentionedUserIds?: number[];
+    mentionEveryone?: boolean;
     onProgress?: (progress: number) => void;
   },
 ): Promise<ChatMessage> => {
@@ -35,6 +36,7 @@ const sendUpload = (
     if (payload.clientMessageId) formData.append('clientMessageId', payload.clientMessageId);
     if (payload.replyToMessageId) formData.append('replyToMessageId', payload.replyToMessageId.toString());
     if (payload.mentionedUserIds?.length) formData.append('mentionedUserIds', JSON.stringify(payload.mentionedUserIds));
+    if (payload.mentionEveryone) formData.append('mentionEveryone', 'true');
 
     const request = new XMLHttpRequest();
     request.open('POST', `${apiBaseUrl}/messages/media`);
