@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
           >
             <CallControlButton
               :active="isLocalScreenShare"
-              :icon="isLocalScreenShare ? 'screen_share' : 'screen_share_off'"
+              :icon="isLocalScreenShare ? 'screen_share_off' : 'screen_share'"
               label="Chia sẻ màn hình"
               @click="handleToggleScreenShare"
             />
