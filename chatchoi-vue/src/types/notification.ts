@@ -4,7 +4,9 @@ export type PushNotificationType =
   | 'friend.request'
   | 'friend.accept'
   | 'group.added'
-  | 'group.removed';
+  | 'group.removed'
+  | 'call.incoming'
+  | 'call.cancel';
 
 /** Payload data-only nhận từ FCM (mọi field là string vì FCM ràng buộc vậy). */
 export interface PushNotificationData {
@@ -18,6 +20,8 @@ export interface PushNotificationData {
   messageId?: string;
   senderId?: string;
   senderName?: string;
+  callId?: string;
+  callKind?: string;
 }
 
 /** Thông báo đã chuẩn hoá để hiển thị in-app toast. */

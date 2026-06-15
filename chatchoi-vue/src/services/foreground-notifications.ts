@@ -7,6 +7,9 @@ import type { AppNotification, PushNotificationData } from '../types/notificatio
 let unsubscribe: (() => void) | null = null;
 
 const CHAT_TYPES = new Set(['chat.message', 'chat.mention']);
+// Cuộc gọi khi đang mở app do IncomingCallToastStack (chuông in-app) đảm nhiệm,
+// nên foreground bỏ qua để tránh trùng.
+const IGNORED_FOREGROUND_TYPES = new Set(['call.incoming', 'call.cancel']);
 
 const toAppNotification = (data: PushNotificationData): AppNotification => {
   const conversationId = data.conversationId ? Number(data.conversationId) : Number.NaN;
@@ -47,6 +50,8 @@ const showOsNotification = (notification: AppNotification) => {
 };
 
 const handleForegroundData = (data: PushNotificationData) => {
+  if (data.type && IGNORED_FOREGROUND_TYPES.has(data.type)) return;
+
   const notification = toAppNotification(data);
 
   // Tin nhắn của đúng đoạn chat đang mở & đang focus thì bỏ qua: người dùng đã thấy.

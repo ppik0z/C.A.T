@@ -13,7 +13,13 @@ import PushNotificationBanner from '../components/molecules/PushNotificationBann
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
 import type { AppSection } from '../types/navigation';
-import { pushNavigateEvent, pushOpenConversationEvent, takePendingPushConversationId } from '../pwa/pwaRuntime';
+import {
+  pushCallAnswerEvent,
+  pushCallDeclineEvent,
+  pushNavigateEvent,
+  pushOpenConversationEvent,
+  takePendingPushConversationId,
+} from '../pwa/pwaRuntime';
 
 type MobileView = 'list' | 'chat';
 const SettingsPanel = defineAsyncComponent(() => import('../components/organisms/SettingsPanel.vue'));
@@ -118,6 +124,23 @@ const handlePushNavigate = (event: Event) => {
   if (typeof link === 'string') navigateToLink(link);
 };
 
+const answerCall = (callId: number, conversationId?: string | number | null) => {
+  callStore.acceptCall(callId);
+  activeSection.value = 'messages';
+  mobileView.value = 'chat';
+  if (conversationId != null) setPendingConversation(String(conversationId));
+};
+
+const handlePushCallAnswer = (event: Event) => {
+  const detail = (event as CustomEvent<{ callId?: number; conversationId?: string | null }>).detail;
+  if (detail?.callId) answerCall(detail.callId, detail.conversationId);
+};
+
+const handlePushCallDecline = (event: Event) => {
+  const callId = (event as CustomEvent<{ callId?: number }>).detail?.callId;
+  if (callId) callStore.declineCall(callId);
+};
+
 watch(() => chatStore.conversations.length, openPendingConversation);
 
 onMounted(() => {
@@ -125,13 +148,26 @@ onMounted(() => {
   setPendingConversation(params.get('conversationId'));
   setPendingConversation(takePendingPushConversationId());
   if (params.get('view') === 'friends') handleNavigate('friends');
+
+  const answerCallId = Number(params.get('answerCallId'));
+  if (Number.isInteger(answerCallId) && answerCallId > 0) {
+    answerCall(answerCallId, params.get('conversationId'));
+    const url = new URL(window.location.href);
+    url.searchParams.delete('answerCallId');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
   window.addEventListener(pushOpenConversationEvent, handlePushOpenConversation);
   window.addEventListener(pushNavigateEvent, handlePushNavigate);
+  window.addEventListener(pushCallAnswerEvent, handlePushCallAnswer);
+  window.addEventListener(pushCallDeclineEvent, handlePushCallDecline);
 });
 
 onUnmounted(() => {
   window.removeEventListener(pushOpenConversationEvent, handlePushOpenConversation);
   window.removeEventListener(pushNavigateEvent, handlePushNavigate);
+  window.removeEventListener(pushCallAnswerEvent, handlePushCallAnswer);
+  window.removeEventListener(pushCallDeclineEvent, handlePushCallDecline);
 });
 </script>
 
