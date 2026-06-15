@@ -7,12 +7,13 @@ import ConversationPanel from '../components/organisms/ConversationPanel.vue';
 import FriendsPanel from '../components/organisms/FriendsPanel.vue';
 import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
+import NotificationToastStack from '../components/molecules/NotificationToastStack.vue';
 import CallMiniPlayer from '../components/molecules/CallMiniPlayer.vue';
 import PushNotificationBanner from '../components/molecules/PushNotificationBanner.vue';
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
 import type { AppSection } from '../types/navigation';
-import { pushOpenConversationEvent, takePendingPushConversationId } from '../pwa/pwaRuntime';
+import { pushNavigateEvent, pushOpenConversationEvent, takePendingPushConversationId } from '../pwa/pwaRuntime';
 
 type MobileView = 'list' | 'chat';
 const SettingsPanel = defineAsyncComponent(() => import('../components/organisms/SettingsPanel.vue'));
@@ -96,16 +97,41 @@ const handlePushOpenConversation = (event: Event) => {
   setPendingConversation((event as CustomEvent<{ conversationId?: string }>).detail?.conversationId);
 };
 
+const navigateToLink = (link: string) => {
+  try {
+    const url = new URL(link, window.location.origin);
+    const conversationId = url.searchParams.get('conversationId');
+    if (conversationId) {
+      setPendingConversation(conversationId);
+      return;
+    }
+    if (url.searchParams.get('view') === 'friends') {
+      handleNavigate('friends');
+    }
+  } catch {
+    // link không hợp lệ -> bỏ qua, app vẫn ở màn hình hiện tại
+  }
+};
+
+const handlePushNavigate = (event: Event) => {
+  const link = (event as CustomEvent<{ link?: string }>).detail?.link;
+  if (typeof link === 'string') navigateToLink(link);
+};
+
 watch(() => chatStore.conversations.length, openPendingConversation);
 
 onMounted(() => {
-  setPendingConversation(new URL(window.location.href).searchParams.get('conversationId'));
+  const params = new URL(window.location.href).searchParams;
+  setPendingConversation(params.get('conversationId'));
   setPendingConversation(takePendingPushConversationId());
+  if (params.get('view') === 'friends') handleNavigate('friends');
   window.addEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+  window.addEventListener(pushNavigateEvent, handlePushNavigate);
 });
 
 onUnmounted(() => {
   window.removeEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+  window.removeEventListener(pushNavigateEvent, handlePushNavigate);
 });
 </script>
 
@@ -166,6 +192,7 @@ onUnmounted(() => {
     </main>
 
     <IncomingCallToastStack />
+    <NotificationToastStack />
     <CallOverlay />
     <CallMiniPlayer />
     <PushNotificationBanner />

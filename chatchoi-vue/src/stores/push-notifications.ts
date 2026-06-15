@@ -6,6 +6,8 @@ import {
   revokeFcmSubscription,
   shouldRegisterFcmSubscription,
 } from '../services/push-notifications.service';
+import { startForegroundNotifications, stopForegroundNotifications } from '../services/foreground-notifications';
+import { useNotificationToastsStore } from './notification-toasts';
 
 export type PushPermissionState = NotificationPermission | 'unsupported';
 
@@ -27,6 +29,10 @@ export const usePushNotificationsStore = defineStore('push-notifications', () =>
       isEnabled.value = false;
       return;
     }
+
+    // Lắng nghe foreground ngay cả khi quyền chưa "granted": message vẫn tới khi
+    // đã có token, và việc đăng ký listener là idempotent.
+    startForegroundNotifications();
 
     permission.value = Notification.permission;
     if (permission.value === 'granted' && shouldRegisterFcmSubscription()) {
@@ -73,6 +79,8 @@ export const usePushNotificationsStore = defineStore('push-notifications', () =>
     isEnabled.value = false;
     isBannerDismissed.value = false;
     error.value = null;
+    stopForegroundNotifications();
+    useNotificationToastsStore().clear();
   };
 
   const registerSubscription = async () => {

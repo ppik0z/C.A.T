@@ -33,7 +33,7 @@ self.addEventListener('notificationclick', (event) => {
     const existingClient = windowClients.find((client) => new URL(client.url).origin === self.location.origin);
 
     if (existingClient) {
-      existingClient.postMessage({ type: 'OPEN_CONVERSATION', conversationId });
+      existingClient.postMessage({ type: 'PUSH_NAVIGATE', link, conversationId });
       await existingClient.focus();
       return;
     }
@@ -53,14 +53,20 @@ onBackgroundMessage(messaging, (payload) => {
   const data = payload.data;
   if (!data) return;
 
-  void self.registration.showNotification(data.senderName || 'ChatChoi', {
-    body: data.body || 'Bạn có tin nhắn mới.',
-    icon: '/pwa/icon-192.png',
+  const tag = data.tag || `notif:${Date.now()}`;
+  // `renotify` chưa có trong type NotificationOptions của TS DOM lib nhưng được
+  // trình duyệt hỗ trợ; cast để bật cảnh báo lại khi gộp theo tag.
+  const options: NotificationOptions & { renotify?: boolean } = {
+    body: data.body || 'Bạn có thông báo mới.',
+    icon: data.icon || '/pwa/icon-192.png',
     badge: '/pwa/icon-192.png',
-    tag: `conversation:${data.conversationId || 'unknown'}`,
+    tag,
+    renotify: Boolean(data.tag),
     data: {
-      conversationId: data.conversationId,
+      type: data.type || null,
+      conversationId: data.conversationId || null,
       link: data.link || '/',
     },
-  });
+  };
+  void self.registration.showNotification(data.title || 'ChatChoi', options);
 });

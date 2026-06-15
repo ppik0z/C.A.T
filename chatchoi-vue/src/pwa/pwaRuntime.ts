@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register';
 let applyServiceWorkerUpdate: ((reloadPage?: boolean) => Promise<void>) | null = null;
 const PENDING_CONVERSATION_KEY = 'chatchoi.push.pending-conversation-id';
 const OPEN_CONVERSATION_EVENT = 'push:open-conversation';
+const NAVIGATE_EVENT = 'push:navigate';
 
 export const initializePwaRuntime = () => {
   navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
@@ -31,12 +32,29 @@ export const takePendingPushConversationId = () => {
 };
 
 export const pushOpenConversationEvent = OPEN_CONVERSATION_EVENT;
+export const pushNavigateEvent = NAVIGATE_EVENT;
+
+/**
+ * Điều hướng khi người dùng bấm vào một thông báo (từ service worker hoặc từ
+ * toast foreground). Nếu có conversationId thì mở đúng đoạn chat; nếu không thì
+ * phát sự kiện điều hướng chung kèm link để màn hình tự định tuyến.
+ */
+export const dispatchPushNavigation = (link: string, conversationId?: string | null) => {
+  if (conversationId) {
+    localStorage.setItem(PENDING_CONVERSATION_KEY, conversationId);
+    window.dispatchEvent(new CustomEvent(OPEN_CONVERSATION_EVENT, {
+      detail: { conversationId },
+    }));
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(NAVIGATE_EVENT, { detail: { link } }));
+};
 
 const handleServiceWorkerMessage = (event: MessageEvent) => {
-  if (event.data?.type !== 'OPEN_CONVERSATION' || typeof event.data.conversationId !== 'string') return;
+  if (event.data?.type !== 'PUSH_NAVIGATE') return;
 
-  localStorage.setItem(PENDING_CONVERSATION_KEY, event.data.conversationId);
-  window.dispatchEvent(new CustomEvent(OPEN_CONVERSATION_EVENT, {
-    detail: { conversationId: event.data.conversationId },
-  }));
+  const conversationId = typeof event.data.conversationId === 'string' ? event.data.conversationId : null;
+  const link = typeof event.data.link === 'string' ? event.data.link : '/';
+  dispatchPushNavigation(link, conversationId);
 };
