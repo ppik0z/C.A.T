@@ -809,6 +809,7 @@ export class CallsService {
         await this.messagesService.createCallEventMessage({
             conversationId: state.conversationId,
             senderId: state.startedBy.id,
+            callSessionId: state.id,
             content,
         });
     }

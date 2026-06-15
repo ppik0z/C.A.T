@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
-import { fetchConversationDetail } from '../services/conversation.service';
+import { fetchConversationDetail, fetchConversations } from '../services/conversation.service';
 import { prepareMediaForUpload } from '../services/mediaProcessing.service';
 import { uploadMediaMessage } from '../services/message.service';
+import { inspectLocalMedia } from '../services/localMediaMetadata.service';
 import type {
     ChatMessage,
     ChatMessageType,
     Conversation,
     ConversationDetailLoadState,
+    ConversationListLoadState,
     ConversationListUpdate,
     JwtIdentity,
     MemberReadState,
@@ -60,7 +62,22 @@ const appendUniqueMessage = (messages: ChatMessage[], message: ChatMessage): Cha
     if (clientKey) {
         const tempIndex = messages.findIndex((item) => item.clientMessageId === clientKey || item.clientTempId === clientKey);
         if (tempIndex !== -1) {
-            return messages.map((item, index) => index === tempIndex ? { ...message, localStatus: undefined } : item);
+            return messages.map((item, index) => {
+                if (index !== tempIndex) return item;
+
+                return {
+                    ...item,
+                    ...message,
+                    fileWidth: message.fileWidth ?? item.fileWidth,
+                    fileHeight: message.fileHeight ?? item.fileHeight,
+                    fileDurationSeconds: message.fileDurationSeconds ?? item.fileDurationSeconds,
+                    localStatus: undefined,
+                    uploadProgress: undefined,
+                    compressionProgress: undefined,
+                    uploadError: undefined,
+                    canRetry: false,
+                };
+            });
         }
     }
 
@@ -120,6 +137,9 @@ export const useChatStore = defineStore('chat', {
         myId: null as number | null,
         isConnected: false,
         conversations: [] as Conversation[],
+        conversationListLoadState: 'idle' as ConversationListLoadState,
+        conversationListError: null as string | null,
+        conversationListPromise: undefined as Promise<Conversation[]> | undefined,
         myUserName: null as string | null,
         myDisplayName: null as string | null,
         myAvatar: null as string | null,
@@ -545,6 +565,7 @@ export const useChatStore = defineStore('chat', {
             const conversationId = this.currentConversationId;
             const replyTo = this.replyTarget;
             const previewUrl = URL.createObjectURL(file);
+            const mediaMetadata = await inspectLocalMedia(file, previewUrl);
             const optimisticMessage: ChatMessage = {
                 id: -Date.now(),
                 clientTempId,
@@ -557,6 +578,9 @@ export const useChatStore = defineStore('chat', {
                 fileName: file.name,
                 fileMimeType: file.type,
                 fileSizeBytes: file.size,
+                fileWidth: mediaMetadata.width,
+                fileHeight: mediaMetadata.height,
+                fileDurationSeconds: mediaMetadata.durationSeconds,
                 originalFileSizeBytes: file.size,
                 uploadProgress: 0,
                 compressionProgress: 0,
@@ -725,6 +749,39 @@ export const useChatStore = defineStore('chat', {
 
         setConversations(convs: Conversation[]) {
             this.conversations = convs;
+        },
+
+        async loadConversations(force = false) {
+            if (!force && this.conversationListLoadState === 'loaded') {
+                return this.conversations;
+            }
+            if (this.conversationListPromise) return this.conversationListPromise;
+
+            this.conversationListLoadState = 'loading';
+            this.conversationListError = null;
+            const request = fetchConversations()
+                .then((conversations) => {
+                    if (this.conversationListPromise !== request) return conversations;
+                    this.setConversations(conversations);
+                    this.conversationListLoadState = 'loaded';
+                    return conversations;
+                })
+                .catch((error: unknown) => {
+                    if (this.conversationListPromise !== request) throw error;
+                    this.conversationListLoadState = 'error';
+                    this.conversationListError = error instanceof Error
+                        ? error.message
+                        : 'Không thể tải danh sách hội thoại.';
+                    throw error;
+                })
+                .finally(() => {
+                    if (this.conversationListPromise === request) {
+                        this.conversationListPromise = undefined;
+                    }
+                });
+
+            this.conversationListPromise = request;
+            return request;
         },
 
         upsertConversation(conversation: Conversation) {

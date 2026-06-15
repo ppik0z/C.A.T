@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import TextInput from '../atoms/TextInput.vue';
+import LoadingListSkeleton from './LoadingListSkeleton.vue';
+import { LoaderCircle } from '@lucide/vue';
 import { addConversationMembers } from '../../services/conversation.service';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
@@ -46,6 +48,10 @@ const addableUsers = computed(() => {
 
 watch(searchTerm, (value) => {
   if (searchTimer) clearTimeout(searchTimer);
+  if (!value.trim()) {
+    void friendsStore.search('');
+    return;
+  }
   searchTimer = setTimeout(() => {
     void friendsStore.search(value);
   }, 250);
@@ -55,6 +61,10 @@ onMounted(() => {
   if (!friendsStore.hasLoaded) {
     void friendsStore.refreshAll();
   }
+});
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer);
 });
 
 const toggleUser = (user: FriendUser) => {
@@ -113,7 +123,14 @@ const submit = async () => {
       </header>
 
       <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 thin-scrollbar">
-        <TextInput v-model="searchTerm" icon="search" placeholder="Tìm bạn bè hoặc người dùng..." />
+        <div class="relative">
+          <TextInput v-model="searchTerm" icon="search" placeholder="Tìm bạn bè hoặc người dùng..." />
+          <LoaderCircle
+            v-if="friendsStore.isSearching"
+            class="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-primary"
+            aria-label="Đang tìm kiếm"
+          />
+        </div>
 
         <div v-if="Object.values(selectedUsersById).length" class="flex flex-wrap gap-2">
           <button
@@ -131,8 +148,15 @@ const submit = async () => {
         <div v-if="error" class="rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
           {{ error }}
         </div>
+        <div v-if="searchTerm.trim() && friendsStore.searchError" class="rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
+          {{ friendsStore.searchError }}
+        </div>
 
-        <div class="space-y-1">
+        <LoadingListSkeleton
+          v-if="friendsStore.isSearching || (!searchTerm.trim() && friendsStore.isLoading && !friendsStore.hasLoaded)"
+          :rows="4"
+        />
+        <div v-else class="space-y-1">
           <button
             v-for="user in addableUsers"
             :key="user.id"
@@ -153,7 +177,7 @@ const submit = async () => {
             </span>
           </button>
 
-          <div v-if="addableUsers.length === 0" class="py-8 text-center text-sm text-on-surface-variant">
+          <div v-if="addableUsers.length === 0 && !friendsStore.isSearching" class="py-8 text-center text-sm text-on-surface-variant">
             Không tìm thấy người dùng phù hợp.
           </div>
         </div>

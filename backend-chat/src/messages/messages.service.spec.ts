@@ -4,6 +4,7 @@ import { DrizzleService } from '../database/drizzle.service';
 import { MessagesService } from './messages.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { MediaUploadService } from './media-upload.service';
+import type { CallEventSnapshot } from './messages.service';
 
 describe('MessagesService', () => {
   let service: MessagesService;
@@ -103,5 +104,79 @@ describe('MessagesService', () => {
       conversationId: 9,
       conversationIndex: 3,
     }));
+  });
+
+  it('creates call event messages linked to their call session', async () => {
+    const createMessage = jest.spyOn(
+      service as unknown as { createMessage: jest.Mock },
+      'createMessage',
+    ).mockResolvedValue({ id: 99 });
+
+    await service.createCallEventMessage({
+      conversationId: 20,
+      senderId: 7,
+      callSessionId: 10,
+      content: 'Cuộc gọi video đã kết thúc',
+    });
+
+    expect(createMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: 20,
+      senderId: 7,
+      callSessionId: 10,
+      type: 'call_event',
+    }));
+  });
+
+  it('batch-builds a viewer-specific call event snapshot', async () => {
+    const select = jest.fn()
+      .mockReturnValueOnce({
+        from: () => ({
+          where: jest.fn().mockResolvedValue([{
+            id: 10,
+            kind: 'video',
+            status: 'ended',
+            endedReason: 'completed',
+            startedAt: new Date('2026-06-11T10:00:00.000Z'),
+            answeredAt: new Date('2026-06-11T10:00:05.000Z'),
+            endedAt: new Date('2026-06-11T10:01:10.000Z'),
+            startedByUserId: 1,
+          }]),
+        }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({
+          where: jest.fn().mockResolvedValue([
+            { callSessionId: 10, userId: 1, status: 'left' },
+            { callSessionId: 10, userId: 2, status: 'declined' },
+          ]),
+        }),
+      });
+    const messageService = new MessagesService(
+      { db: { select } } as never,
+      { emit: jest.fn() } as never,
+      { getPublicSummary: jest.fn() } as never,
+      { deleteUploadedFile: jest.fn() } as never,
+    );
+
+    const snapshots = await (
+      messageService as unknown as {
+        getCallEventSnapshots(
+          rows: Array<{ type: string; callSessionId: number | null }>,
+          currentUserId: number,
+        ): Promise<Record<number, CallEventSnapshot>>;
+      }
+    ).getCallEventSnapshots([{ type: 'call_event', callSessionId: 10 }], 2);
+
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(snapshots[10]).toMatchObject({
+      callId: 10,
+      kind: 'video',
+      durationSeconds: 65,
+      currentUserStatus: 'declined',
+      participants: [
+        { userId: 1, status: 'left' },
+        { userId: 2, status: 'declined' },
+      ],
+    });
   });
 });

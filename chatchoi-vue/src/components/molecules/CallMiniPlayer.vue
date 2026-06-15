@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Maximize2, Mic, MicOff, Minus, PhoneOff, Video, VideoOff } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import { useCallMediaStore } from '../../stores/call-media';
@@ -135,7 +136,7 @@ const handleLeave = () => {
       <div
         v-if="isVisible && call"
         ref="playerEl"
-        class="fixed z-40 select-none touch-none"
+        class="fixed z-[80] select-none touch-none"
         :style="{ right: `${pos.right}px`, bottom: `${pos.bottom}px` }"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
@@ -183,7 +184,8 @@ const handleLeave = () => {
                 :aria-label="micOn ? 'Tắt micro' : 'Bật micro'"
                 @click.stop="handleToggleMic"
               >
-                <span class="material-symbols-outlined text-[18px]">{{ micOn ? 'mic' : 'mic_off' }}</span>
+                <Mic v-if="micOn" :size="18" />
+                <MicOff v-else :size="18" />
               </button>
 
               <button
@@ -193,7 +195,8 @@ const handleLeave = () => {
                 :aria-label="cameraOn ? 'Tắt camera' : 'Bật camera'"
                 @click.stop="handleToggleCamera"
               >
-                <span class="material-symbols-outlined text-[18px]">{{ cameraOn ? 'videocam' : 'videocam_off' }}</span>
+                <Video v-if="cameraOn" :size="18" />
+                <VideoOff v-else :size="18" />
               </button>
 
               <button
@@ -203,7 +206,7 @@ const handleLeave = () => {
                 aria-label="Rời cuộc gọi"
                 @click.stop="handleLeave"
               >
-                <span class="material-symbols-outlined text-[15px]">call_end</span>
+                <PhoneOff :size="15" />
               </button>
             </div>
           </div>
@@ -247,7 +250,7 @@ const handleLeave = () => {
                   aria-label="Mở rộng"
                   @click.stop="handleExpand"
                 >
-                  <span class="material-symbols-outlined text-[14px]">open_in_full</span>
+                  <Maximize2 :size="14" />
                 </button>
                 <button
                   class="h-7 w-7 rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm
@@ -256,7 +259,7 @@ const handleLeave = () => {
                   aria-label="Thu nhỏ tối đa"
                   @click.stop="isCollapsed = true"
                 >
-                  <span class="material-symbols-outlined text-[14px]">remove</span>
+                  <Minus :size="14" />
                 </button>
               </div>
             </div>
@@ -296,7 +299,8 @@ const handleLeave = () => {
                     :aria-label="micOn ? 'Tắt micro' : 'Bật micro'"
                     @click.stop="handleToggleMic"
                   >
-                    <span class="material-symbols-outlined text-[16px]">{{ micOn ? 'mic' : 'mic_off' }}</span>
+                    <Mic v-if="micOn" :size="16" />
+                    <MicOff v-else :size="16" />
                   </button>
 
                   <button
@@ -308,7 +312,8 @@ const handleLeave = () => {
                     :aria-label="cameraOn ? 'Tắt camera' : 'Bật camera'"
                     @click.stop="handleToggleCamera"
                   >
-                    <span class="material-symbols-outlined text-[16px]">{{ cameraOn ? 'videocam' : 'videocam_off' }}</span>
+                    <Video v-if="cameraOn" :size="16" />
+                    <VideoOff v-else :size="16" />
                   </button>
 
                   <button
@@ -318,7 +323,7 @@ const handleLeave = () => {
                     aria-label="Rời cuộc gọi"
                     @click.stop="handleLeave"
                   >
-                    <span class="material-symbols-outlined text-[16px]">call_end</span>
+                    <PhoneOff :size="16" />
                   </button>
                 </div>
               </div>

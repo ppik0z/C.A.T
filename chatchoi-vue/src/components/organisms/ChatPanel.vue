@@ -4,6 +4,7 @@ import ActiveCallBanner from '../molecules/ActiveCallBanner.vue';
 import ChatHeader from '../molecules/ChatHeader.vue';
 import ComposerBar from '../molecules/ComposerBar.vue';
 import MessageBubble from '../molecules/MessageBubble.vue';
+import MessageThreadSkeleton from '../molecules/MessageThreadSkeleton.vue';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
 import type { CallKind } from '../../types/call';
@@ -368,7 +369,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="h-full min-w-0 flex flex-col bg-surface overflow-hidden relative">
+  <section class="h-full min-w-0 flex flex-col bg-chat-canvas overflow-hidden relative">
     <template v-if="props.conversation">
       <ChatHeader
         :conversation="props.conversation"
@@ -434,7 +435,7 @@ onBeforeUnmount(() => {
 
       <div
         ref="scrollRef"
-        class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 flex flex-col gap-5 sm:gap-6 thin-scrollbar bg-background/50"
+        class="chat-thread-surface flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5 flex flex-col gap-2.5 sm:gap-3 thin-scrollbar"
         @scroll.passive="handleScroll"
       >
         <div
@@ -445,9 +446,13 @@ onBeforeUnmount(() => {
           Đang tải tin nhắn cũ...
         </div>
 
-        <template v-for="group in messageGroups" :key="group.key">
+        <MessageThreadSkeleton
+          v-if="currentLoadState === 'loading' && sortedMessages.length === 0"
+        />
+
+        <template v-else v-for="group in messageGroups" :key="group.key">
           <div class="flex justify-center">
-            <span class="px-4 py-1 bg-tertiary-container/30 text-tertiary text-xs rounded-full font-semibold uppercase tracking-wider">
+            <span class="rounded-full border border-outline-variant/70 bg-surface-container-lowest/85 px-3 py-1 text-[11px] font-semibold text-on-surface-variant shadow-sm backdrop-blur-sm">
               {{ group.label }}
             </span>
           </div>
@@ -463,10 +468,12 @@ onBeforeUnmount(() => {
             ]"
           >
             <MessageBubble
+              :current-user-id="chatStore.myId"
               :is-own="isOwnMessage(message)"
               :message="message"
               :status-text="isOwnMessage(message) ? chatStore.getMessageDisplayStatus(message, props.conversation) : undefined"
               @react="chatStore.setReaction"
+              @call-back="handleStartCall"
               @recall="chatStore.recallMessage"
               @remove-reaction="chatStore.removeReaction"
               @reply="chatStore.setReplyTarget"
@@ -478,7 +485,7 @@ onBeforeUnmount(() => {
 
       <div
         v-if="typingLabel"
-        class="px-4 sm:px-6 py-2 bg-background/50 text-xs text-secondary flex items-center gap-2"
+        class="chat-thread-surface px-4 sm:px-6 py-2 text-xs text-on-surface-variant flex items-center gap-2"
       >
         <span class="inline-flex gap-[2px]">
           <span class="w-1 h-1 bg-primary rounded-full animate-bounce"></span>
@@ -500,7 +507,7 @@ onBeforeUnmount(() => {
       />
     </template>
 
-    <div v-else class="flex-1 flex flex-col items-center justify-center text-on-surface-variant bg-background/50 px-6 text-center">
+    <div v-else class="chat-thread-surface flex-1 flex flex-col items-center justify-center text-on-surface-variant px-6 text-center">
       <div class="w-20 h-20 rounded-full bg-primary-container text-primary flex items-center justify-center mb-4">
         <span class="material-symbols-outlined text-[40px]">chat</span>
       </div>

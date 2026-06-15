@@ -25,6 +25,28 @@ export interface ConversationMember {
 
 export type ChatMessageType = 'text' | 'image' | 'video' | 'document' | 'gif' | 'call_event';
 
+export type CallEventSessionStatus = 'ended' | 'missed' | 'cancelled';
+export type CallEventParticipantStatus = 'ringing' | 'joined' | 'left' | 'declined' | 'missed';
+
+export interface CallEventParticipantSnapshot {
+  userId: number;
+  status: CallEventParticipantStatus;
+}
+
+export interface CallEventSnapshot {
+  callId: number;
+  kind: 'audio' | 'video';
+  status: CallEventSessionStatus;
+  endedReason: string | null;
+  startedAt: string | Date;
+  answeredAt: string | Date | null;
+  endedAt: string | Date | null;
+  durationSeconds: number;
+  startedByUserId: number;
+  currentUserStatus: CallEventParticipantStatus | 'none';
+  participants: CallEventParticipantSnapshot[];
+}
+
 export interface ChatMessage {
   id: number;
   clientTempId?: string;
@@ -43,6 +65,10 @@ export interface ChatMessage {
   fileFormat?: string | null;
   fileWidth?: number | null;
   fileHeight?: number | null;
+  fileThumbnailUrl?: string | null;
+  fileDurationSeconds?: number | null;
+  callSessionId?: number | null;
+  callEvent?: CallEventSnapshot | null;
   senderId?: number;
   senderName?: string;
   localStatus?: 'sending' | 'compressing' | 'uploading' | 'sent' | 'failed';
@@ -89,6 +115,7 @@ export interface LastMessage {
 export interface Conversation {
   id: number;
   name: string | null;
+  description?: string | null;
   isGroup: boolean;
   avatarGroup: string | null;
   unreadCount: number;
@@ -190,6 +217,7 @@ export interface MessageSearchState {
 
 export type MessageLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 export type ConversationDetailLoadState = 'idle' | 'loading' | 'loaded' | 'error';
+export type ConversationListLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 export interface LoadMessagesSuccessPayload {
   conversationId: number;

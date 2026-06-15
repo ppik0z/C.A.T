@@ -3,9 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import TextInput from '../atoms/TextInput.vue';
 import ConversationItem from '../molecules/ConversationItem.vue';
 import GroupCreateModal from '../molecules/GroupCreateModal.vue';
+import LoadingListSkeleton from '../molecules/LoadingListSkeleton.vue';
 import { useCallStore } from '../../stores/call';
 import { useChatStore } from '../../stores/chat';
-import { fetchConversations } from '../../services/conversation.service';
 import { getConversationName } from '../../utils/chatPresentation';
 import type { Conversation } from '../../types/chat';
 
@@ -46,8 +46,7 @@ const conversations = computed(() => {
 
 onMounted(async () => {
   try {
-    const data = await fetchConversations();
-    chatStore.setConversations(data);
+    const data = await chatStore.loadConversations();
     await chatStore.prefetchMessagesForConversations(data.slice(0, 3).map((conversation) => conversation.id));
   } catch (error) {
     console.error('Lỗi lấy danh sách phòng:', error);
@@ -104,16 +103,30 @@ const handleGroupCreated = (conversation: Conversation) => {
     </div>
 
     <div class="flex-1 overflow-y-auto thin-scrollbar">
-      <ConversationItem
-        v-for="conversation in conversations"
-        :key="conversation.id"
-        :active="chatStore.currentConversationId === conversation.id"
-        :conversation="conversation"
-        :current-username="chatStore.myUserName"
-        @select="handleSelect"
+      <LoadingListSkeleton
+        v-if="chatStore.conversationListLoadState === 'loading' && conversations.length === 0"
       />
+      <template v-else>
+        <ConversationItem
+          v-for="conversation in conversations"
+          :key="conversation.id"
+          :active="chatStore.currentConversationId === conversation.id"
+          :conversation="conversation"
+          :current-username="chatStore.myUserName"
+          @select="handleSelect"
+        />
+      </template>
 
-      <div v-if="conversations.length === 0" class="px-6 py-12 text-center text-sm text-on-surface-variant">
+      <div
+        v-if="chatStore.conversationListLoadState === 'error'"
+        class="mx-4 rounded-xl bg-error-container px-4 py-3 text-sm font-semibold text-error"
+      >
+        {{ chatStore.conversationListError }}
+      </div>
+      <div
+        v-else-if="chatStore.conversationListLoadState === 'loaded' && conversations.length === 0"
+        class="px-6 py-12 text-center text-sm text-on-surface-variant"
+      >
         Không tìm thấy đoạn chat phù hợp.
       </div>
     </div>

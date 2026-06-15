@@ -28,7 +28,7 @@ const subtitle = computed(() => {
 </script>
 
 <template>
-  <header class="flex justify-between items-center gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-outline-variant bg-surface-container-lowest sticky top-0 z-30">
+  <header class="flex min-h-16 justify-between items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-outline-variant/70 bg-surface-container-lowest/95 shadow-[0_1px_8px_rgba(15,23,42,0.04)] backdrop-blur-xl sticky top-0 z-30">
     <div class="flex items-center gap-3 sm:gap-4 min-w-0">
       <IconButton class="lg:hidden" icon="arrow_back" label="Quay lại danh sách" @click="emit('back')" />
 
@@ -42,8 +42,8 @@ const subtitle = computed(() => {
       </UserHoverCard>
 
       <div class="min-w-0">
-        <h2 class="text-lg sm:text-xl leading-7 font-bold text-primary truncate">{{ getConversationName(props.conversation) }}</h2>
-        <p class="text-xs font-semibold text-secondary">{{ subtitle }}</p>
+        <h2 class="text-base sm:text-lg leading-6 font-bold text-on-surface truncate">{{ getConversationName(props.conversation) }}</h2>
+        <p class="text-xs font-medium text-on-surface-variant">{{ subtitle }}</p>
       </div>
     </div>
 

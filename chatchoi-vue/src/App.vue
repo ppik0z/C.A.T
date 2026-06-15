@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
+import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import AppBootstrapSkeleton from "./components/organisms/AppBootstrapSkeleton.vue";
+import { loadLoginView } from "./router";
 import { useAuthStore } from "./stores/auth";
 
 const authStore = useAuthStore();
@@ -8,13 +10,17 @@ const route = useRoute();
 const router = useRouter();
 const isLoggedIn = computed(() => authStore.status === "authenticated");
 const isPublicAuthAction = computed(() => route.meta.publicAuthAction === true);
+const isRedirectingForAuth = computed(
+  () =>
+    (authStore.status === "guest" && route.meta.requiresAuth === true) ||
+    (authStore.status === "authenticated" && route.meta.guestOnly === true),
+);
 
-onMounted(() => {
-  void authStore.bootstrap();
-});
+void loadLoginView();
+void authStore.bootstrap();
 
 watch(
-  [() => authStore.status, () => route.fullPath],
+  [() => authStore.status, () => route.name],
   async ([status]) => {
     if (status === "authenticated" && route.meta.guestOnly) {
       await router.replace("/");
@@ -28,23 +34,13 @@ watch(
 
 <template>
   <RouterView v-if="isPublicAuthAction" />
-  <main
+  <AppBootstrapSkeleton
     v-else-if="
-      authStore.status === 'unknown' || authStore.status === 'refreshing'
+      authStore.status === 'unknown' ||
+      authStore.status === 'refreshing' ||
+      isRedirectingForAuth
     "
-    class="flex min-h-screen items-center justify-center bg-background p-6 text-on-background"
-    aria-live="polite"
-  >
-    <div class="text-center">
-      <div
-        class="mx-auto mb-4 size-8 animate-spin rounded-full border-4 border-surface-container-high border-t-primary"
-        aria-hidden="true"
-      ></div>
-      <p class="text-sm font-semibold text-on-surface-variant">
-        Đang khôi phục phiên đăng nhập...
-      </p>
-    </div>
-  </main>
+  />
   <main
     v-else-if="authStore.status === 'unavailable'"
     class="flex min-h-screen items-center justify-center bg-background p-6 text-on-background"

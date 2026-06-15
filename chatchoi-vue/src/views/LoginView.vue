@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "../stores/auth";
 import { useRouter } from "vue-router";
+import BrandLogo from "@/components/atoms/BrandLogo.vue";
 
 type AuthMode = "login" | "register";
 
@@ -77,11 +78,12 @@ const submit = async () => {
       aria-labelledby="auth-title"
     >
       <div class="text-center mb-6">
+        <BrandLogo alt="" class="mx-auto mb-3 size-14 rounded-2xl shadow-sm" />
         <h1 id="auth-title" class="text-3xl font-bold text-primary mb-2">
           CHATCHOI
         </h1>
         <p class="text-on-surface-variant text-sm">
-          Kết nối và trò chuyện theo cách của bạn
+          :3
         </p>
       </div>
 
@@ -137,7 +139,7 @@ const submit = async () => {
             class="h-12 rounded-xl bg-surface-container-low px-4 text-base"
             :disabled="isLoading"
             maxlength="255"
-            placeholder="you@example.com hoặc username"
+            placeholder="Nhập email hoặc username"
             required
             spellcheck="false"
           />

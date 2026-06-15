@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { LoaderCircle } from '@lucide/vue';
 import TextInput from '../atoms/TextInput.vue';
 import FriendRow from '../molecules/FriendRow.vue';
+import LoadingListSkeleton from '../molecules/LoadingListSkeleton.vue';
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
-import { accessDirectConversation, fetchConversations } from '../../services/conversation.service';
+import { accessDirectConversation } from '../../services/conversation.service';
 import type { FriendsTab } from '../../types/friends';
 
 const emit = defineEmits<{
@@ -39,9 +41,17 @@ const emptyLabel = computed(() => {
 
 watch(searchTerm, (value) => {
   if (searchTimer) clearTimeout(searchTimer);
+  if (!value.trim()) {
+    void friendsStore.search('');
+    return;
+  }
   searchTimer = setTimeout(() => {
     void friendsStore.search(value);
   }, 250);
+});
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer);
 });
 
 onMounted(() => {
@@ -52,8 +62,7 @@ onMounted(() => {
 
 const handleMessage = async (friendId: number) => {
   const conversation = await accessDirectConversation(friendId);
-  const conversations = await fetchConversations();
-  chatStore.setConversations(conversations);
+  await chatStore.loadConversations(true);
   chatStore.selectConversation(conversation.id);
   emit('openMessages');
 };
@@ -80,7 +89,14 @@ const handleMessage = async (friendId: number) => {
         </button>
       </div>
 
-      <TextInput v-model="searchTerm" class="mb-4" icon="search" placeholder="Search people..." />
+      <div class="relative mb-4">
+        <TextInput v-model="searchTerm" icon="search" placeholder="Search people..." />
+        <LoaderCircle
+          v-if="friendsStore.isSearching"
+          class="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-primary"
+          aria-label="Đang tìm kiếm"
+        />
+      </div>
 
       <div class="flex gap-2 overflow-x-auto thin-scrollbar pb-1">
         <button
@@ -105,10 +121,13 @@ const handleMessage = async (friendId: number) => {
         <div v-if="friendsStore.error" class="m-4 rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
           {{ friendsStore.error }}
         </div>
-
-        <div v-if="friendsStore.isLoading" class="px-6 py-12 text-center text-sm text-on-surface-variant">
-          Đang tải danh sách bạn bè...
+        <div v-if="searchTerm.trim() && friendsStore.searchError" class="m-4 rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
+          {{ friendsStore.searchError }}
         </div>
+
+        <LoadingListSkeleton
+          v-if="friendsStore.isSearching || (friendsStore.isLoading && visibleUsers.length === 0)"
+        />
 
         <template v-else>
           <FriendRow
@@ -123,7 +142,7 @@ const handleMessage = async (friendId: number) => {
             @remove="friendsStore.removeFriend"
           />
 
-          <div v-if="visibleUsers.length === 0" class="px-6 py-12 text-center text-sm text-on-surface-variant">
+          <div v-if="visibleUsers.length === 0 && !friendsStore.isSearching" class="px-6 py-12 text-center text-sm text-on-surface-variant">
             {{ emptyLabel }}
           </div>
         </template>

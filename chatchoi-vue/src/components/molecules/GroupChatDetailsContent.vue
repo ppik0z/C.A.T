@@ -2,10 +2,14 @@
 import { computed, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
 import GroupAddMembersModal from './GroupAddMembersModal.vue';
+import GroupAvatarPicker from './GroupAvatarPicker.vue';
 import MemberHoverCard from './MemberHoverCard.vue';
 import TextInput from '../atoms/TextInput.vue';
 import type { Conversation, ConversationMember } from '../../types/chat';
-import { removeConversationMember, updateConversation } from '../../services/conversation.service';
+import {
+  removeConversationMember,
+  updateConversation,
+} from '../../services/conversation.service';
 import { useChatStore } from '../../stores/chat';
 import { getConversationName } from '../../utils/chatPresentation';
 import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
@@ -27,7 +31,9 @@ const chatStore = useChatStore();
 const isEditingGroup = ref(false);
 const isAddingMembers = ref(false);
 const editName = ref('');
-const editAvatar = ref('');
+const editDescription = ref('');
+const editAvatarFile = ref<File | null>(null);
+const isSavingGroup = ref(false);
 const memberSearch = ref('');
 const error = ref<string | null>(null);
 
@@ -71,21 +77,28 @@ watch(
 
 const startEdit = () => {
   editName.value = detail.value.name ?? '';
-  editAvatar.value = detail.value.avatarGroup ?? '';
+  editDescription.value = detail.value.description ?? '';
+  editAvatarFile.value = null;
   isEditingGroup.value = true;
   error.value = null;
 };
 
 const saveGroup = async () => {
+  if (!editName.value.trim() || isSavingGroup.value) return;
+  isSavingGroup.value = true;
+  error.value = null;
   try {
     const updated = await updateConversation(props.conversation.id, {
       name: editName.value.trim(),
-      avatarGroup: editAvatar.value.trim() || null,
+      description: editDescription.value.trim() || null,
+      avatar: editAvatarFile.value,
     });
     chatStore.upsertConversationDetail(updated);
     isEditingGroup.value = false;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Không thể cập nhật nhóm';
+  } finally {
+    isSavingGroup.value = false;
   }
 };
 
@@ -119,8 +132,11 @@ const removeMember = async (member: ConversationMember) => {
           :size="props.compact ? 'lg' : 'xl'"
         />
         <h3 :class="['font-bold text-on-surface text-center', props.compact ? 'text-lg' : 'text-xl']">{{ getConversationName(detail) }}</h3>
-        <p class="text-sm font-semibold text-secondary mt-1">{{ members.length || detail.memberCount || 0 }} members</p>
-        <p class="text-xs font-semibold uppercase text-on-surface-variant mt-2">{{ isAdmin ? 'Admin' : 'Member' }}</p>
+        <p v-if="detail.description" class="mt-2 max-w-xs text-center text-sm font-medium leading-5 text-on-surface-variant">
+          {{ detail.description }}
+        </p>
+        <p class="mt-2 text-sm font-semibold text-secondary">{{ members.length || detail.memberCount || 0 }} thành viên</p>
+        <p class="mt-2 text-xs font-semibold uppercase text-on-surface-variant">{{ isAdmin ? 'Quản trị viên' : 'Thành viên' }}</p>
       </div>
 
       <div v-if="error" class="mt-4 rounded-lg bg-error-container px-4 py-3 text-sm font-semibold text-error">
@@ -138,11 +154,38 @@ const removeMember = async (member: ConversationMember) => {
 
       <div v-if="isAdmin" class="mt-5 space-y-3">
         <template v-if="isEditingGroup">
+          <div class="rounded-2xl border border-outline-variant bg-surface-container-lowest p-4">
+            <GroupAvatarPicker
+              v-model="editAvatarFile"
+              :disabled="isSavingGroup"
+              :existing-url="detail.avatarGroup"
+              :name="editName"
+            />
+          </div>
           <TextInput v-model="editName" placeholder="Tên nhóm" />
-          <TextInput v-model="editAvatar" placeholder="URL avatar nhóm" />
+          <textarea
+            v-model="editDescription"
+            class="min-h-24 w-full resize-none rounded-xl border border-transparent bg-surface-container-low px-4 py-3 text-sm font-medium text-on-surface outline-none transition placeholder:text-outline focus:border-primary focus:ring-2 focus:ring-primary/20"
+            maxlength="500"
+            placeholder="Mô tả nhóm"
+          ></textarea>
           <div class="flex gap-2">
-            <button class="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary" type="button" @click="saveGroup">Lưu</button>
-            <button class="flex-1 rounded-lg bg-surface-container-high px-3 py-2 text-sm font-semibold text-on-surface-variant" type="button" @click="isEditingGroup = false">Huỷ</button>
+            <button
+              class="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-on-primary disabled:opacity-50"
+              :disabled="!editName.trim() || isSavingGroup"
+              type="button"
+              @click="saveGroup"
+            >
+              {{ isSavingGroup ? 'Đang lưu...' : 'Lưu' }}
+            </button>
+            <button
+              class="flex-1 rounded-lg bg-surface-container-high px-3 py-2 text-sm font-semibold text-on-surface-variant disabled:opacity-50"
+              :disabled="isSavingGroup"
+              type="button"
+              @click="isEditingGroup = false"
+            >
+              Huỷ
+            </button>
           </div>
         </template>
         <button v-else class="w-full flex items-center justify-center gap-2 rounded-lg bg-surface-container-high px-3 py-2 text-sm font-semibold text-primary" type="button" @click="startEdit">

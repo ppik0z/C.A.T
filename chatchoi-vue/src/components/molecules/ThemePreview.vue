@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { FontChoice, FontSize, MessageDensity } from '@/types/settings';
 import type { ThemePreset } from '@/theme/themePresets';
 import { fontFamilies, fontSizeMap } from '@/theme/appearanceRuntime';
+import BrandLogo from '@/components/atoms/BrandLogo.vue';
 
 interface Props {
   preset: ThemePreset;
@@ -63,9 +64,7 @@ const successDotStyle = computed(() => ({
     <div :style="innerStyle" class="p-4">
       <div class="mb-4 flex items-center justify-between gap-3">
         <div class="flex min-w-0 items-center gap-3">
-          <div class="flex size-9 shrink-0 items-center justify-center rounded-lg font-bold" :style="primaryStyle">
-            C
-          </div>
+          <BrandLogo alt="" class="size-9 rounded-lg shadow-sm" />
           <div class="min-w-0">
             <p class="truncate text-sm font-bold">Chatchoi Settings</p>
             <p class="truncate text-xs font-semibold opacity-70">Preview</p>

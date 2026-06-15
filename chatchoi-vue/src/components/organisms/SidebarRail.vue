@@ -5,6 +5,7 @@ import { resolveDisplayName, getUserInitial } from '../../utils/userPresentation
 import type { AppSection } from '../../types/navigation';
 import { useAccountStore } from '../../stores/account';
 import { useAuthStore } from '../../stores/auth';
+import BrandLogo from '../atoms/BrandLogo.vue';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
@@ -13,9 +14,12 @@ const authStore = useAuthStore();
 
 interface Props {
   activeSection: AppSection;
+  hideMobile?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  hideMobile: false,
+});
 const emit = defineEmits<{
   navigate: [section: AppSection];
 }>();
@@ -31,7 +35,10 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
 </script>
 
 <template>
-  <nav class="fixed inset-x-0 bottom-0 z-50 h-16 bg-surface-container-lowest border-t border-outline-variant shadow-[0_-8px_24px_rgba(10,27,53,0.08)] md:hidden">
+  <nav
+    v-if="!props.hideMobile"
+    class="fixed inset-x-0 bottom-0 z-50 h-16 bg-surface-container-lowest border-t border-outline-variant shadow-[0_-8px_24px_rgba(10,27,53,0.08)] md:hidden"
+  >
     <div class="h-full grid grid-cols-5 items-center px-2">
       <a
         v-for="item in navItems"
@@ -65,9 +72,7 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
   <aside class="left-sidebar hidden md:flex z-50 h-screen bg-surface flex-col border-r border-outline-variant shadow-lg">
     <div class="flex flex-col items-start px-4 py-8 gap-8">
       <div class="flex items-center gap-4">
-        <div class="min-w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-on-primary shadow-sm">
-          <span class="material-symbols-outlined !text-[1.5rem]">hub</span>
-        </div>
+        <BrandLogo class="size-12 min-w-12 rounded-xl shadow-sm" />
         <span class="sidebar-label text-xl font-bold text-primary">CHATCHOI</span>
       </div>
     </div>

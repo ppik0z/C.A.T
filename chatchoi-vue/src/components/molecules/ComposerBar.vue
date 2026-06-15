@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { Reply, X } from '@lucide/vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Image, Paperclip, Plus, Reply, Send, Smile, X } from '@lucide/vue';
 import IconButton from '../atoms/IconButton.vue';
 import { formatFileSize } from '../../utils/chatPresentation';
 import type { ChatMessage, ConversationMember } from '../../types/chat';
@@ -27,6 +27,7 @@ const emit = defineEmits<{
 
 const text = ref('');
 const selectedFile = ref<File | null>(null);
+const composerRootRef = ref<HTMLElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const messageInputRef = ref<HTMLInputElement | null>(null);
 const previewUrl = ref<string | null>(null);
@@ -36,6 +37,7 @@ const mentionStartIndex = ref<number | null>(null);
 const selectedMentionIdsByUsername = ref<Record<string, number>>({});
 const fileInputAccept = ref('');
 const isEmojiPickerOpen = ref(false);
+const isAttachmentMenuOpen = ref(false);
 let typingStopTimer: ReturnType<typeof setTimeout> | null = null;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const mediaFileAccept = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime';
@@ -64,6 +66,7 @@ const allowedMimeTypes = new Set([
 
 const isSelectedImage = computed(() => selectedFile.value?.type.startsWith('image/') ?? false);
 const isSelectedVideo = computed(() => selectedFile.value?.type.startsWith('video/') ?? false);
+const canSend = computed(() => Boolean(text.value.trim() || selectedFile.value));
 const mentionedUserIds = computed(() => {
   return Object.entries(selectedMentionIdsByUsername.value)
     .filter(([username]) => text.value.includes(`@${username}`))
@@ -108,6 +111,7 @@ const handleSend = () => {
 };
 
 const openFilePicker = (accept = allFileAccept) => {
+  isAttachmentMenuOpen.value = false;
   fileInputAccept.value = accept;
   fileInputRef.value?.click();
 };
@@ -145,7 +149,35 @@ const clearSelectedFile = () => {
 
 const toggleEmojiPicker = () => {
   errorText.value = '';
+  isAttachmentMenuOpen.value = false;
   isEmojiPickerOpen.value = !isEmojiPickerOpen.value;
+};
+
+const toggleAttachmentMenu = () => {
+  errorText.value = '';
+  isEmojiPickerOpen.value = false;
+  isAttachmentMenuOpen.value = !isAttachmentMenuOpen.value;
+};
+
+const closePopovers = () => {
+  isEmojiPickerOpen.value = false;
+  isAttachmentMenuOpen.value = false;
+};
+
+const handleOutsidePointerDown = (event: PointerEvent) => {
+  if (!isEmojiPickerOpen.value && !isAttachmentMenuOpen.value) return;
+  if (
+    composerRootRef.value &&
+    event.target instanceof Node &&
+    composerRootRef.value.contains(event.target)
+  ) {
+    return;
+  }
+  closePopovers();
+};
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') closePopovers();
 };
 
 const insertEmoji = async (emoji: string) => {
@@ -206,14 +238,24 @@ watch(text, (value) => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleOutsidePointerDown);
+  document.removeEventListener('keydown', handleKeydown);
   clearTypingStopTimer();
   clearSelectedFile();
   emit('typingStop');
 });
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsidePointerDown);
+  document.addEventListener('keydown', handleKeydown);
+});
 </script>
 
 <template>
-  <footer class="relative px-3 sm:px-6 py-3 sm:py-4 bg-surface-container-lowest border-t border-outline-variant">
+  <footer
+    ref="composerRootRef"
+    class="relative z-20 border-t border-outline-variant/70 bg-surface-container-lowest/95 px-2.5 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_18px_rgba(15,23,42,0.04)] backdrop-blur-xl sm:px-5 sm:py-3"
+  >
     <div
       v-if="props.replyTarget"
       class="mb-2 mx-1 sm:mx-2 flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low px-3 py-2 shadow-sm"
@@ -240,7 +282,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div class="flex items-center gap-2 sm:gap-3">
+    <div class="flex items-end gap-1.5 sm:gap-2">
       <input
         ref="fileInputRef"
         class="hidden"
@@ -248,13 +290,55 @@ onBeforeUnmount(() => {
         :accept="fileInputAccept || allFileAccept"
         @change="handleFileSelected"
       />
-      <IconButton icon="add_photo_alternate" label="Thêm ảnh hoặc video" @click="openFilePicker(mediaFileAccept)" />
-      <IconButton icon="attach_file" label="Đính kèm tài liệu" @click="openFilePicker(documentFileAccept)" />
+      <div class="relative sm:hidden">
+        <button
+          :class="[
+            'flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            isAttachmentMenuOpen
+              ? 'bg-primary-container text-primary'
+              : 'text-chat-accent hover:bg-surface-container-high',
+          ]"
+          type="button"
+          aria-label="Thêm nội dung"
+          :aria-expanded="isAttachmentMenuOpen"
+          @click="toggleAttachmentMenu"
+        >
+          <Plus class="h-5 w-5" aria-hidden="true" />
+        </button>
+        <div
+          v-if="isAttachmentMenuOpen"
+          class="absolute bottom-12 left-0 z-30 w-56 overflow-hidden rounded-2xl border border-outline-variant bg-surface-container-lowest p-1.5 shadow-xl"
+        >
+          <button
+            class="composer-menu-item"
+            type="button"
+            @click="openFilePicker(mediaFileAccept)"
+          >
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary-container text-primary">
+              <Image class="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>Ảnh hoặc video</span>
+          </button>
+          <button
+            class="composer-menu-item"
+            type="button"
+            @click="openFilePicker(documentFileAccept)"
+          >
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
+              <Paperclip class="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span>Tệp tài liệu</span>
+          </button>
+        </div>
+      </div>
 
-      <div class="flex-1 flex items-center bg-surface-container-low border border-outline-variant rounded-full px-3 sm:px-4 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent transition-all min-w-0">
+      <IconButton class="hidden sm:inline-flex" icon="add_photo_alternate" label="Thêm ảnh hoặc video" @click="openFilePicker(mediaFileAccept)" />
+      <IconButton class="hidden sm:inline-flex" icon="attach_file" label="Đính kèm tài liệu" @click="openFilePicker(documentFileAccept)" />
+
+      <div class="relative flex min-h-10 flex-1 items-center rounded-[1.35rem] bg-surface-container px-3 transition-shadow focus-within:ring-2 focus-within:ring-chat-accent/30 min-w-0">
         <div
           v-if="mentionOptions.length > 0"
-          class="absolute bottom-20 left-4 right-4 sm:left-8 sm:right-8 z-20 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
+          class="absolute bottom-12 left-0 right-0 z-20 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
         >
           <button
             v-for="member in mentionOptions"
@@ -275,8 +359,8 @@ onBeforeUnmount(() => {
         <input
           ref="messageInputRef"
           v-model="text"
-          class="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-sm sm:text-base py-2 placeholder:text-outline"
-          placeholder="Type your message..."
+          class="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-sm sm:text-base py-2.5 placeholder:text-on-surface-variant/70"
+          placeholder="Nhắn tin..."
           type="text"
           @keyup.enter="handleSend"
         />
@@ -297,18 +381,31 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <button
-            class="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-highest"
+            class="flex h-8 w-8 items-center justify-center rounded-full text-chat-accent transition-colors hover:bg-surface-container-high"
             type="button"
             aria-label="Thêm emoji"
             title="Thêm emoji"
             @click="toggleEmojiPicker"
           >
-            <span class="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
+            <Smile class="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <IconButton icon="send" label="Send message" @click="handleSend" />
+      <button
+        :class="[
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chat-accent focus-visible:ring-offset-2',
+          canSend
+            ? 'bg-chat-accent text-chat-on-accent shadow-sm hover:brightness-95 active:scale-95'
+            : 'text-chat-accent hover:bg-surface-container-high',
+        ]"
+        type="button"
+        aria-label="Gửi tin nhắn"
+        :disabled="!canSend"
+        @click="handleSend"
+      >
+        <Send class="h-4 w-4" aria-hidden="true" />
+      </button>
     </div>
 
     <div v-if="selectedFile" class="mt-3 mx-2 sm:mx-4 flex items-center gap-3 rounded-lg border border-outline-variant bg-surface-container-low p-2">
@@ -341,3 +438,24 @@ onBeforeUnmount(() => {
     <p v-if="errorText" class="mt-2 px-2 sm:px-4 text-xs text-error">{{ errorText }}</p>
   </footer>
 </template>
+
+<style scoped>
+.composer-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.875rem;
+  padding: 0.5rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--theme-on-surface);
+}
+
+.composer-menu-item:hover,
+.composer-menu-item:focus-visible {
+  background: var(--theme-surface-container-low);
+  outline: none;
+}
+</style>

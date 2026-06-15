@@ -1,17 +1,18 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Request, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 import { AuthGuard } from '@nestjs/passport';
 import type { RequestWithUser } from '../common/interfaces/request-with-user.interface';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 interface CreateGroupBody {
     name: string;
-    avatarGroup?: string | null;
-    memberIds: number[];
+    description?: string | null;
+    memberIds: number[] | string;
 }
 
 interface UpdateConversationBody {
     name?: string;
-    avatarGroup?: string | null;
+    description?: string | null;
 }
 
 interface AddMembersBody {
@@ -33,8 +34,23 @@ export class ConversationsController {
     }
 
     @Post('groups')
-    async createGroup(@Body() body: CreateGroupBody, @Request() req: RequestWithUser) {
-        return this.conversationsService.createGroup(req.user.userId, body);
+    @UseInterceptors(FileInterceptor('avatar', {
+        limits: { fileSize: 5 * 1024 * 1024 },
+    }))
+    async createGroup(
+        @Body() body: CreateGroupBody,
+        @UploadedFile() avatar: Express.Multer.File | undefined,
+        @Request() req: RequestWithUser,
+    ) {
+        return this.conversationsService.createGroup(
+            req.user.userId,
+            {
+                name: body.name,
+                description: body.description,
+                memberIds: this.parseMemberIds(body.memberIds),
+            },
+            avatar,
+        );
     }
 
     @Get(':id')
@@ -43,12 +59,16 @@ export class ConversationsController {
     }
 
     @Patch(':id')
+    @UseInterceptors(FileInterceptor('avatar', {
+        limits: { fileSize: 5 * 1024 * 1024 },
+    }))
     async updateConversation(
         @Param('id', ParseIntPipe) id: number,
         @Body() body: UpdateConversationBody,
+        @UploadedFile() avatar: Express.Multer.File | undefined,
         @Request() req: RequestWithUser,
     ) {
-        return this.conversationsService.updateGroup(req.user.userId, id, body);
+        return this.conversationsService.updateGroup(req.user.userId, id, body, avatar);
     }
 
     @Post(':id/members')
@@ -67,5 +87,16 @@ export class ConversationsController {
         @Request() req: RequestWithUser,
     ) {
         return this.conversationsService.removeGroupMember(req.user.userId, id, userId);
+    }
+
+    private parseMemberIds(value: number[] | string) {
+        if (Array.isArray(value)) return value;
+        try {
+            const parsed = JSON.parse(value) as unknown;
+            if (!Array.isArray(parsed)) throw new Error('invalid');
+            return parsed.filter((item): item is number => Number.isInteger(item));
+        } catch {
+            throw new BadRequestException('Danh sách thành viên không hợp lệ.');
+        }
     }
 }

@@ -21,9 +21,12 @@ export const useFriendsStore = defineStore('friends', {
     suggestions: [] as FriendUser[],
     searchResults: [] as FriendUser[],
     isLoading: false,
+    isSearching: false,
     hasLoaded: false,
     refreshPromise: null as Promise<void> | null,
     error: null as string | null,
+    searchError: null as string | null,
+    searchRequestId: 0,
   }),
 
   getters: {
@@ -78,15 +81,29 @@ export const useFriendsStore = defineStore('friends', {
 
     async search(query: string) {
       const normalizedQuery = query.trim();
+      const requestId = ++this.searchRequestId;
       if (!normalizedQuery) {
         this.searchResults = [];
+        this.searchError = null;
+        this.isSearching = false;
         return;
       }
 
+      this.isSearching = true;
+      this.searchError = null;
       try {
-        this.searchResults = await searchFriends(normalizedQuery);
+        const results = await searchFriends(normalizedQuery);
+        if (requestId === this.searchRequestId) {
+          this.searchResults = results;
+        }
       } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Không thể tìm kiếm người dùng';
+        if (requestId === this.searchRequestId) {
+          this.searchError = error instanceof Error ? error.message : 'Không thể tìm kiếm người dùng';
+        }
+      } finally {
+        if (requestId === this.searchRequestId) {
+          this.isSearching = false;
+        }
       }
     },
 

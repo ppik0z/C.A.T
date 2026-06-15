@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
-import { formatFileSize, formatMessageTime } from '../../utils/chatPresentation';
+import type { CallKind } from '../../types/call';
+import { formatMessageTime } from '../../utils/chatPresentation';
 import { resolveDisplayName } from '../../utils/userPresentation';
+import MessageContentRenderer from './message/MessageContentRenderer.vue';
+import MediaLightbox from '../organisms/MediaLightbox.vue';
+import CallEventCard from './message/CallEventCard.vue';
 
 interface Props {
   message: ChatMessage;
   isOwn: boolean;
+  currentUserId: number | null;
   statusText?: string;
 }
 
@@ -18,12 +23,14 @@ const emit = defineEmits<{
   recall: [message: ChatMessage];
   react: [message: ChatMessage, emoji: string];
   removeReaction: [message: ChatMessage];
+  callBack: [kind: CallKind];
 }>();
 
 const copied = ref(false);
 const isMenuOpen = ref(false);
 const isReactionOpen = ref(false);
 const actionRootRef = ref<HTMLElement | null>(null);
+const openMediaKind = ref<'image' | 'video' | null>(null);
 let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 const quickReactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
@@ -33,6 +40,10 @@ const getSenderName = (message: ChatMessage) => {
 };
 
 const getMessageType = (message: ChatMessage) => message.type ?? 'text';
+const usesStandaloneSurface = computed(() => {
+  return !props.message.recalledAt
+    && ['image', 'gif', 'video', 'document'].includes(getMessageType(props.message));
+});
 
 const getUploadStatusText = (message: ChatMessage): string => {
   if (message.localStatus === 'compressing' || message.localStatus === 'uploading' || message.localStatus === 'sending') {
@@ -111,6 +122,12 @@ const reactToMessage = (emoji: string) => {
   closeActions();
 };
 
+const openMedia = (kind: 'image' | 'video') => {
+  if (!props.message.fileUrl) return;
+  openMediaKind.value = kind;
+  closeActions();
+};
+
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutsidePointerDown);
   document.removeEventListener('keydown', handleKeydown);
@@ -131,17 +148,22 @@ watch(
 <template>
   <div
     v-if="getMessageType(props.message) === 'call_event'"
-    class="mx-auto max-w-[min(90%,28rem)] animate-slide-in rounded-full bg-surface-container-high px-4 py-2 text-center text-xs sm:text-sm font-semibold text-on-surface-variant flex items-center justify-center gap-2"
+    :class="[
+      'flex animate-slide-in',
+      props.isOwn ? 'justify-end' : 'justify-start',
+    ]"
   >
-    <span class="material-symbols-outlined text-[18px] text-primary">call</span>
-    <span class="truncate">{{ props.message.content }}</span>
-    <span class="text-secondary font-medium">{{ formatMessageTime(props.message.createdAt) }}</span>
+    <CallEventCard
+      :current-user-id="props.currentUserId"
+      :message="props.message"
+      @call-back="emit('callBack', $event)"
+    />
   </div>
 
   <div
     v-else
     :class="[
-      'flex gap-3 sm:gap-4 max-w-[min(82%,42rem)] animate-slide-in',
+      'flex gap-2 sm:gap-3 max-w-[min(90%,40rem)] sm:max-w-[min(78%,40rem)] animate-slide-in',
       props.isOwn ? 'flex-row-reverse ml-auto' : 'mr-auto',
     ]"
   >
@@ -156,7 +178,7 @@ watch(
       <div
         v-if="props.message.replyTo"
         :class="[
-          'max-w-[min(100%,22rem)] rounded-2xl border border-outline-variant bg-surface-container-high px-3 py-2 text-on-surface-variant shadow-sm',
+          'max-w-[min(100%,22rem)] rounded-2xl border border-outline-variant/70 bg-surface-container-lowest/90 px-3 py-2 text-on-surface-variant shadow-sm backdrop-blur-sm',
           props.isOwn ? 'rounded-br-md mr-2' : 'rounded-bl-md ml-2',
         ]"
       >
@@ -168,60 +190,28 @@ watch(
         </p>
       </div>
 
+      <p v-if="!props.isOwn" class="px-1 text-[11px] font-semibold text-on-surface-variant">
+        {{ getSenderName(props.message) }}
+      </p>
+
       <div
         :class="[
-          'p-3 sm:p-4 shadow-sm break-words',
-          props.isOwn
-            ? 'bg-primary text-on-primary rounded-2xl rounded-br-none shadow-md'
-            : 'bg-surface-container-highest text-on-surface-variant rounded-2xl rounded-bl-none',
+          'break-words',
+          usesStandaloneSurface
+            ? 'bg-transparent p-0'
+            : [
+                'rounded-[1.25rem] px-3.5 py-2.5 sm:px-4 sm:py-3',
+                props.isOwn
+                  ? 'rounded-br-md bg-chat-accent text-chat-on-accent'
+                  : 'rounded-bl-md bg-chat-incoming text-on-surface',
+              ],
         ]"
       >
-        <p v-if="!props.isOwn" class="text-[11px] font-semibold opacity-70 mb-1 uppercase tracking-wider">
-          {{ getSenderName(props.message) }}
-        </p>
-        <p v-if="props.message.recalledAt" class="text-sm italic opacity-75">
-          Tin nhắn đã được thu hồi
-        </p>
-        <template v-else-if="getMessageType(props.message) === 'image' || getMessageType(props.message) === 'gif'">
-          <a v-if="props.message.fileUrl" :href="props.message.fileUrl" target="_blank" rel="noreferrer">
-            <img
-              :src="props.message.fileUrl"
-              :alt="props.message.fileName ?? 'Media message'"
-              class="max-h-72 w-full rounded-xl object-cover"
-            />
-          </a>
-        </template>
-
-        <video
-          v-else-if="getMessageType(props.message) === 'video' && props.message.fileUrl"
-          :src="props.message.fileUrl"
-          class="max-h-72 w-full rounded-xl bg-black"
-          controls
+        <MessageContentRenderer
+          :is-own="props.isOwn"
+          :message="props.message"
+          @open-media="openMedia"
         />
-
-        <a
-          v-else-if="getMessageType(props.message) === 'document' && props.message.fileUrl"
-          :href="props.message.fileUrl"
-          target="_blank"
-          rel="noreferrer"
-          class="flex items-center gap-3 rounded-xl bg-surface-container-low text-on-surface p-3 min-w-[14rem]"
-        >
-          <span class="material-symbols-outlined text-[28px] text-primary">description</span>
-          <span class="min-w-0">
-            <span class="block truncate text-sm font-semibold">{{ props.message.fileName ?? 'Tài liệu' }}</span>
-            <span class="block text-xs text-secondary">{{ formatFileSize(props.message.fileSizeBytes) }}</span>
-          </span>
-        </a>
-
-        <p
-          v-if="props.message.content"
-          :class="[
-            'text-sm sm:text-base leading-6 whitespace-pre-wrap',
-            getMessageType(props.message) === 'text' ? '' : 'mt-2',
-          ]"
-        >
-          {{ props.message.content }}
-        </p>
         <div v-if="props.message.localStatus === 'failed'" class="mt-2">
           <button
             v-if="props.message.canRetry && props.message.clientTempId"
@@ -252,7 +242,7 @@ watch(
         </button>
       </div>
 
-      <div :class="['flex items-center gap-1 text-xs text-secondary', props.isOwn ? 'flex-row-reverse' : '']">
+      <div :class="['flex items-center gap-1 px-1 text-[11px] text-on-surface-variant', props.isOwn ? 'flex-row-reverse' : '']">
         <span
           v-if="['sending', 'compressing', 'uploading'].includes(props.message.localStatus ?? '')"
           class="upload-spinner"
@@ -261,7 +251,7 @@ watch(
         <span :class="props.message.localStatus === 'failed' ? 'text-error' : ''">
           {{ getFooterStatusText(props.message) }}
         </span>
-        <span v-if="props.isOwn" class="material-symbols-outlined text-[16px] text-primary">done_all</span>
+        <span v-if="props.isOwn" class="material-symbols-outlined text-[15px] text-chat-accent">done_all</span>
       </div>
     </div>
 
@@ -352,6 +342,16 @@ watch(
       </div>
     </div>
   </div>
+
+  <MediaLightbox
+    v-if="props.message.fileUrl && openMediaKind"
+    :alt="props.message.fileName ?? 'Media message'"
+    :kind="openMediaKind"
+    :open="Boolean(openMediaKind)"
+    :poster="props.message.fileThumbnailUrl"
+    :url="props.message.fileUrl"
+    @close="openMediaKind = null"
+  />
 </template>
 
 <style scoped>
