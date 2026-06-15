@@ -164,7 +164,7 @@ const handleToggleScreenShare = () => {
     callMediaStore.setError('Đã có người đang chia sẻ màn hình.');
     return;
   }
-  void callMediaStore.setScreenShareEnabled(!localParticipant.value?.screenShareEnabled);
+  void callMediaStore.setScreenShareEnabled(!isLocalScreenShare.value);
 };
 
 const handleReconnectHere = () => {
@@ -353,8 +353,8 @@ onBeforeUnmount(() => {
             :class="{ 'opacity-50': hasScreenShare && !isLocalScreenShare }"
           >
             <CallControlButton
-              :active="Boolean(localParticipant?.screenShareEnabled)"
-              :icon="localParticipant?.screenShareEnabled ? 'screen_share' : 'screen_share_off'"
+              :active="isLocalScreenShare"
+              :icon="isLocalScreenShare ? 'screen_share' : 'screen_share_off'"
               label="Chia sẻ màn hình"
               @click="handleToggleScreenShare"
             />
