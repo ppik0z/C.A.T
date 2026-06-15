@@ -88,7 +88,7 @@ export class ConversationsService {
         if (existing.length > 0) return existing[0];
 
         // Chưa có -> Tạo mới
-        return await this.drizzle.db.transaction(async (tx) => {
+        const created = await this.drizzle.db.transaction(async (tx) => {
             const [newConv] = await tx.insert(conversations).values({
                 isGroup: false,
             });
@@ -100,6 +100,11 @@ export class ConversationsService {
 
             return { id: newConv.insertId };
         });
+
+        // Phát tán phòng mới cho cả 2 phía đang online để đoạn chat hiện ngay
+        this.emitConversationUpsert([user1Id, user2Id], created.id);
+
+        return created;
     }
 
     //----getMyConversations----
@@ -260,6 +265,12 @@ export class ConversationsService {
         }
 
         this.emitConversationUpsert([creatorId, ...selectedMemberIds], conversationId);
+        this.eventEmitter.emit('conversation.members.added', {
+            conversationId,
+            groupName: name,
+            actorId: creatorId,
+            addedUserIds: selectedMemberIds,
+        });
         return this.buildConversationForUser(creatorId, conversationId);
     }
 
@@ -354,7 +365,19 @@ export class ConversationsService {
             isAdmin: false,
         })));
 
+        const [group] = await this.drizzle.db
+            .select({ name: conversations.name })
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+
         this.emitConversationUpsert([...existingMembers, ...newIds], conversationId);
+        this.eventEmitter.emit('conversation.members.added', {
+            conversationId,
+            groupName: group?.name ?? null,
+            actorId: currentUserId,
+            addedUserIds: newIds,
+        });
         return this.getConversationDetail(currentUserId, conversationId);
     }
 
@@ -368,12 +391,29 @@ export class ConversationsService {
         }
 
         const membersBefore = await this.getConversationMemberIds(conversationId);
+        const isKick = currentUserId !== targetUserId;
+        const [groupBefore] = isKick
+            ? await this.drizzle.db
+                .select({ name: conversations.name })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1)
+            : [{ name: null }];
         await this.drizzle.db
             .delete(conversationMembers)
             .where(and(
                 eq(conversationMembers.conversationId, conversationId),
                 eq(conversationMembers.userId, targetUserId),
             ));
+
+        if (isKick) {
+            this.eventEmitter.emit('conversation.member.kicked', {
+                conversationId,
+                groupName: groupBefore?.name ?? null,
+                actorId: currentUserId,
+                targetUserId,
+            });
+        }
 
         const remainingMembers = membersBefore.filter((id) => id !== targetUserId);
         if (remainingMembers.length === 0) {

@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { FcmPushProvider } from './fcm-push.provider';
-import { PushSubscriptionsService } from './push-subscriptions.service';
+import { PushSubscriptionsService, type ActiveFcmSubscription } from './push-subscriptions.service';
+import { ProfilesService } from '../profiles/profiles.service';
+import type { PushNotificationData } from './push-notification.types';
 
 interface MessageCreatedEvent {
   id: number;
@@ -10,6 +12,31 @@ interface MessageCreatedEvent {
   senderId: number;
   senderName: string;
   mentionedUserIds?: number[];
+  sender?: { avatar?: string | null };
+}
+
+interface FriendRequestReceivedEvent {
+  senderId: number;
+  receiverId: number;
+}
+
+interface FriendRequestAcceptedEvent {
+  requesterId: number;
+  receiverId: number;
+}
+
+interface ConversationMembersAddedEvent {
+  conversationId: number;
+  groupName: string | null;
+  actorId: number;
+  addedUserIds: number[];
+}
+
+interface ConversationMemberKickedEvent {
+  conversationId: number;
+  groupName: string | null;
+  actorId: number;
+  targetUserId: number;
 }
 
 const MAX_PREVIEW_LENGTH = 120;
@@ -21,27 +48,109 @@ export class PushNotificationListener {
   constructor(
     private readonly subscriptions: PushSubscriptionsService,
     private readonly fcmPushProvider: FcmPushProvider,
+    private readonly profilesService: ProfilesService,
   ) {}
 
   @OnEvent('message.created')
   async handleMessageCreated(payload: MessageCreatedEvent) {
-    try {
-      const members = await this.getRecipientSubscriptions(payload);
-      if (members.length === 0) return;
+    const userIds = await this.subscriptions.getConversationRecipientIds(payload.conversationId, payload.senderId);
+    const mentionedIds = new Set(payload.mentionedUserIds ?? []);
 
-      const mentionedIds = new Set(payload.mentionedUserIds ?? []);
-      const result = await this.fcmPushProvider.send(members.map((subscription) => ({
+    await this.dispatch(userIds, (subscription) => ({
+      type: mentionedIds.has(subscription.userId) ? 'chat.mention' : 'chat.message',
+      title: payload.senderName,
+      body: subscription.showNotificationPreview
+        ? this.toPreview(payload.previewContent)
+        : 'Bạn có tin nhắn mới.',
+      icon: payload.sender?.avatar ?? undefined,
+      tag: `conversation:${payload.conversationId}`,
+      link: `/?conversationId=${payload.conversationId}`,
+      conversationId: String(payload.conversationId),
+      messageId: String(payload.id),
+      senderId: String(payload.senderId),
+      senderName: payload.senderName,
+    }));
+  }
+
+  @OnEvent('friends.request.received')
+  async handleFriendRequestReceived(payload: FriendRequestReceivedEvent) {
+    const sender = await this.resolveUser(payload.senderId);
+    if (!sender) return;
+
+    await this.dispatch([payload.receiverId], () => ({
+      type: 'friend.request',
+      title: 'Lời mời kết bạn',
+      body: `${sender.name} đã gửi cho bạn lời mời kết bạn.`,
+      icon: sender.avatar,
+      tag: `friend-request:${payload.senderId}`,
+      link: '/?view=friends',
+      senderId: String(payload.senderId),
+      senderName: sender.name,
+    }));
+  }
+
+  @OnEvent('friends.request.accepted')
+  async handleFriendRequestAccepted(payload: FriendRequestAcceptedEvent) {
+    const actor = await this.resolveUser(payload.receiverId);
+    if (!actor) return;
+
+    await this.dispatch([payload.requesterId], () => ({
+      type: 'friend.accept',
+      title: 'Kết bạn thành công',
+      body: `${actor.name} đã chấp nhận lời mời kết bạn.`,
+      icon: actor.avatar,
+      tag: `friend-accept:${payload.receiverId}`,
+      link: '/?view=friends',
+      senderId: String(payload.receiverId),
+      senderName: actor.name,
+    }));
+  }
+
+  @OnEvent('conversation.members.added')
+  async handleConversationMembersAdded(payload: ConversationMembersAddedEvent) {
+    if (payload.addedUserIds.length === 0) return;
+    const actor = await this.resolveUser(payload.actorId);
+    const actorName = actor?.name ?? 'Một thành viên';
+    const groupName = payload.groupName?.trim() || 'nhóm mới';
+
+    await this.dispatch(payload.addedUserIds, () => ({
+      type: 'group.added',
+      title: groupName,
+      body: `${actorName} đã thêm bạn vào ${groupName}.`,
+      tag: `group-added:${payload.conversationId}`,
+      link: `/?conversationId=${payload.conversationId}`,
+      conversationId: String(payload.conversationId),
+    }));
+  }
+
+  @OnEvent('conversation.member.kicked')
+  async handleConversationMemberKicked(payload: ConversationMemberKickedEvent) {
+    const actor = await this.resolveUser(payload.actorId);
+    const actorName = actor?.name ?? 'Quản trị viên';
+    const groupName = payload.groupName?.trim() || 'nhóm';
+
+    await this.dispatch([payload.targetUserId], () => ({
+      type: 'group.removed',
+      title: groupName,
+      body: `${actorName} đã xoá bạn khỏi ${groupName}.`,
+      tag: `group-removed:${payload.conversationId}`,
+      link: '/',
+      conversationId: String(payload.conversationId),
+    }));
+  }
+
+  private async dispatch(
+    userIds: number[],
+    build: (subscription: ActiveFcmSubscription) => PushNotificationData,
+  ) {
+    try {
+      if (userIds.length === 0) return;
+      const subscriptions = await this.subscriptions.getActiveFcmSubscriptions(userIds);
+      if (subscriptions.length === 0) return;
+
+      const result = await this.fcmPushProvider.send(subscriptions.map((subscription) => ({
         token: subscription.token,
-        data: {
-          type: mentionedIds.has(subscription.userId) ? 'chat.mention' : 'chat.message',
-          messageId: String(payload.id),
-          conversationId: String(payload.conversationId),
-          senderName: payload.senderName,
-          body: subscription.showNotificationPreview
-            ? this.toPreview(payload.previewContent)
-            : 'Bạn có tin nhắn mới.',
-          link: `/?conversationId=${payload.conversationId}`,
-        },
+        data: this.toFcmData(build(subscription)),
       })));
 
       await this.subscriptions.revokeTokens(result.invalidTokens);
@@ -53,9 +162,25 @@ export class PushNotificationListener {
     }
   }
 
-  private async getRecipientSubscriptions(payload: MessageCreatedEvent) {
-    const userIds = await this.subscriptions.getConversationRecipientIds(payload.conversationId, payload.senderId);
-    return this.subscriptions.getActiveFcmSubscriptions(userIds);
+  private async resolveUser(userId: number) {
+    try {
+      const summary = await this.profilesService.getPublicSummary(userId);
+      return {
+        name: summary.displayName || summary.username,
+        avatar: summary.avatar ?? undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** FCM data chỉ nhận string; loại bỏ field rỗng/undefined để payload gọn và hợp lệ. */
+  private toFcmData(data: PushNotificationData): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(data).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0,
+      ),
+    );
   }
 
   private toPreview(content: string) {
