@@ -165,7 +165,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 });
             });
         } else {
-            this.server.to(`conv_${payload.conversationId}`).emit('new_message', payload);
+            // Phát tới room cá nhân của từng thành viên (luôn được join khi kết nối) thay vì
+            // room `conv_` (chỉ join khi mở chat). Nhờ vậy realtime không còn phụ thuộc vào
+            // thời điểm join_room, loại bỏ lỗ hổng mất tin đầu tiên khi vừa mở/đua join-load.
+            members.forEach((member) => {
+                this.server.to(`user_${member.userId}`).emit('new_message', payload);
+            });
         }
 
         members.forEach((member) => {
@@ -388,6 +393,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const userId = client.user.userId;
+
+        // Chặn user đánh dấu đã đọc cho phòng họ không thuộc (tránh giả mạo read receipt).
+        await this.messagesService.validateMember(userId, data.conversationId);
 
         // 1. Quăng vào Redis
         await this.readStateService.markAsRead(userId, data.conversationId, data.lastMessageIndex);

@@ -67,6 +67,12 @@ const registerSocketListeners = () => {
         }, 15000);
 
         callStore.syncActiveCalls();
+
+        // Khi reconnect, server chỉ join lại room cá nhân chứ không join lại `conv_` room,
+        // và có thể có tin tới trong lúc rớt mạng. Vào lại room hội thoại đang mở và tải bù.
+        if (chatStore.currentConversationId) {
+            chatStore.catchUpConversation(chatStore.currentConversationId);
+        }
     });
 
     socket.on("load_messages_success", (payload: LoadMessagesSuccessPayload) => {

@@ -489,13 +489,68 @@ export const useChatStore = defineStore('chat', {
             }
         },
 
-        // Thêm 1 tin nhắn mới 
+        // Thêm 1 tin nhắn mới
         pushMessage(msg: ChatMessage) {
             if (!msg.conversationId) return;
+            const conversationId = msg.conversationId;
+
+            // Ghi nhận index lớn nhất ĐÃ xác nhận trước khi chèn để dò lỗ hổng (gap) tin nhắn.
+            const previousMaxIndex = this.getMaxConfirmedIndex(conversationId);
 
             // Tránh trùng lặp nếu đã nhận từ callback gửi tin
-            const messages = this.messagesByConversationId[msg.conversationId] ?? [];
-            this.messagesByConversationId[msg.conversationId] = appendUniqueMessage(messages, msg);
+            const messages = this.messagesByConversationId[conversationId] ?? [];
+            this.messagesByConversationId[conversationId] = appendUniqueMessage(messages, msg);
+
+            this.maybeBackfillGap(conversationId, previousMaxIndex, msg);
+        },
+
+        // Index lớn nhất của tin đã được server xác nhận (bỏ qua tin optimistic id < 0).
+        getMaxConfirmedIndex(conversationId: number): number {
+            const messages = this.messagesByConversationId[conversationId] ?? [];
+            return messages.reduce((max, message) => {
+                const index = message.conversationIndex;
+                return message.id > 0 && typeof index === 'number' && index > max ? index : max;
+            }, 0);
+        },
+
+        // Nếu tin mới có index nhảy cóc so với index đã biết → có tin bị lỡ → tải bù khoảng trống.
+        // Lưới an toàn cho mất gói/đứt kết nối ngắn, tận dụng conversationIndex tăng dần của server.
+        maybeBackfillGap(conversationId: number, previousMaxIndex: number, msg: ChatMessage) {
+            const incomingIndex = msg.conversationIndex;
+            if (typeof incomingIndex !== 'number' || incomingIndex <= 0) return; // optimistic/không rõ
+            if (previousMaxIndex <= 0) return; // chưa có mốc (hội thoại mới/trống)
+            if (incomingIndex <= previousMaxIndex + 1) return; // liền mạch, không có lỗ hổng
+            if (this.messageLoadStateByConversationId[conversationId] !== 'loaded') return;
+            if ((this.messageWindowModeByConversationId[conversationId] ?? 'latest') !== 'latest') return;
+
+            this.backfillMessageGap(conversationId, previousMaxIndex);
+        },
+
+        // Tải các tin có index > afterIndex để lấp khoảng trống và nối vào cuối cửa sổ hiện tại.
+        backfillMessageGap(conversationId: number, afterIndex: number) {
+            if (this.messageLoadStateByConversationId[conversationId] === 'loading') return;
+
+            this.messageLoadStateByConversationId[conversationId] = 'loading';
+            this.messageLoadDirectionByConversationId[conversationId] = 'newer';
+            socket.emit('load_messages', {
+                conversationId,
+                limit: MESSAGE_WINDOW_LIMIT,
+                afterIndex,
+            });
+        },
+
+        // Sau khi (re)connect: vào lại room hội thoại đang mở và tải bù các tin lỡ trong lúc rớt mạng.
+        catchUpConversation(conversationId: number) {
+            socket.emit('join_room', { conversationId });
+
+            const mode = this.messageWindowModeByConversationId[conversationId] ?? 'latest';
+            const maxIndex = this.getMaxConfirmedIndex(conversationId);
+
+            if (this.messageLoadStateByConversationId[conversationId] === 'loaded' && mode === 'latest' && maxIndex > 0) {
+                this.backfillMessageGap(conversationId, maxIndex);
+            } else {
+                this.loadLatestMessages(conversationId);
+            }
         },
 
         // Hàm gửi tin nhắn đi
