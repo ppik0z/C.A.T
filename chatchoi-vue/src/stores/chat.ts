@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { socket } from '../socket';
 import { jwtDecode } from 'jwt-decode';
-import { fetchConversationDetail, fetchConversations } from '../services/conversation.service';
+import { fetchConversationDetail, fetchConversations, updateConversationNotifications } from '../services/conversation.service';
 import { prepareMediaForUpload } from '../services/mediaProcessing.service';
 import { uploadMediaMessage } from '../services/message.service';
 import { inspectLocalMedia } from '../services/localMediaMetadata.service';
@@ -786,6 +786,30 @@ export const useChatStore = defineStore('chat', {
 
             this.conversationListPromise = request;
             return request;
+        },
+
+        // durationMinutes: null = bật lại; 0 = tắt cho đến khi bật lại; > 0 = tắt N phút.
+        async muteConversation(conversationId: number, durationMinutes: number | null) {
+            const updated = await updateConversationNotifications(conversationId, durationMinutes);
+            this.applyMuteState(conversationId, updated.mutedUntil ?? null, updated.isMuted ?? false);
+            return updated;
+        },
+
+        unmuteConversation(conversationId: number) {
+            return this.muteConversation(conversationId, null);
+        },
+
+        applyMuteState(conversationId: number, mutedUntil: string | null, isMuted: boolean) {
+            const conv = this.conversations.find((item) => item.id === conversationId);
+            if (conv) {
+                conv.mutedUntil = mutedUntil;
+                conv.isMuted = isMuted;
+            }
+            const detail = this.conversationDetailsById[conversationId];
+            if (detail) {
+                detail.mutedUntil = mutedUntil;
+                detail.isMuted = isMuted;
+            }
         },
 
         upsertConversation(conversation: Conversation) {

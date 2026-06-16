@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import Avatar from '../atoms/Avatar.vue';
+import ConversationMuteControl from './ConversationMuteControl.vue';
 import GroupAddMembersModal from './GroupAddMembersModal.vue';
 import GroupAvatarPicker from './GroupAvatarPicker.vue';
 import MemberHoverCard from './MemberHoverCard.vue';
@@ -247,10 +248,7 @@ const removeMember = async (member: ConversationMember) => {
 
     <div :class="props.compact ? 'p-4' : 'p-6'">
       <h4 :class="['font-semibold text-on-surface', props.compact ? 'mb-3' : 'mb-4']">Group Settings</h4>
-      <button class="w-full flex items-center gap-4 p-2 rounded-xl hover:bg-surface-container-high transition-colors text-on-surface-variant text-left" type="button">
-        <span class="material-symbols-outlined">notifications</span>
-        <span class="text-base">Notifications</span>
-      </button>
+      <ConversationMuteControl :conversation="props.conversation" />
       <button
         v-if="detail.myMember"
         class="w-full flex items-center gap-4 p-2 rounded-xl hover:bg-error-container/20 text-error transition-colors mt-3 text-left"

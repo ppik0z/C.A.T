@@ -2,6 +2,7 @@
 import Avatar from '../atoms/Avatar.vue';
 import Badge from '../atoms/Badge.vue';
 import UserHoverCard from './UserHoverCard.vue';
+import { BellOff } from '@lucide/vue';
 import { computed } from 'vue';
 import { useCallStore } from '../../stores/call';
 import type { Conversation } from '../../types/chat';
@@ -54,8 +55,20 @@ const callStatusLabel = computed(() => {
 
     <div class="min-w-0 flex-1">
       <div class="flex justify-between items-baseline gap-3">
-        <h3 class="font-semibold text-on-surface truncate">{{ getConversationName(props.conversation) }}</h3>
-        <Badge v-if="props.conversation.unreadCount > 0" tone="primary">{{ props.conversation.unreadCount }}</Badge>
+        <div class="flex min-w-0 items-center gap-1.5">
+          <h3 class="font-semibold text-on-surface truncate">{{ getConversationName(props.conversation) }}</h3>
+          <BellOff
+            v-if="props.conversation.isMuted"
+            class="h-3.5 w-3.5 shrink-0 text-on-surface-variant"
+            aria-label="Đã tắt thông báo"
+          />
+        </div>
+        <Badge
+          v-if="props.conversation.unreadCount > 0"
+          :tone="props.conversation.isMuted ? 'neutral' : 'primary'"
+        >
+          {{ props.conversation.unreadCount }}
+        </Badge>
       </div>
       <p
         v-if="!hasLiveCall"

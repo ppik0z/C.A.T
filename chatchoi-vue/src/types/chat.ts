@@ -139,6 +139,8 @@ export interface Conversation {
   lastMessageIndex?: number;
   lastSeenMessageIndex?: number;
   lastMessageContent?: string | null;
+  mutedUntil?: string | null;
+  isMuted?: boolean;
   friend: ChatUser | null;
   lastMessage: LastMessage;
 }
