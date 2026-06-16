@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useChatStore } from '../../stores/chat';
 import { useFriendsStore } from '../../stores/friends';
+import { useNotificationsStore } from '../../stores/notifications';
 import { resolveDisplayName, getUserInitial } from '../../utils/userPresentation';
 import type { AppSection } from '../../types/navigation';
 import { useAccountStore } from '../../stores/account';
@@ -9,6 +10,7 @@ import BrandLogo from '../atoms/BrandLogo.vue';
 
 const chatStore = useChatStore();
 const friendsStore = useFriendsStore();
+const notificationsStore = useNotificationsStore();
 const accountStore = useAccountStore();
 const authStore = useAuthStore();
 
@@ -101,6 +103,28 @@ const navItems: Array<{ icon: string; label: string; section?: AppSection }> = [
         </div>
         <span class="sidebar-label font-semibold">{{ item.label }}</span>
       </a>
+
+      <button
+        type="button"
+        :class="[
+          'flex items-center gap-4 w-full h-12 rounded-xl transition-all duration-200',
+          notificationsStore.isOpen ? 'text-primary bg-primary-container' : 'text-on-surface-variant hover:bg-surface-container-high',
+        ]"
+        @click="notificationsStore.toggle()"
+      >
+        <div class="min-w-12 h-12 flex items-center justify-center">
+          <span class="relative inline-flex items-center justify-center">
+            <span class="material-symbols-outlined !text-[1.5rem]">notifications</span>
+            <span
+              v-if="notificationsStore.unreadCount > 0"
+              class="absolute -right-2 -top-1 min-w-4 h-4 px-1 rounded-full bg-error text-on-error text-[0.625rem] leading-4 text-center font-bold font-body"
+            >
+              {{ Math.min(notificationsStore.unreadCount, 99) }}
+            </span>
+          </span>
+        </div>
+        <span class="sidebar-label font-semibold">Thông báo</span>
+      </button>
     </nav>
 
     <div class="mt-auto flex flex-col items-start py-6 border-t border-outline-variant gap-4 px-4">

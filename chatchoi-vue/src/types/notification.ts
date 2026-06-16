@@ -5,7 +5,8 @@ export type PushNotificationType =
   | 'friend.accept'
   | 'group.added'
   | 'group.removed'
-  | 'call.incoming';
+  | 'call.incoming'
+  | 'call.missed';
 
 /** Payload data-only nhận từ FCM (mọi field là string vì FCM ràng buộc vậy). */
 export interface PushNotificationData {
@@ -35,4 +36,32 @@ export interface AppNotification {
   link: string;
   conversationId: number | null;
   silent?: boolean;
+}
+
+/** Người gây ra thông báo (lấy tươi từ server). */
+export interface NotificationActor {
+  id: number;
+  displayName: string | null;
+  avatar: string | null;
+}
+
+/** Thông báo bền vững từ trung tâm thông báo (lưu server-side). */
+export interface NotificationItem {
+  id: number;
+  type: PushNotificationType | string;
+  actor: NotificationActor | null;
+  conversationId: number | null;
+  title: string;
+  body: string;
+  link: string | null;
+  metadata: Record<string, unknown> | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+/** Kết quả trả về của GET /notifications. */
+export interface NotificationListResponse {
+  items: NotificationItem[];
+  unreadCount: number;
+  hasMore: boolean;
 }

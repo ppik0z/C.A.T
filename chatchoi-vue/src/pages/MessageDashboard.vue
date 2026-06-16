@@ -8,6 +8,7 @@ import FriendsPanel from '../components/organisms/FriendsPanel.vue';
 import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
 import NotificationToastStack from '../components/molecules/NotificationToastStack.vue';
+import NotificationCenterPanel from '../components/organisms/NotificationCenterPanel.vue';
 import CallMiniPlayer from '../components/molecules/CallMiniPlayer.vue';
 import PushNotificationBanner from '../components/molecules/PushNotificationBanner.vue';
 import { useCallStore } from '../stores/call';
@@ -218,6 +219,7 @@ onUnmounted(() => {
 
     <IncomingCallToastStack />
     <NotificationToastStack />
+    <NotificationCenterPanel />
     <CallOverlay />
     <CallMiniPlayer />
     <PushNotificationBanner />

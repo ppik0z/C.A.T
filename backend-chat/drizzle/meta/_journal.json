@@ -71,6 +71,13 @@
       "when": 1781575256620,
       "tag": "0009_classy_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1781598142273,
+      "tag": "0010_cynical_magdalene",
+      "breakpoints": true
     }
   ]
 }

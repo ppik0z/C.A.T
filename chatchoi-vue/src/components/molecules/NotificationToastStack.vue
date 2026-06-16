@@ -1,25 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Bell, MessageSquare, UserPlus, UserCheck, Users, UserMinus, X } from '@lucide/vue';
+import { X } from '@lucide/vue';
 import Avatar from '../atoms/Avatar.vue';
 import { useNotificationToastsStore } from '../../stores/notification-toasts';
 import { openNotification } from '../../services/foreground-notifications';
+import { iconForNotification } from '../../utils/notificationPresentation';
 import type { AppNotification } from '../../types/notification';
 
 const toastsStore = useNotificationToastsStore();
 const toasts = computed(() => toastsStore.toasts);
 
-const iconFor = (type: string) => {
-  switch (type) {
-    case 'friend.request': return UserPlus;
-    case 'friend.accept': return UserCheck;
-    case 'group.added': return Users;
-    case 'group.removed': return UserMinus;
-    case 'chat.message':
-    case 'chat.mention': return MessageSquare;
-    default: return Bell;
-  }
-};
+const iconFor = iconForNotification;
 
 const handleOpen = (toast: AppNotification) => {
   openNotification(toast);
