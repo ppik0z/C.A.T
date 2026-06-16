@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CallsController } from './calls.controller';
+import { CallsPublicController } from './calls-public.controller';
 import { CallsGateway } from './calls.gateway';
 import { CallMediaLifecycleListener } from './call-media-lifecycle.listener';
 import { CALL_MEDIA_PROVIDER } from './call-media.types';
@@ -15,7 +16,7 @@ import { AuthModule } from '../auth/auth.module';
         MessagesModule,
         AuthModule,
     ],
-    controllers: [CallsController],
+    controllers: [CallsController, CallsPublicController],
     providers: [
         CallsGateway,
         CallsService,

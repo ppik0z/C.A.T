@@ -224,6 +224,9 @@ export const conversationMembers = mysqlTable(
     isAdmin: boolean('isAdmin').notNull().default(false),
     lastSeenMessageId: int('lastSeenMessageId'),
     lastSeenMessageIndex: int('lastSeenMessageIndex').notNull().default(0),
+    // Tắt thông báo theo hội thoại: NULL = không tắt; đang tắt khi mutedUntil > NOW().
+    // Tắt vô thời hạn lưu mốc rất xa (9999-12-31).
+    mutedUntil: datetime('mutedUntil'),
     joinedAt: datetime('joinedAt')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),
@@ -324,6 +327,36 @@ export const messageReactions = mysqlTable(
   ],
 );
 
+// ─── MessageMentions ──────────────────────────────────────────────────────────
+export const messageMentions = mysqlTable(
+  'message_mentions',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    messageId: int('messageId')
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    conversationId: int('conversationId')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    mentionedUserId: int('mentionedUserId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    mentionType: varchar('mentionType', { length: 20 })
+      .notNull()
+      .default('user'), // 'user' | 'everyone'
+    createdAt: datetime('createdAt')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    uniqueIndex('uq_message_mention').on(t.messageId, t.mentionedUserId),
+    index('idx_mention_user_conversation').on(
+      t.mentionedUserId,
+      t.conversationId,
+    ),
+  ],
+);
+
 // ─── CallSessions ─────────────────────────────────────────────────────────────
 export const callSessions = mysqlTable(
   'call_sessions',
@@ -369,6 +402,7 @@ export const callParticipants = mysqlTable(
     status: varchar('status', { length: 30 }).notNull().default('ringing'),
     micEnabled: boolean('micEnabled').notNull().default(false),
     cameraEnabled: boolean('cameraEnabled').notNull().default(false),
+    screenShareEnabled: boolean('screenShareEnabled').notNull().default(false),
     joinedAt: datetime('joinedAt'),
     leftAt: datetime('leftAt'),
     declinedAt: datetime('declinedAt'),
@@ -395,6 +429,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   memberships: many(conversationMembers),
   messageStatuses: many(messageStatuses),
   reactions: many(messageReactions),
+  mentions: many(messageMentions),
   friends: many(friendships, { relationName: 'UserFriends' }),
   friendOf: many(friendships, { relationName: 'FriendOfUser' }),
   startedCalls: many(callSessions),
@@ -493,7 +528,26 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
   }),
   statuses: many(messageStatuses),
   reactions: many(messageReactions),
+  mentions: many(messageMentions),
 }));
+
+export const messageMentionsRelations = relations(
+  messageMentions,
+  ({ one }) => ({
+    message: one(messages, {
+      fields: [messageMentions.messageId],
+      references: [messages.id],
+    }),
+    conversation: one(conversations, {
+      fields: [messageMentions.conversationId],
+      references: [conversations.id],
+    }),
+    mentionedUser: one(users, {
+      fields: [messageMentions.mentionedUserId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const messageStatusesRelations = relations(
   messageStatuses,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Avatar from '../atoms/Avatar.vue';
+import ConversationMuteControl from './ConversationMuteControl.vue';
 import type { Conversation } from '../../types/chat';
 import { getConversationKindLabel, getConversationName, getConversationUser } from '../../utils/chatPresentation';
 import { formatUsername } from '../../utils/userPresentation';
@@ -21,13 +22,10 @@ const actionItems = [
   { icon: 'call', label: 'Call' },
   { icon: 'videocam', label: 'Video' },
   { icon: 'search', label: 'Search', action: 'search' },
-  { icon: 'notifications_off', label: 'Mute' },
 ];
 
 const settingItems = [
-  { icon: 'notifications', label: 'Notifications', value: null },
   { icon: 'security', label: 'Privacy & Safety', value: null },
-  { icon: 'group', label: 'Members', value: '2 People' },
 ];
 </script>
 
@@ -50,7 +48,7 @@ const settingItems = [
       <p class="text-sm font-semibold text-secondary mt-1">{{ props.conversation?.isOnline ? 'Online' : 'Offline' }}</p>
       <p :class="['text-xs font-semibold uppercase text-on-surface-variant', props.compact ? 'mt-1' : 'mt-2']">{{ getConversationKindLabel(props.conversation) }}</p>
 
-      <div :class="['grid grid-cols-4 w-full', props.compact ? 'gap-2 mt-4' : 'gap-4 mt-8']">
+      <div :class="['grid grid-cols-3 w-full', props.compact ? 'gap-2 mt-4' : 'gap-4 mt-8']">
         <button
           v-for="item in actionItems"
           :key="item.icon"
@@ -94,6 +92,8 @@ const settingItems = [
     <div :class="props.compact ? 'p-4' : 'p-6'">
       <h4 :class="['font-semibold text-on-surface', props.compact ? 'mb-3' : 'mb-4']">Chat Settings</h4>
       <div class="space-y-1">
+        <ConversationMuteControl :conversation="props.conversation" />
+
         <button
           v-for="item in settingItems"
           :key="item.icon"

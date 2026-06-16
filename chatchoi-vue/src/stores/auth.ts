@@ -17,6 +17,7 @@ import {
   setAccessToken,
   withRefreshLock,
 } from '../services/session.runtime';
+import { clearSessionHint, hasSessionHint, setSessionHint } from '../services/auth-hint';
 import { connectSocket, disconnectSocket } from '../services/socket.service';
 import { useAccountStore } from './account';
 import { useCallStore } from './call';
@@ -67,6 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
     useChatStore().setIdentity(session.accessToken);
     connectSocket(session.accessToken);
     scheduleRefresh(session.expiresInSeconds);
+    setSessionHint();
     error.value = null;
     status.value = 'authenticated';
     void hydrateSession();
@@ -103,6 +105,10 @@ export const useAuthStore = defineStore('auth', () => {
   const bootstrap = async () => {
     if (bootstrapPromise) return bootstrapPromise;
     bootstrapPromise = (async () => {
+      if (!hasSessionHint()) {
+        status.value = 'guest';
+        return;
+      }
       status.value = 'refreshing';
       error.value = null;
       try {
@@ -177,6 +183,7 @@ export const useAuthStore = defineStore('auth', () => {
     useFriendsStore().$reset();
     useCallStore().resetSession();
     usePushNotificationsStore().resetSession();
+    clearSessionHint();
     status.value = 'guest';
   };
 

@@ -1,7 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { deleteToken, getMessaging, getToken, isSupported, type Messaging } from 'firebase/messaging';
+import { deleteToken, getMessaging, getToken, isSupported, onMessage, type Messaging } from 'firebase/messaging';
 import { firebaseConfig, firebaseVapidKey } from '../config/firebase';
 import { apiRequest } from './apiClient';
+import type { PushNotificationData } from '../types/notification';
 
 const INSTALLATION_ID_KEY = 'chatchoi.push.installation-id';
 const PUSH_ENABLED_KEY = 'chatchoi.push.enabled';
@@ -100,6 +101,16 @@ export const registerFcmSubscription = async () => {
   });
 
   localStorage.setItem(PUSH_ENABLED_KEY, 'true');
+};
+
+/**
+ * Lắng nghe message FCM khi app đang ở foreground. Trả về hàm huỷ đăng ký.
+ * Chỉ gọi sau khi đã hỗ trợ push (isFcmPushSupported).
+ */
+export const subscribeForegroundPush = (handler: (data: PushNotificationData) => void) => {
+  return onMessage(getFirebaseMessaging(), (payload) => {
+    if (payload.data) handler(payload.data as PushNotificationData);
+  });
 };
 
 export const revokeFcmSubscription = async () => {

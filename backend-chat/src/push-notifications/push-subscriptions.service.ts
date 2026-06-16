@@ -7,8 +7,15 @@ import type { RegisterFcmSubscriptionDto } from './dto/push-subscription.dto';
 
 export interface ActiveFcmSubscription {
   showNotificationPreview: boolean;
+  notificationSound: boolean;
+  status: string;
   token: string;
   userId: number;
+}
+
+export interface ConversationRecipient {
+  userId: number;
+  muted: boolean;
 }
 
 @Injectable()
@@ -112,6 +119,8 @@ export class PushSubscriptionsService {
         token: pushSubscriptions.token,
         userId: pushSubscriptions.userId,
         showNotificationPreview: userSettings.showNotificationPreview,
+        notificationSound: userSettings.notificationSound,
+        status: userSettings.status,
       })
       .from(pushSubscriptions)
       .innerJoin(authSessions, eq(pushSubscriptions.authSessionId, authSessions.id))
@@ -129,19 +138,27 @@ export class PushSubscriptionsService {
       token: row.token,
       userId: row.userId,
       showNotificationPreview: row.showNotificationPreview ?? true,
+      notificationSound: row.notificationSound ?? true,
+      status: row.status ?? 'online',
     }));
   }
 
-  async getConversationRecipientIds(conversationId: number, senderId: number) {
+  async getConversationRecipients(conversationId: number, senderId: number): Promise<ConversationRecipient[]> {
     const rows = await this.drizzle.db
-      .select({ userId: conversationMembers.userId })
+      .select({
+        userId: conversationMembers.userId,
+        mutedUntil: conversationMembers.mutedUntil,
+      })
       .from(conversationMembers)
       .where(and(
         eq(conversationMembers.conversationId, conversationId),
         ne(conversationMembers.userId, senderId),
       ));
 
-    return rows.map((row) => row.userId);
+    return rows.map((row) => ({
+      userId: row.userId,
+      muted: row.mutedUntil != null && row.mutedUntil.getTime() > Date.now(),
+    }));
   }
 
   private hash(value: string) {

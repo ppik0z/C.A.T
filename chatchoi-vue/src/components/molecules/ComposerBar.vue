@@ -18,8 +18,8 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  send: [content: string, mentionedUserIds: number[]];
-  sendMedia: [file: File, caption: string, mentionedUserIds: number[]];
+  send: [content: string, mentionedUserIds: number[], mentionEveryone: boolean];
+  sendMedia: [file: File, caption: string, mentionedUserIds: number[], mentionEveryone: boolean];
   cancelReply: [];
   typingStart: [];
   typingStop: [];
@@ -34,6 +34,8 @@ const previewUrl = ref<string | null>(null);
 const errorText = ref('');
 const mentionSearch = ref('');
 const mentionStartIndex = ref<number | null>(null);
+const cursorIndex = ref(0);
+const activeMentionIndex = ref(0);
 const selectedMentionIdsByUsername = ref<Record<string, number>>({});
 const fileInputAccept = ref('');
 const isEmojiPickerOpen = ref(false);
@@ -67,11 +69,19 @@ const allowedMimeTypes = new Set([
 const isSelectedImage = computed(() => selectedFile.value?.type.startsWith('image/') ?? false);
 const isSelectedVideo = computed(() => selectedFile.value?.type.startsWith('video/') ?? false);
 const canSend = computed(() => Boolean(text.value.trim() || selectedFile.value));
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Khớp đúng "@username" theo ranh giới ký tự (tránh va chạm chuỗi con như @an vs @another).
 const mentionedUserIds = computed(() => {
-  return Object.entries(selectedMentionIdsByUsername.value)
-    .filter(([username]) => text.value.includes(`@${username}`))
-    .map(([, userId]) => userId);
+  const ids: number[] = [];
+  for (const [username, userId] of Object.entries(selectedMentionIdsByUsername.value)) {
+    const pattern = new RegExp(`(^|[^\\w.])@${escapeRegExp(username)}(?![\\w.])`);
+    if (pattern.test(text.value)) ids.push(userId);
+  }
+  return ids;
 });
+// @everyone nhắc toàn nhóm — bất kỳ thành viên nào cũng dùng được.
+const mentionEveryone = computed(() => /(^|[^\w.])@(everyone|all)(?![\w.])/i.test(text.value));
 const mentionOptions = computed(() => {
   if (!props.isGroup || mentionStartIndex.value === null) return [];
   const query = mentionSearch.value.trim().toLowerCase();
@@ -83,6 +93,18 @@ const mentionOptions = computed(() => {
         || (member.displayName?.toLowerCase().includes(query) ?? false);
     })
     .slice(0, 6);
+});
+const showEveryoneOption = computed(() => {
+  if (!props.isGroup || mentionStartIndex.value === null) return false;
+  const query = mentionSearch.value.trim().toLowerCase();
+  return query === '' || 'everyone'.startsWith(query) || 'all'.startsWith(query);
+});
+type MentionMenuItem = { kind: 'everyone' } | { kind: 'member'; member: ConversationMember };
+const mentionMenuItems = computed<MentionMenuItem[]>(() => {
+  const items: MentionMenuItem[] = [];
+  if (showEveryoneOption.value) items.push({ kind: 'everyone' });
+  for (const member of mentionOptions.value) items.push({ kind: 'member', member });
+  return items;
 });
 
 const clearTypingStopTimer = () => {
@@ -96,16 +118,16 @@ const handleSend = () => {
   if (!content && !selectedFile.value) return;
 
   if (selectedFile.value) {
-    emit('sendMedia', selectedFile.value, content, mentionedUserIds.value);
+    emit('sendMedia', selectedFile.value, content, mentionedUserIds.value, mentionEveryone.value);
     clearSelectedFile();
   } else {
-    emit('send', content, mentionedUserIds.value);
+    emit('send', content, mentionedUserIds.value, mentionEveryone.value);
   }
 
   text.value = '';
   selectedMentionIdsByUsername.value = {};
-  mentionStartIndex.value = null;
-  mentionSearch.value = '';
+  cursorIndex.value = 0;
+  closeMentionMenu();
   clearTypingStopTimer();
   emit('typingStop');
 };
@@ -189,41 +211,115 @@ const insertEmoji = async (emoji: string) => {
 
   await nextTick();
   const cursorPosition = start + emoji.length;
+  cursorIndex.value = cursorPosition;
   messageInputRef.value?.focus();
   messageInputRef.value?.setSelectionRange(cursorPosition, cursorPosition);
 };
 
+// Đồng bộ vị trí con trỏ thật từ <input> để phát hiện "@" ở giữa câu, không chỉ ở cuối.
+const syncCursor = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  cursorIndex.value = target.selectionStart ?? text.value.length;
+  updateMentionSearch();
+};
+
+// Bỏ qua các phím điều hướng menu để không ghi đè con trỏ vừa được đặt sau khi chọn mention.
+const handleInputKeyup = (event: KeyboardEvent) => {
+  if (['Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  syncCursor(event);
+};
+
+const closeMentionMenu = () => {
+  mentionStartIndex.value = null;
+  mentionSearch.value = '';
+  activeMentionIndex.value = 0;
+};
+
 const updateMentionSearch = () => {
-  if (!props.isGroup) return;
-  const cursorIndex = text.value.length;
-  const beforeCursor = text.value.slice(0, cursorIndex);
+  if (!props.isGroup) {
+    closeMentionMenu();
+    return;
+  }
+  const beforeCursor = text.value.slice(0, cursorIndex.value);
   const match = beforeCursor.match(/(^|\s)@([\w.]*)$/);
   if (!match) {
-    mentionStartIndex.value = null;
-    mentionSearch.value = '';
+    closeMentionMenu();
     return;
   }
 
-  mentionStartIndex.value = cursorIndex - match[2].length - 1;
+  mentionStartIndex.value = cursorIndex.value - match[2].length - 1;
   mentionSearch.value = match[2];
+  activeMentionIndex.value = 0;
+};
+
+// Chèn token mention vào đúng vị trí "@" đang gõ, giữ nguyên phần text phía sau con trỏ.
+const insertMentionToken = async (token: string) => {
+  if (mentionStartIndex.value === null) return;
+  const start = mentionStartIndex.value;
+  const before = text.value.slice(0, start);
+  const after = text.value.slice(cursorIndex.value);
+  const insert = `${token} `;
+  text.value = `${before}${insert}${after}`;
+  closeMentionMenu();
+
+  await nextTick();
+  const nextCursor = before.length + insert.length;
+  cursorIndex.value = nextCursor;
+  messageInputRef.value?.focus();
+  messageInputRef.value?.setSelectionRange(nextCursor, nextCursor);
 };
 
 const selectMention = (member: ConversationMember) => {
-  if (mentionStartIndex.value === null || !member.username) return;
-  const start = mentionStartIndex.value;
-  const before = text.value.slice(0, start);
-  const after = text.value.slice(text.value.length);
-  text.value = `${before}@${member.username} ${after}`;
+  if (!member.username) return;
   selectedMentionIdsByUsername.value = {
     ...selectedMentionIdsByUsername.value,
     [member.username]: member.userId,
   };
-  mentionStartIndex.value = null;
-  mentionSearch.value = '';
+  void insertMentionToken(`@${member.username}`);
+};
+
+const selectEveryone = () => {
+  void insertMentionToken('@everyone');
+};
+
+const selectMentionItem = (item: MentionMenuItem) => {
+  if (item.kind === 'everyone') selectEveryone();
+  else selectMention(item.member);
+};
+
+const handleInputKeydown = (event: KeyboardEvent) => {
+  const itemCount = mentionMenuItems.value.length;
+  if (itemCount > 0) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      activeMentionIndex.value = (activeMentionIndex.value + 1) % itemCount;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      activeMentionIndex.value = (activeMentionIndex.value - 1 + itemCount) % itemCount;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const item = mentionMenuItems.value[activeMentionIndex.value];
+      if (item) selectMentionItem(item);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMentionMenu();
+      return;
+    }
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    handleSend();
+  }
 };
 
 watch(text, (value) => {
-  updateMentionSearch();
   clearTypingStopTimer();
   if (!value.trim()) {
     emit('typingStop');
@@ -337,23 +433,38 @@ onMounted(() => {
 
       <div class="relative flex min-h-10 flex-1 items-center rounded-[1.35rem] bg-surface-container px-3 transition-shadow focus-within:ring-2 focus-within:ring-chat-accent/30 min-w-0">
         <div
-          v-if="mentionOptions.length > 0"
+          v-if="mentionMenuItems.length > 0"
           class="absolute bottom-12 left-0 right-0 z-20 rounded-2xl border border-outline-variant bg-surface-container-lowest p-2 shadow-xl"
         >
           <button
-            v-for="member in mentionOptions"
-            :key="member.userId"
-            class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface-container-high"
+            v-for="(item, index) in mentionMenuItems"
+            :key="item.kind === 'everyone' ? 'everyone' : item.member.userId"
+            :class="[
+              'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left',
+              index === activeMentionIndex ? 'bg-surface-container-high' : 'hover:bg-surface-container-high',
+            ]"
             type="button"
-            @click="selectMention(member)"
+            @mouseenter="activeMentionIndex = index"
+            @click="selectMentionItem(item)"
           >
-            <span class="h-8 w-8 rounded-full bg-primary-container text-primary flex items-center justify-center text-xs font-bold">
-              {{ (member.displayName || member.username)[0]?.toUpperCase() }}
-            </span>
-            <span class="min-w-0">
-              <span class="block truncate text-sm font-semibold text-on-surface">{{ member.displayName || member.username }}</span>
-              <span class="block truncate text-xs text-on-surface-variant">@{{ member.username }}</span>
-            </span>
+            <template v-if="item.kind === 'everyone'">
+              <span class="h-8 w-8 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center text-xs font-bold">
+                @
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold text-on-surface">Mọi người</span>
+                <span class="block truncate text-xs text-on-surface-variant">@everyone · nhắc toàn nhóm</span>
+              </span>
+            </template>
+            <template v-else>
+              <span class="h-8 w-8 rounded-full bg-primary-container text-primary flex items-center justify-center text-xs font-bold">
+                {{ (item.member.displayName || item.member.username)[0]?.toUpperCase() }}
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold text-on-surface">{{ item.member.displayName || item.member.username }}</span>
+                <span class="block truncate text-xs text-on-surface-variant">@{{ item.member.username }}</span>
+              </span>
+            </template>
           </button>
         </div>
         <input
@@ -362,7 +473,10 @@ onMounted(() => {
           class="flex-1 min-w-0 bg-transparent border-none focus:ring-0 focus:outline-none text-sm sm:text-base py-2.5 placeholder:text-on-surface-variant/70"
           placeholder="Nhắn tin..."
           type="text"
-          @keyup.enter="handleSend"
+          @keydown="handleInputKeydown"
+          @input="syncCursor"
+          @keyup="handleInputKeyup"
+          @click="syncCursor"
         />
         <div class="relative shrink-0">
           <div

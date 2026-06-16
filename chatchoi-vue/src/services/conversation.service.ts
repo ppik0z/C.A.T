@@ -38,3 +38,10 @@ export const addConversationMembers = (conversationId: number, memberIds: number
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds }),
 });
 export const removeConversationMember = (conversationId: number, userId: number) => apiRequest<{ removed: boolean }>(`/conversations/${conversationId}/members/${userId}`, { method: 'DELETE' });
+
+// durationMinutes: null = bật lại; 0 = tắt cho đến khi bật lại; > 0 = tắt trong N phút.
+export const updateConversationNotifications = (conversationId: number, durationMinutes: number | null) => apiRequest<Conversation>(`/conversations/${conversationId}/notifications`, {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ durationMinutes }),
+});

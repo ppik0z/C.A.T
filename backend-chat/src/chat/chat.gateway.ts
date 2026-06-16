@@ -210,7 +210,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     @SubscribeMessage('send_message')
     async handleMessage(
-        @MessageBody() data: { conversationId: number; content?: string, clientTempId?: string, clientMessageId?: string, type?: 'text' | 'gif', fileUrl?: string, replyToMessageId?: number, mentionedUserIds?: number[] },
+        @MessageBody() data: { conversationId: number; content?: string, clientTempId?: string, clientMessageId?: string, type?: 'text' | 'gif', fileUrl?: string, replyToMessageId?: number, mentionedUserIds?: number[], mentionEveryone?: boolean },
         @ConnectedSocket() client: AuthenticatedSocket,
     ) {
         const senderId = client.user.userId;
@@ -228,6 +228,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 clientMessageId: data.clientMessageId,
                 replyToMessageId: data.replyToMessageId,
                 mentionedUserIds: data.mentionedUserIds,
+                mentionEveryone: data.mentionEveryone,
             },
         );
     }

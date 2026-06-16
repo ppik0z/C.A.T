@@ -19,6 +19,13 @@ interface AddMembersBody {
     memberIds: number[];
 }
 
+interface UpdateNotificationsBody {
+    // null = bật lại; 0 = tắt cho đến khi bật lại; > 0 = tắt trong N phút.
+    durationMinutes?: number | null;
+}
+
+const INDEFINITE_MUTE_UNTIL = new Date('9999-12-31T23:59:59Z');
+
 @UseGuards(AuthGuard('jwt'))
 @Controller('conversations')
 export class ConversationsController {
@@ -71,6 +78,15 @@ export class ConversationsController {
         return this.conversationsService.updateGroup(req.user.userId, id, body, avatar);
     }
 
+    @Patch(':id/notifications')
+    async updateNotifications(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() body: UpdateNotificationsBody,
+        @Request() req: RequestWithUser,
+    ) {
+        return this.conversationsService.setConversationMute(req.user.userId, id, this.resolveMutedUntil(body.durationMinutes));
+    }
+
     @Post(':id/members')
     async addMembers(
         @Param('id', ParseIntPipe) id: number,
@@ -87,6 +103,12 @@ export class ConversationsController {
         @Request() req: RequestWithUser,
     ) {
         return this.conversationsService.removeGroupMember(req.user.userId, id, userId);
+    }
+
+    private resolveMutedUntil(durationMinutes?: number | null): Date | null {
+        if (durationMinutes === null || durationMinutes === undefined) return null; // bật lại
+        if (durationMinutes <= 0) return INDEFINITE_MUTE_UNTIL; // tắt cho đến khi bật lại
+        return new Date(Date.now() + durationMinutes * 60_000);
     }
 
     private parseMemberIds(value: number[] | string) {

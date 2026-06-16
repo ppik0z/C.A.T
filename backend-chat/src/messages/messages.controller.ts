@@ -14,7 +14,7 @@ export class MessagesController {
     ) { }
 
     @Post()
-    async send(@Body() body: { conversationId: number, content?: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string, clientMessageId?: string, replyToMessageId?: number, mentionedUserIds?: number[] }, @Request() req: RequestWithUser) {
+    async send(@Body() body: { conversationId: number, content?: string, type?: 'text' | 'gif', fileUrl?: string, clientTempId?: string, clientMessageId?: string, replyToMessageId?: number, mentionedUserIds?: number[], mentionEveryone?: boolean }, @Request() req: RequestWithUser) {
         const input: SendMessageInput = {
             type: body.type,
             content: body.content,
@@ -23,6 +23,7 @@ export class MessagesController {
             clientMessageId: body.clientMessageId,
             replyToMessageId: body.replyToMessageId,
             mentionedUserIds: body.mentionedUserIds,
+            mentionEveryone: body.mentionEveryone,
         };
 
         return this.messagesService.sendMessage(req.user.userId, body.conversationId, body.content ?? '', body.clientTempId, input);
@@ -36,7 +37,7 @@ export class MessagesController {
     }))
     async sendMedia(
         @UploadedFile() file: Express.Multer.File,
-        @Body() body: { conversationId: string; caption?: string; clientTempId?: string; clientMessageId?: string; replyToMessageId?: string; mentionedUserIds?: string },
+        @Body() body: { conversationId: string; caption?: string; clientTempId?: string; clientMessageId?: string; replyToMessageId?: string; mentionedUserIds?: string; mentionEveryone?: string },
         @Request() req: RequestWithUser,
     ) {
         const conversationId = Number(body.conversationId);
@@ -54,6 +55,7 @@ export class MessagesController {
             clientMessageId: body.clientMessageId,
             replyToMessageId: body.replyToMessageId ? Number(body.replyToMessageId) : undefined,
             mentionedUserIds: this.parseMentionedUserIds(body.mentionedUserIds),
+            mentionEveryone: body.mentionEveryone === 'true',
             media,
         });
     }

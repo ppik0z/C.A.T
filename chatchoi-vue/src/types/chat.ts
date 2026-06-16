@@ -83,6 +83,9 @@ export interface ChatMessage {
   replyToMessageId?: number | null;
   replyTo?: ReplySnapshot | null;
   reactions?: MessageReactionSummary[];
+  mentions?: MentionSummary[];
+  mentionedUserIds?: number[];
+  mentionsEveryone?: boolean;
   sender?: {
     id: number;
     username: string;
@@ -103,6 +106,12 @@ export interface MessageReactionSummary {
   emoji: string;
   count: number;
   reactedByMe: boolean;
+}
+
+export interface MentionSummary {
+  userId: number;
+  username: string;
+  displayName?: string | null;
 }
 
 export interface LastMessage {
@@ -130,6 +139,8 @@ export interface Conversation {
   lastMessageIndex?: number;
   lastSeenMessageIndex?: number;
   lastMessageContent?: string | null;
+  mutedUntil?: string | null;
+  isMuted?: boolean;
   friend: ChatUser | null;
   lastMessage: LastMessage;
 }

@@ -36,6 +36,7 @@ export interface StoredCallParticipant {
     status: CallParticipantStatus;
     micEnabled: boolean;
     cameraEnabled: boolean;
+    screenShareEnabled: boolean;
     joinedAt: string | null;
     leftAt: string | null;
     declinedAt: string | null;
@@ -174,6 +175,7 @@ export class CallsService {
                     status: member.userId === userId ? 'joined' : 'ringing',
                     micEnabled: member.userId === userId,
                     cameraEnabled: member.userId === userId && kind === 'video',
+                    screenShareEnabled: false,
                     joinedAt: member.userId === userId ? now : null,
                     lastHeartbeatAt: member.userId === userId ? now : null,
                     mediaStatus: 'idle',
@@ -209,6 +211,7 @@ export class CallsService {
                     status: member.userId === userId ? 'joined' : 'ringing',
                     micEnabled: member.userId === userId,
                     cameraEnabled: member.userId === userId && kind === 'video',
+                    screenShareEnabled: false,
                     joinedAt: member.userId === userId ? this.toIso(now) : null,
                     leftAt: null,
                     declinedAt: null,
@@ -258,6 +261,7 @@ export class CallsService {
             status: 'joined',
             micEnabled: true,
             cameraEnabled: state.kind === 'video',
+            screenShareEnabled: false,
             joinedAt: participant.joinedAt ?? this.toIso(now),
             leftAt: null,
             declinedAt: null,
@@ -278,6 +282,7 @@ export class CallsService {
                     status: 'joined',
                     micEnabled: true,
                     cameraEnabled: state.kind === 'video',
+                    screenShareEnabled: false,
                     joinedAt: participant.joinedAt ? new Date(participant.joinedAt) : now,
                     leftAt: null,
                     declinedAt: null,
@@ -321,6 +326,7 @@ export class CallsService {
             status: 'declined',
             micEnabled: false,
             cameraEnabled: false,
+            screenShareEnabled: false,
             declinedAt: this.toIso(now),
             mediaStatus: 'idle',
             mediaFailureReason: null,
@@ -331,6 +337,7 @@ export class CallsService {
                 status: 'declined',
                 micEnabled: false,
                 cameraEnabled: false,
+                screenShareEnabled: false,
                 declinedAt: now,
                 mediaStatus: 'idle',
                 mediaFailureReason: null,
@@ -373,6 +380,7 @@ export class CallsService {
             status: participant.status === 'joined' ? 'left' : 'declined',
             micEnabled: false,
             cameraEnabled: false,
+            screenShareEnabled: false,
             leftAt: participant.status === 'joined' ? this.toIso(now) : participant.leftAt,
             declinedAt: participant.status === 'joined' ? participant.declinedAt : this.toIso(now),
             mediaStatus: participant.status === 'joined' ? 'disconnected' : 'idle',
@@ -385,6 +393,7 @@ export class CallsService {
                 status: participant.status === 'joined' ? 'left' : 'declined',
                 micEnabled: false,
                 cameraEnabled: false,
+                screenShareEnabled: false,
                 leftAt: participant.status === 'joined' ? now : participant.leftAt ? new Date(participant.leftAt) : null,
                 declinedAt: participant.status === 'joined' ? participant.declinedAt ? new Date(participant.declinedAt) : null : now,
                 mediaStatus: participant.status === 'joined' ? 'disconnected' : 'idle',
@@ -415,11 +424,11 @@ export class CallsService {
         return result;
     }
 
-    async updateMediaState(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean }): Promise<CallMutationResult> {
+    async updateMediaState(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean; screenShareEnabled?: boolean }): Promise<CallMutationResult> {
         return this.callLockService.withCallLock(callId, async () => this.updateMediaStateLocked(userId, callId, input));
     }
 
-    private async updateMediaStateLocked(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean }): Promise<CallMutationResult> {
+    private async updateMediaStateLocked(userId: number, callId: number, input: { micEnabled: boolean; cameraEnabled: boolean; screenShareEnabled?: boolean }): Promise<CallMutationResult> {
         const state = await this.getAccessibleState(userId, callId);
         this.ensureCallIsActiveOrRinging(state);
 
@@ -428,15 +437,22 @@ export class CallsService {
             throw new BadRequestException('Bạn cần tham gia cuộc gọi trước khi cập nhật thiết bị.');
         }
 
+        // screenShareEnabled là optional để các client cũ chỉ gửi mic/camera không vô tình tắt chia sẻ màn hình.
+        const nextScreenShareEnabled = input.screenShareEnabled === undefined
+            ? participant.screenShareEnabled
+            : Boolean(input.screenShareEnabled);
+
         const nextState = this.mapParticipant(state, userId, {
             micEnabled: Boolean(input.micEnabled),
             cameraEnabled: Boolean(input.cameraEnabled),
+            screenShareEnabled: nextScreenShareEnabled,
         });
 
         await this.drizzle.db.update(callParticipants)
             .set({
                 micEnabled: Boolean(input.micEnabled),
                 cameraEnabled: Boolean(input.cameraEnabled),
+                screenShareEnabled: nextScreenShareEnabled,
             })
             .where(and(eq(callParticipants.callSessionId, callId), eq(callParticipants.userId, userId)));
 
@@ -675,6 +691,7 @@ export class CallsService {
                 status: 'left',
                 micEnabled: false,
                 cameraEnabled: false,
+                screenShareEnabled: false,
                 leftAt: this.toIso(now),
                 mediaStatus: 'disconnected',
                 mediaDisconnectedAt: this.toIso(now),
@@ -688,6 +705,7 @@ export class CallsService {
                 status: 'left',
                 micEnabled: false,
                 cameraEnabled: false,
+                screenShareEnabled: false,
                 leftAt: now,
                 mediaStatus: 'disconnected',
                 mediaDisconnectedAt: now,
@@ -727,6 +745,7 @@ export class CallsService {
                     status: 'left' as const,
                     micEnabled: false,
                     cameraEnabled: false,
+                    screenShareEnabled: false,
                     leftAt: participant.leftAt ?? this.toIso(now),
                     mediaStatus: 'disconnected' as const,
                     mediaDisconnectedAt: participant.mediaDisconnectedAt ?? this.toIso(now),
@@ -740,6 +759,7 @@ export class CallsService {
                     status: 'missed' as const,
                     micEnabled: false,
                     cameraEnabled: false,
+                    screenShareEnabled: false,
                     mediaStatus: 'idle' as const,
                     mediaFailureReason: null,
                 };
@@ -749,6 +769,7 @@ export class CallsService {
                 ...participant,
                 micEnabled: false,
                 cameraEnabled: false,
+                screenShareEnabled: false,
                 mediaStatus: participant.status === 'declined' ? 'idle' as const : participant.mediaStatus,
                 mediaFailureReason: null,
             };
@@ -777,6 +798,7 @@ export class CallsService {
                     status: 'left',
                     micEnabled: false,
                     cameraEnabled: false,
+                    screenShareEnabled: false,
                     leftAt: now,
                     mediaStatus: 'disconnected',
                     mediaDisconnectedAt: now,
@@ -789,6 +811,7 @@ export class CallsService {
                     status: 'missed',
                     micEnabled: false,
                     cameraEnabled: false,
+                    screenShareEnabled: false,
                     mediaStatus: 'idle',
                     mediaFailureReason: null,
                 })
@@ -891,6 +914,7 @@ export class CallsService {
                 status: callParticipants.status,
                 micEnabled: callParticipants.micEnabled,
                 cameraEnabled: callParticipants.cameraEnabled,
+                screenShareEnabled: callParticipants.screenShareEnabled,
                 joinedAt: callParticipants.joinedAt,
                 leftAt: callParticipants.leftAt,
                 declinedAt: callParticipants.declinedAt,
@@ -933,6 +957,7 @@ export class CallsService {
                 status: this.normalizeParticipantStatus(participant.status),
                 micEnabled: Boolean(participant.micEnabled),
                 cameraEnabled: Boolean(participant.cameraEnabled),
+                screenShareEnabled: Boolean(participant.screenShareEnabled),
                 joinedAt: this.toIsoOrNull(participant.joinedAt),
                 leftAt: this.toIsoOrNull(participant.leftAt),
                 declinedAt: this.toIsoOrNull(participant.declinedAt),

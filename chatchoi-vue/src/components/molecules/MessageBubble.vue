@@ -208,6 +208,7 @@ watch(
         ]"
       >
         <MessageContentRenderer
+          :current-user-id="props.currentUserId"
           :is-own="props.isOwn"
           :message="props.message"
           @open-media="openMedia"

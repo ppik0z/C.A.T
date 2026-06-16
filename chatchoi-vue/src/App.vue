@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import AppBootstrapSkeleton from "./components/organisms/AppBootstrapSkeleton.vue";
+import AppSplash from "./components/organisms/AppSplash.vue";
 import { loadLoginView } from "./router";
 import { useAuthStore } from "./stores/auth";
 
@@ -9,11 +9,10 @@ const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const isLoggedIn = computed(() => authStore.status === "authenticated");
+const isGuest = computed(() => authStore.status === "guest");
 const isPublicAuthAction = computed(() => route.meta.publicAuthAction === true);
-const isRedirectingForAuth = computed(
-  () =>
-    (authStore.status === "guest" && route.meta.requiresAuth === true) ||
-    (authStore.status === "authenticated" && route.meta.guestOnly === true),
+const isVerifyingSession = computed(
+  () => authStore.status === "unknown" || authStore.status === "refreshing",
 );
 
 void loadLoginView();
@@ -34,13 +33,8 @@ watch(
 
 <template>
   <RouterView v-if="isPublicAuthAction" />
-  <AppBootstrapSkeleton
-    v-else-if="
-      authStore.status === 'unknown' ||
-      authStore.status === 'refreshing' ||
-      isRedirectingForAuth
-    "
-  />
+  <RouterView v-else-if="isGuest" />
+  <AppSplash v-else-if="isVerifyingSession" />
   <main
     v-else-if="authStore.status === 'unavailable'"
     class="flex min-h-screen items-center justify-center bg-background p-6 text-on-background"

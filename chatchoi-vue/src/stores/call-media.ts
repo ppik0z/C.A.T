@@ -31,6 +31,7 @@ export const useCallMediaStore = defineStore('call-media', {
     participantIdentities: [] as string[],
     activeSpeakerIdentities: [] as string[],
     videoTracksByIdentity: {} as Record<string, CallVideoTrack>,
+    screenTracksByIdentity: {} as Record<string, CallVideoTrack>,
     videoPageIndex: 0,
     videoPageSize: 6,
   }),
@@ -42,6 +43,18 @@ export const useCallMediaStore = defineStore('call-media', {
 
     pageCount(state) {
       return Math.max(1, Math.ceil(state.participantIdentities.length / state.videoPageSize));
+    },
+
+    // Identity (vd "user:12") của người đang chia sẻ màn hình; chỉ spotlight một luồng tại một thời điểm.
+    screenShareIdentity(state): string | null {
+      return Object.keys(state.screenTracksByIdentity)[0] ?? null;
+    },
+
+    screenShareUserId(): number | null {
+      const identity = this.screenShareIdentity;
+      if (!identity) return null;
+      const userId = Number(identity.replace('user:', ''));
+      return Number.isInteger(userId) ? userId : null;
     },
   },
 
@@ -155,8 +168,27 @@ export const useCallMediaStore = defineStore('call-media', {
       }
     },
 
+    async setScreenShareEnabled(enabled: boolean) {
+      try {
+        await callMediaService.setScreenShareEnabled(enabled);
+      } catch (error) {
+        // Người dùng huỷ hộp thoại chọn màn hình không phải lỗi thật → không hiện cảnh báo.
+        if (this.isUserAbortedShare(error)) return;
+        this.setError(error instanceof Error ? error.message : 'Không thể chia sẻ màn hình.');
+      }
+    },
+
+    isUserAbortedShare(error: unknown) {
+      if (!(error instanceof Error)) return false;
+      return error.name === 'NotAllowedError' || error.name === 'AbortError';
+    },
+
     getVideoTrackForUser(userId: number) {
       return this.videoTracksByIdentity[toParticipantIdentity(userId)] ?? null;
+    },
+
+    getScreenTrackForUser(userId: number) {
+      return this.screenTracksByIdentity[toParticipantIdentity(userId)] ?? null;
     },
 
     isActiveSpeaker(userId: number) {
@@ -180,6 +212,9 @@ export const useCallMediaStore = defineStore('call-media', {
       this.videoTracksByIdentity = Object.fromEntries(
         Object.entries(snapshot.videoTracksByIdentity).map(([identity, track]) => [identity, markRaw(track)]),
       ) as Record<string, CallVideoTrack>;
+      this.screenTracksByIdentity = Object.fromEntries(
+        Object.entries(snapshot.screenTracksByIdentity).map(([identity, track]) => [identity, markRaw(track)]),
+      ) as Record<string, CallVideoTrack>;
     },
 
     applyLocalMediaState(callId: number, state: LocalMediaState) {
@@ -197,6 +232,7 @@ export const useCallMediaStore = defineStore('call-media', {
       this.participantIdentities = [];
       this.activeSpeakerIdentities = [];
       this.videoTracksByIdentity = {};
+      this.screenTracksByIdentity = {};
       this.videoPageIndex = 0;
       this.videoPageSize = 6;
     },

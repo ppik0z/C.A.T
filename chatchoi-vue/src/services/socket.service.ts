@@ -4,6 +4,7 @@ import { useChatStore } from "../stores/chat";
 import { useFriendsStore } from "../stores/friends";
 import { useProfilesStore } from "../stores/profiles";
 import { useAccountStore } from "../stores/account";
+import { useNotificationToastsStore } from "../stores/notification-toasts";
 import type { PublicUserProfile } from "../types/account";
 import type { ActiveCallsPayload, CallErrorPayload, CallState } from "../types/call";
 import type {
@@ -49,6 +50,7 @@ const registerSocketListeners = () => {
     const friendsStore = useFriendsStore();
     const profilesStore = useProfilesStore();
     const accountStore = useAccountStore();
+    const notificationToastsStore = useNotificationToastsStore();
     socket.on("connect", () => {
         chatStore.isConnected = true;
         console.log("Đã kết nối!");
@@ -152,7 +154,21 @@ const registerSocketListeners = () => {
     });
 
     socket.on("mention_received", (data: { conversationId: number; messageId: number; senderName: string }) => {
-        console.log(`${data.senderName} đã nhắc đến bạn trong đoạn chat ${data.conversationId}.`);
+        // Bỏ qua nếu đang mở đúng đoạn chat & focus: người dùng đã thấy tin nhắn.
+        const isViewing = document.visibilityState === 'visible'
+            && document.hasFocus()
+            && chatStore.currentConversationId === data.conversationId;
+        if (isViewing) return;
+
+        notificationToastsStore.push({
+            id: crypto.randomUUID(),
+            type: 'chat.mention',
+            title: data.senderName,
+            body: `${data.senderName} đã nhắc đến bạn.`,
+            icon: null,
+            link: `/?conversationId=${data.conversationId}`,
+            conversationId: data.conversationId,
+        });
     });
 
     socket.on("read_state_updated", (data: ReadStateUpdate) => {

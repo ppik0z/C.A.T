@@ -7,12 +7,19 @@ import ConversationPanel from '../components/organisms/ConversationPanel.vue';
 import FriendsPanel from '../components/organisms/FriendsPanel.vue';
 import SidebarRail from '../components/organisms/SidebarRail.vue';
 import IncomingCallToastStack from '../components/molecules/IncomingCallToastStack.vue';
+import NotificationToastStack from '../components/molecules/NotificationToastStack.vue';
 import CallMiniPlayer from '../components/molecules/CallMiniPlayer.vue';
 import PushNotificationBanner from '../components/molecules/PushNotificationBanner.vue';
 import { useCallStore } from '../stores/call';
 import { useChatStore } from '../stores/chat';
 import type { AppSection } from '../types/navigation';
-import { pushOpenConversationEvent, takePendingPushConversationId } from '../pwa/pwaRuntime';
+import {
+  pushCallAnswerEvent,
+  pushCallDeclineEvent,
+  pushNavigateEvent,
+  pushOpenConversationEvent,
+  takePendingPushConversationId,
+} from '../pwa/pwaRuntime';
 
 type MobileView = 'list' | 'chat';
 const SettingsPanel = defineAsyncComponent(() => import('../components/organisms/SettingsPanel.vue'));
@@ -96,16 +103,60 @@ const handlePushOpenConversation = (event: Event) => {
   setPendingConversation((event as CustomEvent<{ conversationId?: string }>).detail?.conversationId);
 };
 
+const navigateToLink = (link: string) => {
+  try {
+    const url = new URL(link, window.location.origin);
+    const conversationId = url.searchParams.get('conversationId');
+    if (conversationId) {
+      setPendingConversation(conversationId);
+      return;
+    }
+    if (url.searchParams.get('view') === 'friends') {
+      handleNavigate('friends');
+    }
+  } catch {
+    // link không hợp lệ -> bỏ qua, app vẫn ở màn hình hiện tại
+  }
+};
+
+const handlePushNavigate = (event: Event) => {
+  const link = (event as CustomEvent<{ link?: string }>).detail?.link;
+  if (typeof link === 'string') navigateToLink(link);
+};
+
+const handlePushCallDecline = (event: Event) => {
+  const callId = (event as CustomEvent<{ callId?: number }>).detail?.callId;
+  if (callId) callStore.declineCall(callId);
+};
+
+// Bấm "Trả lời" trên thông báo OS: app vừa được đưa lên trước. Đồng bộ lại cuộc
+// gọi đang đổ chuông (socket có thể đã rớt khi app ở nền) để pop up cuộc gọi hiện
+// lại, rồi mở đúng đoạn chat. Người dùng tự bấm "Chấp nhận" ở pop up.
+const handlePushCallAnswer = (event: Event) => {
+  const detail = (event as CustomEvent<{ callId?: number; conversationId?: string | null }>).detail;
+  callStore.syncActiveCalls();
+  if (detail?.conversationId) setPendingConversation(detail.conversationId);
+};
+
 watch(() => chatStore.conversations.length, openPendingConversation);
 
 onMounted(() => {
-  setPendingConversation(new URL(window.location.href).searchParams.get('conversationId'));
+  const params = new URL(window.location.href).searchParams;
+  setPendingConversation(params.get('conversationId'));
   setPendingConversation(takePendingPushConversationId());
+  if (params.get('view') === 'friends') handleNavigate('friends');
+
   window.addEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+  window.addEventListener(pushNavigateEvent, handlePushNavigate);
+  window.addEventListener(pushCallDeclineEvent, handlePushCallDecline);
+  window.addEventListener(pushCallAnswerEvent, handlePushCallAnswer);
 });
 
 onUnmounted(() => {
   window.removeEventListener(pushOpenConversationEvent, handlePushOpenConversation);
+  window.removeEventListener(pushNavigateEvent, handlePushNavigate);
+  window.removeEventListener(pushCallDeclineEvent, handlePushCallDecline);
+  window.removeEventListener(pushCallAnswerEvent, handlePushCallAnswer);
 });
 </script>
 
@@ -166,6 +217,7 @@ onUnmounted(() => {
     </main>
 
     <IncomingCallToastStack />
+    <NotificationToastStack />
     <CallOverlay />
     <CallMiniPlayer />
     <PushNotificationBanner />

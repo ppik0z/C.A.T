@@ -17,11 +17,13 @@ export interface CallMediaSnapshot {
   participantIdentities: string[];
   activeSpeakerIdentities: string[];
   videoTracksByIdentity: Record<string, CallVideoTrack>;
+  screenTracksByIdentity: Record<string, CallVideoTrack>;
 }
 
 export interface LocalMediaState {
   micEnabled: boolean;
   cameraEnabled: boolean;
+  screenShareEnabled: boolean;
 }
 
 interface ConnectCallMediaInput {
@@ -112,6 +114,18 @@ class CallMediaService {
     this.emitSnapshot();
   }
 
+  async setScreenShareEnabled(enabled: boolean): Promise<void> {
+    const room = this.ensureRoom();
+    try {
+      // audio: true để chia sẻ kèm âm thanh tab (trình duyệt hỗ trợ một phần).
+      await room.localParticipant.setScreenShareEnabled(enabled, { audio: true });
+    } finally {
+      // Luôn đồng bộ lại trạng thái thật kể cả khi người dùng huỷ hộp thoại chọn màn hình.
+      this.callbacks?.onLocalMediaChange(this.getLocalMediaState());
+      this.emitSnapshot();
+    }
+  }
+
   getCurrentCallId() {
     return this.activeCallId;
   }
@@ -160,8 +174,15 @@ class CallMediaService {
     });
     room.on(liveKit.RoomEvent.TrackMuted, () => this.emitSnapshot());
     room.on(liveKit.RoomEvent.TrackUnmuted, () => this.emitSnapshot());
-    room.on(liveKit.RoomEvent.LocalTrackPublished, () => this.emitSnapshot());
-    room.on(liveKit.RoomEvent.LocalTrackUnpublished, () => this.emitSnapshot());
+    room.on(liveKit.RoomEvent.LocalTrackPublished, () => {
+      this.callbacks?.onLocalMediaChange(this.getLocalMediaState());
+      this.emitSnapshot();
+    });
+    room.on(liveKit.RoomEvent.LocalTrackUnpublished, () => {
+      // Bắt cả trường hợp người dùng dừng chia sẻ bằng nút gốc của trình duyệt.
+      this.callbacks?.onLocalMediaChange(this.getLocalMediaState());
+      this.emitSnapshot();
+    });
     room.on(liveKit.RoomEvent.ActiveSpeakersChanged, () => this.emitSnapshot());
   }
 
@@ -185,7 +206,7 @@ class CallMediaService {
       }
     }
 
-    this.callbacks?.onLocalMediaChange({ micEnabled, cameraEnabled });
+    this.callbacks?.onLocalMediaChange({ micEnabled, cameraEnabled, screenShareEnabled: false });
   }
 
   private syncSubscriptions() {
@@ -197,6 +218,12 @@ class CallMediaService {
         if (!this.isRemotePublication(publication)) return;
 
         if (publication.source === Track.Source.Microphone) {
+          publication.setSubscribed(true);
+          return;
+        }
+
+        // Chia sẻ màn hình luôn được subscribe để không bị ẩn bởi phân trang video.
+        if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
           publication.setSubscribed(true);
           return;
         }
@@ -215,6 +242,7 @@ class CallMediaService {
         participantIdentities: [],
         activeSpeakerIdentities: [],
         videoTracksByIdentity: {},
+        screenTracksByIdentity: {},
       });
       return;
     }
@@ -222,13 +250,18 @@ class CallMediaService {
     const { Track } = this.liveKitModule;
 
     const videoTracksByIdentity: Record<string, CallVideoTrack> = {};
+    const screenTracksByIdentity: Record<string, CallVideoTrack> = {};
     const localIdentity = this.room.localParticipant.identity || this.localIdentity;
     const localVideoTrack = this.room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack;
     if (localIdentity && localVideoTrack) videoTracksByIdentity[localIdentity] = localVideoTrack;
+    const localScreenTrack = this.room.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack;
+    if (localIdentity && localScreenTrack) screenTracksByIdentity[localIdentity] = localScreenTrack;
 
     this.room.remoteParticipants.forEach((participant) => {
       const videoTrack = participant.getTrackPublication(Track.Source.Camera)?.videoTrack;
       if (videoTrack) videoTracksByIdentity[participant.identity] = videoTrack as RemoteVideoTrack;
+      const screenTrack = participant.getTrackPublication(Track.Source.ScreenShare)?.videoTrack;
+      if (screenTrack) screenTracksByIdentity[participant.identity] = screenTrack as RemoteVideoTrack;
     });
 
     this.callbacks.onSnapshot({
@@ -238,6 +271,7 @@ class CallMediaService {
       ],
       activeSpeakerIdentities: this.room.activeSpeakers.map((participant) => participant.identity),
       videoTracksByIdentity,
+      screenTracksByIdentity,
     });
   }
 
@@ -271,9 +305,11 @@ class CallMediaService {
     const Track = this.liveKitModule?.Track;
     const microphone = Track ? this.room?.localParticipant.getTrackPublication(Track.Source.Microphone) : null;
     const camera = Track ? this.room?.localParticipant.getTrackPublication(Track.Source.Camera) : null;
+    const screenShare = Track ? this.room?.localParticipant.getTrackPublication(Track.Source.ScreenShare) : null;
     return {
       micEnabled: Boolean(microphone && !microphone.isMuted),
       cameraEnabled: Boolean(camera && !camera.isMuted),
+      screenShareEnabled: Boolean(screenShare && screenShare.track && !screenShare.isMuted),
     };
   }
 

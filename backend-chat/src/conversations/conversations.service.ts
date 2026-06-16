@@ -32,6 +32,7 @@ interface ConversationRow {
     lastMessageType: string | null;
     unreadCount: number;
     lastSeenMessageIndex: number;
+    mutedUntil: Date | null;
     isAdmin: boolean;
     memberCount: number;
     friendId: number | null;
@@ -88,7 +89,7 @@ export class ConversationsService {
         if (existing.length > 0) return existing[0];
 
         // Chưa có -> Tạo mới
-        return await this.drizzle.db.transaction(async (tx) => {
+        const created = await this.drizzle.db.transaction(async (tx) => {
             const [newConv] = await tx.insert(conversations).values({
                 isGroup: false,
             });
@@ -100,6 +101,11 @@ export class ConversationsService {
 
             return { id: newConv.insertId };
         });
+
+        // Phát tán phòng mới cho cả 2 phía đang online để đoạn chat hiện ngay
+        this.emitConversationUpsert([user1Id, user2Id], created.id);
+
+        return created;
     }
 
     //----getMyConversations----
@@ -131,6 +137,7 @@ export class ConversationsService {
                 lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
+                mutedUntil: myMember.mutedUntil,
                 isAdmin: myMember.isAdmin,
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
@@ -168,6 +175,8 @@ export class ConversationsService {
                 unreadCount: conv.unreadCount,
                 lastMessageIndex: conv.lastMessageIndex,
                 lastSeenMessageIndex: conv.lastSeenMessageIndex,
+                mutedUntil: conv.mutedUntil,
+                isMuted: this.isConversationMuted(conv.mutedUntil),
                 memberCount: conv.memberCount,
                 myMember: {
                     userId: currentUserId,
@@ -260,6 +269,12 @@ export class ConversationsService {
         }
 
         this.emitConversationUpsert([creatorId, ...selectedMemberIds], conversationId);
+        this.eventEmitter.emit('conversation.members.added', {
+            conversationId,
+            groupName: name,
+            actorId: creatorId,
+            addedUserIds: selectedMemberIds,
+        });
         return this.buildConversationForUser(creatorId, conversationId);
     }
 
@@ -272,6 +287,26 @@ export class ConversationsService {
             members,
             memberCount: summary.isGroup ? members.length : summary.memberCount,
         };
+    }
+
+    /**
+     * Tắt/bật thông báo theo hội thoại cho riêng người dùng.
+     * mutedUntil = null để bật lại; mốc thời gian (kể cả mốc xa = vô thời hạn) để tắt.
+     */
+    async setConversationMute(currentUserId: number, conversationId: number, mutedUntil: Date | null) {
+        await this.ensureMember(currentUserId, conversationId);
+
+        await this.drizzle.db
+            .update(conversationMembers)
+            .set({ mutedUntil })
+            .where(and(
+                eq(conversationMembers.conversationId, conversationId),
+                eq(conversationMembers.userId, currentUserId),
+            ));
+
+        // Đồng bộ trạng thái mute sang mọi tab/thiết bị khác của chính người dùng.
+        this.emitConversationUpsert([currentUserId], conversationId);
+        return this.buildConversationForUser(currentUserId, conversationId);
     }
 
     async updateGroup(
@@ -354,7 +389,19 @@ export class ConversationsService {
             isAdmin: false,
         })));
 
+        const [group] = await this.drizzle.db
+            .select({ name: conversations.name })
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+
         this.emitConversationUpsert([...existingMembers, ...newIds], conversationId);
+        this.eventEmitter.emit('conversation.members.added', {
+            conversationId,
+            groupName: group?.name ?? null,
+            actorId: currentUserId,
+            addedUserIds: newIds,
+        });
         return this.getConversationDetail(currentUserId, conversationId);
     }
 
@@ -368,12 +415,29 @@ export class ConversationsService {
         }
 
         const membersBefore = await this.getConversationMemberIds(conversationId);
+        const isKick = currentUserId !== targetUserId;
+        const [groupBefore] = isKick
+            ? await this.drizzle.db
+                .select({ name: conversations.name })
+                .from(conversations)
+                .where(eq(conversations.id, conversationId))
+                .limit(1)
+            : [{ name: null }];
         await this.drizzle.db
             .delete(conversationMembers)
             .where(and(
                 eq(conversationMembers.conversationId, conversationId),
                 eq(conversationMembers.userId, targetUserId),
             ));
+
+        if (isKick) {
+            this.eventEmitter.emit('conversation.member.kicked', {
+                conversationId,
+                groupName: groupBefore?.name ?? null,
+                actorId: currentUserId,
+                targetUserId,
+            });
+        }
 
         const remainingMembers = membersBefore.filter((id) => id !== targetUserId);
         if (remainingMembers.length === 0) {
@@ -430,6 +494,8 @@ export class ConversationsService {
             unreadCount: summary.unreadCount,
             lastMessageIndex: summary.lastMessageIndex,
             lastSeenMessageIndex: summary.lastSeenMessageIndex,
+            mutedUntil: summary.mutedUntil,
+            isMuted: this.isConversationMuted(summary.mutedUntil),
             memberCount: summary.memberCount,
             myMember: {
                 userId: currentUserId,
@@ -473,6 +539,7 @@ export class ConversationsService {
                 lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
+                mutedUntil: myMember.mutedUntil,
                 isAdmin: myMember.isAdmin,
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
@@ -522,6 +589,23 @@ export class ConversationsService {
             avatar: member.avatar,
             isOnline: await this.presenceService.isUserOnline(member.userId),
         })));
+    }
+
+    private async ensureMember(userId: number, conversationId: number) {
+        const [member] = await this.drizzle.db
+            .select({ id: conversationMembers.id })
+            .from(conversationMembers)
+            .where(and(
+                eq(conversationMembers.conversationId, conversationId),
+                eq(conversationMembers.userId, userId),
+            ))
+            .limit(1);
+
+        if (!member) throw new ForbiddenException('Bạn không có quyền trong phòng chat này.');
+    }
+
+    private isConversationMuted(mutedUntil: Date | null) {
+        return mutedUntil != null && mutedUntil.getTime() > Date.now();
     }
 
     private async ensureGroupMember(userId: number, conversationId: number): Promise<GroupMembership> {

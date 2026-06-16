@@ -19,6 +19,7 @@ export interface CallParticipant {
   status: CallParticipantStatus;
   micEnabled: boolean;
   cameraEnabled: boolean;
+  screenShareEnabled: boolean;
   joinedAt: string | null;
   leftAt: string | null;
   declinedAt: string | null;
