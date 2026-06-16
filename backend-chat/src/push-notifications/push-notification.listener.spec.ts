@@ -6,7 +6,7 @@ import { Logger } from '@nestjs/common';
 
 describe('PushNotificationListener', () => {
   const subscriptions = {
-    getConversationRecipientIds: jest.fn(),
+    getConversationRecipients: jest.fn(),
     getActiveFcmSubscriptions: jest.fn(),
     revokeTokens: jest.fn(),
   };
@@ -33,10 +33,13 @@ describe('PushNotificationListener', () => {
     jest.clearAllMocks();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-    subscriptions.getConversationRecipientIds.mockResolvedValue([8, 10]);
+    subscriptions.getConversationRecipients.mockResolvedValue([
+      { userId: 8, muted: false },
+      { userId: 10, muted: false },
+    ]);
     subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
-      { userId: 8, token: 'visible-token', showNotificationPreview: true },
-      { userId: 10, token: 'private-token', showNotificationPreview: false },
+      { userId: 8, token: 'visible-token', showNotificationPreview: true, notificationSound: true, status: 'online' },
+      { userId: 10, token: 'private-token', showNotificationPreview: false, notificationSound: true, status: 'online' },
     ]);
     fcmPushProvider.send.mockResolvedValue({
       invalidTokens: ['private-token'],
@@ -52,7 +55,7 @@ describe('PushNotificationListener', () => {
   it('sends recipient-specific previews and revokes invalid tokens', async () => {
     await listener.handleMessageCreated(message);
 
-    expect(subscriptions.getConversationRecipientIds).toHaveBeenCalledWith(9, 7);
+    expect(subscriptions.getConversationRecipients).toHaveBeenCalledWith(9, 7);
     expect(fcmPushProvider.send).toHaveBeenCalledWith([
       {
         token: 'visible-token',
@@ -86,6 +89,50 @@ describe('PushNotificationListener', () => {
     expect(subscriptions.revokeTokens).toHaveBeenCalledWith(['private-token']);
   });
 
+  it('skips muted recipients but still notifies muted users who are mentioned', async () => {
+    subscriptions.getConversationRecipients.mockResolvedValue([
+      { userId: 8, muted: true },
+      { userId: 10, muted: true },
+    ]);
+    subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
+      { userId: 10, token: 'mentioned-token', showNotificationPreview: true, notificationSound: true, status: 'online' },
+    ]);
+
+    await listener.handleMessageCreated({ ...message, mentionedUserIds: [10] });
+
+    expect(subscriptions.getActiveFcmSubscriptions).toHaveBeenCalledWith([10]);
+    expect(fcmPushProvider.send).toHaveBeenCalledWith([
+      expect.objectContaining({
+        token: 'mentioned-token',
+        data: expect.objectContaining({ type: 'chat.mention' }),
+      }),
+    ]);
+  });
+
+  it('marks the notification silent when the recipient disabled sound', async () => {
+    subscriptions.getConversationRecipients.mockResolvedValue([{ userId: 8, muted: false }]);
+    subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
+      { userId: 8, token: 'silent-token', showNotificationPreview: true, notificationSound: false, status: 'online' },
+    ]);
+
+    await listener.handleMessageCreated(message);
+
+    expect(fcmPushProvider.send).toHaveBeenCalledWith([
+      expect.objectContaining({ data: expect.objectContaining({ silent: '1' }) }),
+    ]);
+  });
+
+  it('does not push chat messages to recipients in do-not-disturb', async () => {
+    subscriptions.getConversationRecipients.mockResolvedValue([{ userId: 8, muted: false }]);
+    subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
+      { userId: 8, token: 'dnd-token', showNotificationPreview: true, notificationSound: true, status: 'dnd' },
+    ]);
+
+    await listener.handleMessageCreated(message);
+
+    expect(fcmPushProvider.send).not.toHaveBeenCalled();
+  });
+
   it('skips FCM when no active subscriptions exist', async () => {
     subscriptions.getActiveFcmSubscriptions.mockResolvedValueOnce([]);
 
@@ -108,7 +155,7 @@ describe('PushNotificationListener', () => {
       avatar: 'https://cdn/avatar.png',
     });
     subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
-      { userId: 8, token: 'receiver-token', showNotificationPreview: true },
+      { userId: 8, token: 'receiver-token', showNotificationPreview: true, notificationSound: true, status: 'online' },
     ]);
 
     await listener.handleFriendRequestReceived({ senderId: 7, receiverId: 8 });
@@ -139,7 +186,7 @@ describe('PushNotificationListener', () => {
       avatar: null,
     });
     subscriptions.getActiveFcmSubscriptions.mockResolvedValue([
-      { userId: 8, token: 'added-token', showNotificationPreview: true },
+      { userId: 8, token: 'added-token', showNotificationPreview: true, notificationSound: true, status: 'online' },
     ]);
 
     await listener.handleConversationMembersAdded({
@@ -173,12 +220,9 @@ describe('PushNotificationListener', () => {
     await listener.handleCallStarted({
       callId: 50,
       conversationId: 9,
-      memberIds: [7, 8],
       ringingUserIds: [8],
-      ended: false,
       state: {
         kind: 'video',
-        isGroup: false,
         startedBy: { id: 7, username: 'an_nguyen', displayName: 'An', avatar: 'https://cdn/a.png' },
       },
     });
@@ -187,19 +231,20 @@ describe('PushNotificationListener', () => {
     expect(fcmPushProvider.send).toHaveBeenCalledWith([
       {
         token: 'callee-token',
-        data: {
+        data: expect.objectContaining({
           type: 'call.incoming',
           title: 'An',
           body: 'Cuộc gọi video đến',
           icon: 'https://cdn/a.png',
           tag: 'call:50',
-          link: '/?conversationId=9&answerCallId=50',
+          link: '/?conversationId=9',
           conversationId: '9',
           callId: '50',
           callKind: 'video',
+          declineToken: expect.any(String),
           senderId: '7',
           senderName: 'An',
-        },
+        }),
       },
     ]);
   });

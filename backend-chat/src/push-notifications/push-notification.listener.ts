@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { FcmPushProvider } from './fcm-push.provider';
 import { PushSubscriptionsService, type ActiveFcmSubscription } from './push-subscriptions.service';
 import { ProfilesService } from '../profiles/profiles.service';
+import { signCallDeclineToken } from '../calls/call-decline-token';
 import type { PushNotificationData } from './push-notification.types';
 
 interface MessageCreatedEvent {
@@ -39,20 +40,25 @@ interface ConversationMemberKickedEvent {
   targetUserId: number;
 }
 
-interface CallMutationEvent {
+interface CallStartedEvent {
   callId: number;
   conversationId: number;
-  memberIds: number[];
   ringingUserIds: number[];
-  ended: boolean;
   state: {
     kind: 'audio' | 'video';
-    isGroup: boolean;
     startedBy: { id: number; username: string; displayName: string | null; avatar: string | null };
   };
 }
 
+interface DispatchOptions {
+  /** Tôn trọng trạng thái DND của người nhận (mặc định true; cuộc gọi đặt false). */
+  respectUserStatus?: boolean;
+  /** Áp dụng cài đặt notificationSound để tắt âm (mặc định true; cuộc gọi đặt false). */
+  applySilent?: boolean;
+}
+
 const MAX_PREVIEW_LENGTH = 120;
+const CALL_DISPATCH_OPTIONS: DispatchOptions = { respectUserStatus: false, applySilent: false };
 
 @Injectable()
 export class PushNotificationListener {
@@ -66,8 +72,13 @@ export class PushNotificationListener {
 
   @OnEvent('message.created')
   async handleMessageCreated(payload: MessageCreatedEvent) {
-    const userIds = await this.subscriptions.getConversationRecipientIds(payload.conversationId, payload.senderId);
+    const recipients = await this.subscriptions.getConversationRecipients(payload.conversationId, payload.senderId);
     const mentionedIds = new Set(payload.mentionedUserIds ?? []);
+
+    // Đã tắt thông báo phòng này thì bỏ qua, TRỪ khi bị mention (@user hoặc @everyone).
+    const userIds = recipients
+      .filter((recipient) => mentionedIds.has(recipient.userId) || !recipient.muted)
+      .map((recipient) => recipient.userId);
 
     await this.dispatch(userIds, (subscription) => ({
       type: mentionedIds.has(subscription.userId) ? 'chat.mention' : 'chat.message',
@@ -153,66 +164,50 @@ export class PushNotificationListener {
   }
 
   @OnEvent('call.started')
-  async handleCallStarted(payload: CallMutationEvent) {
+  async handleCallStarted(payload: CallStartedEvent) {
     const caller = payload.state.startedBy;
     const name = caller.displayName || caller.username;
     const isVideo = payload.state.kind === 'video';
 
-    await this.dispatch(payload.ringingUserIds, () => ({
+    await this.dispatch(payload.ringingUserIds, (subscription) => ({
       type: 'call.incoming',
       title: name,
       body: isVideo ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến',
       icon: caller.avatar ?? undefined,
       tag: `call:${payload.callId}`,
-      // answerCallId để client tự bắt máy khi mở app từ thông báo.
-      link: `/?conversationId=${payload.conversationId}&answerCallId=${payload.callId}`,
+      // Bấm vào thông báo chỉ mở app; người dùng tự bắt máy ở pop up trong app.
+      link: `/?conversationId=${payload.conversationId}`,
       conversationId: String(payload.conversationId),
       callId: String(payload.callId),
       callKind: payload.state.kind,
+      // Token để service worker từ chối cuộc gọi này khi app đã đóng.
+      declineToken: signCallDeclineToken(payload.callId, subscription.userId),
       senderId: String(caller.id),
       senderName: name,
-    }));
-  }
-
-  @OnEvent('call.ended')
-  async handleCallEnded(payload: CallMutationEvent) {
-    await this.dismissCallNotification(payload);
-  }
-
-  // Decline / leave / hết giờ đổ chuông kết thúc cuộc gọi qua 'call.state_changed'
-  // với ended=true (không phải 'call.ended'), nên cần bắt cả sự kiện này.
-  @OnEvent('call.state_changed')
-  async handleCallStateChanged(payload: CallMutationEvent) {
-    if (payload.ended) await this.dismissCallNotification(payload);
-  }
-
-  private async dismissCallNotification(payload: CallMutationEvent) {
-    // Đóng thông báo cuộc gọi đến đang treo trên thiết bị nền khi cuộc gọi
-    // kết thúc / bị huỷ / hết giờ đổ chuông.
-    await this.dispatch(payload.memberIds, () => ({
-      type: 'call.cancel',
-      title: '',
-      body: '',
-      tag: `call:${payload.callId}`,
-      link: '/',
-      callId: String(payload.callId),
-      conversationId: String(payload.conversationId),
-    }));
+    }), CALL_DISPATCH_OPTIONS);
   }
 
   private async dispatch(
     userIds: number[],
     build: (subscription: ActiveFcmSubscription) => PushNotificationData,
+    options: DispatchOptions = {},
   ) {
+    const { respectUserStatus = true, applySilent = true } = options;
     try {
       if (userIds.length === 0) return;
-      const subscriptions = await this.subscriptions.getActiveFcmSubscriptions(userIds);
+      let subscriptions = await this.subscriptions.getActiveFcmSubscriptions(userIds);
+      // Tôn trọng "Không làm phiền" (trừ cuộc gọi luôn đổ chuông).
+      if (respectUserStatus) {
+        subscriptions = subscriptions.filter((subscription) => subscription.status !== 'dnd');
+      }
       if (subscriptions.length === 0) return;
 
-      const result = await this.fcmPushProvider.send(subscriptions.map((subscription) => ({
-        token: subscription.token,
-        data: this.toFcmData(build(subscription)),
-      })));
+      const result = await this.fcmPushProvider.send(subscriptions.map((subscription) => {
+        const data = build(subscription);
+        // Tắt âm theo cài đặt notificationSound (cuộc gọi bỏ qua quy tắc này).
+        if (applySilent && !subscription.notificationSound) data.silent = '1';
+        return { token: subscription.token, data: this.toFcmData(data) };
+      }));
 
       await this.subscriptions.revokeTokens(result.invalidTokens);
       if (result.failureCount > 0) {
