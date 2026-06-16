@@ -7,9 +7,46 @@ import type { AppNotification, PushNotificationData } from '../types/notificatio
 let unsubscribe: (() => void) | null = null;
 
 const CHAT_TYPES = new Set(['chat.message', 'chat.mention']);
-// Cuộc gọi khi đang mở app do IncomingCallToastStack (chuông in-app) đảm nhiệm,
-// nên foreground bỏ qua để tránh trùng.
-const IGNORED_FOREGROUND_TYPES = new Set(['call.incoming', 'call.cancel']);
+
+type RichNotificationOptions = NotificationOptions & {
+  requireInteraction?: boolean;
+  vibrate?: number[];
+  actions?: { action: string; title: string }[];
+};
+
+const isDocumentFocused = () => document.visibilityState === 'visible' && document.hasFocus();
+
+// Cuộc gọi đến: khi app đang focus thì để chuông in-app (IncomingCallToastStack)
+// lo; khi KHÔNG focus thì vẫn phải hiện thông báo OS (kể cả lúc bị mute, vì cuộc
+// gọi luôn đổ chuông). Phòng trường hợp FCM đẩy vào foreground dù tab đang ẩn.
+const showCallOsNotification = (data: PushNotificationData) => {
+  if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
+  const isVideo = data.callKind === 'video';
+  void navigator.serviceWorker.ready.then((registration) => {
+    const options: RichNotificationOptions = {
+      body: data.body || (isVideo ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến'),
+      icon: data.icon || '/pwa/icon-192.png',
+      badge: '/pwa/icon-192.png',
+      tag: data.tag || `call:${data.callId}`,
+      requireInteraction: true,
+      vibrate: [500, 300, 500, 300, 500],
+      actions: [
+        { action: 'answer', title: 'Trả lời' },
+        { action: 'decline', title: 'Từ chối' },
+      ],
+      data: {
+        type: 'call.incoming',
+        conversationId: data.conversationId ?? null,
+        callId: data.callId ?? null,
+        callKind: data.callKind ?? null,
+        declineToken: data.declineToken ?? null,
+        link: data.link || '/',
+      },
+    };
+    void registration.showNotification(data.title || 'Cuộc gọi đến', options);
+  });
+};
+
 
 const toAppNotification = (data: PushNotificationData): AppNotification => {
   const conversationId = data.conversationId ? Number(data.conversationId) : Number.NaN;
@@ -21,14 +58,14 @@ const toAppNotification = (data: PushNotificationData): AppNotification => {
     icon: data.icon || null,
     link: data.link || '/',
     conversationId: Number.isInteger(conversationId) && conversationId > 0 ? conversationId : null,
+    silent: data.silent === '1',
   };
 };
 
 const isViewingConversation = (conversationId: number | null) => {
   if (!conversationId) return false;
   const chatStore = useChatStore();
-  const focused = document.visibilityState === 'visible' && document.hasFocus();
-  return focused && chatStore.currentConversationId === conversationId;
+  return isDocumentFocused() && chatStore.currentConversationId === conversationId;
 };
 
 const showOsNotification = (notification: AppNotification) => {
@@ -40,6 +77,7 @@ const showOsNotification = (notification: AppNotification) => {
       icon: notification.icon || '/pwa/icon-192.png',
       badge: '/pwa/icon-192.png',
       tag: `${notification.type}:${notification.conversationId ?? notification.id}`,
+      silent: notification.silent,
       data: {
         type: notification.type,
         conversationId: notification.conversationId ? String(notification.conversationId) : null,
@@ -50,7 +88,11 @@ const showOsNotification = (notification: AppNotification) => {
 };
 
 const handleForegroundData = (data: PushNotificationData) => {
-  if (data.type && IGNORED_FOREGROUND_TYPES.has(data.type)) return;
+  // Cuộc gọi: focus -> chuông in-app; không focus -> thông báo OS có nút Trả lời/Từ chối.
+  if (data.type === 'call.incoming') {
+    if (!isDocumentFocused()) showCallOsNotification(data);
+    return;
+  }
 
   const notification = toAppNotification(data);
 

@@ -26,6 +26,17 @@ const isTerminalCallStatus = (status: CallState['status']) => {
   return status === 'ended' || status === 'missed' || status === 'cancelled';
 };
 
+const closeCallOsNotification = async (callId: number) => {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications({ tag: `call:${callId}` });
+    notifications.forEach((notification) => notification.close());
+  } catch {
+    // Không có service worker / notification: bỏ qua.
+  }
+};
+
 export const useCallStore = defineStore('call', {
   state: () => ({
     callsByConversationId: {} as Record<number, CallState>,
@@ -193,6 +204,9 @@ export const useCallStore = defineStore('call', {
     applyCallEnded(call: CallState) {
       this.upsertCall(call);
       this.removeIncomingCall(call.id);
+      // Đóng thông báo OS cuộc gọi (nếu có) khi cuộc gọi kết thúc và app đang mở —
+      // thay cho push 'call.cancel' để tránh thông báo "cập nhật ở chế độ nền".
+      void closeCallOsNotification(call.id);
 
       if (this.overlayCallId === call.id) {
         this.overlayCallId = null;

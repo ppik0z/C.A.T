@@ -18,9 +18,25 @@ if (precacheManifest.length > 0) {
   registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '') || '/api';
+
 const findAppClient = async () => {
   const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   return windowClients.find((client) => new URL(client.url).origin === self.location.origin) ?? null;
+};
+
+// Từ chối cuộc gọi khi app đã đóng: gọi thẳng API bằng token ký trong push
+// (không cần mở app, không cần Bearer access token).
+const declineCallViaApi = async (callId: string, token: string) => {
+  try {
+    await fetch(`${API_BASE}/calls/${callId}/decline/by-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+  } catch {
+    // Mạng lỗi: cuộc gọi sẽ tự hết giờ đổ chuông ở phía người gọi.
+  }
 };
 
 self.addEventListener('notificationclick', (event) => {
@@ -30,25 +46,36 @@ self.addEventListener('notificationclick', (event) => {
   const link = typeof data.link === 'string' ? data.link : '/';
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId : null;
   const callId = typeof data.callId === 'string' ? data.callId : null;
+  const declineToken = typeof data.declineToken === 'string' ? data.declineToken : null;
   const isCall = data.type === 'call.incoming';
+
+  const toAbsolute = (path: string) => new URL(path, self.location.origin).href;
 
   event.waitUntil((async () => {
     const existingClient = await findAppClient();
 
-    // Cuộc gọi đến: nút "Từ chối" báo client từ chối mà không cần mở app.
+    // Cuộc gọi đến: nút "Từ chối" — KHÔNG mở app.
     if (isCall && event.action === 'decline') {
-      if (existingClient) existingClient.postMessage({ type: 'CALL_DECLINE', callId });
+      if (existingClient) {
+        existingClient.postMessage({ type: 'CALL_DECLINE', callId });
+      } else if (callId && declineToken) {
+        await declineCallViaApi(callId, declineToken);
+      }
       return;
     }
 
-    // Bắt máy (hoặc bấm vào thân thông báo cuộc gọi) → mở app và tự trả lời.
+    // Bắt máy: nút "Trả lời" hoặc bấm vào thân thông báo cuộc gọi → đưa app lên
+    // trước rồi hiện lại pop up cuộc gọi trong app để người dùng tự bắt máy.
     if (isCall) {
       if (existingClient) {
+        // App đang mở (có thể ở nền, socket đã rớt) → báo app đồng bộ lại cuộc gọi
+        // để pop up hiện ngay, rồi focus đưa app lên trước.
         existingClient.postMessage({ type: 'CALL_ANSWER', callId, conversationId });
         await existingClient.focus();
         return;
       }
-      await self.clients.openWindow(link);
+      // App đã đóng → mở cửa sổ mới; app cold-start sẽ tự đồng bộ và hiện pop up.
+      await self.clients.openWindow(toAbsolute(link));
       return;
     }
 
@@ -58,7 +85,7 @@ self.addEventListener('notificationclick', (event) => {
       return;
     }
 
-    await self.clients.openWindow(link);
+    await self.clients.openWindow(toAbsolute(link));
   })());
 });
 
@@ -83,19 +110,12 @@ onBackgroundMessage(messaging, (payload) => {
 
   const tag = data.tag || `notif:${Date.now()}`;
 
-  // Cuộc gọi kết thúc/huỷ/timeout → đóng thông báo cuộc gọi đến đang treo.
-  if (data.type === 'call.cancel') {
-    void self.registration.getNotifications({ tag }).then((notifications) => {
-      notifications.forEach((notification) => notification.close());
-    });
-    return;
-  }
-
   const commonData = {
     type: data.type || null,
     conversationId: data.conversationId || null,
     callId: data.callId || null,
     callKind: data.callKind || null,
+    declineToken: data.declineToken || null,
     link: data.link || '/',
   };
 
@@ -127,6 +147,7 @@ onBackgroundMessage(messaging, (payload) => {
     badge: '/pwa/icon-192.png',
     tag,
     renotify: Boolean(data.tag),
+    silent: data.silent === '1',
     data: commonData,
   };
   void self.registration.showNotification(data.title || 'ChatChoi', options);
