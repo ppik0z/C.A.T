@@ -224,6 +224,9 @@ export const conversationMembers = mysqlTable(
     isAdmin: boolean('isAdmin').notNull().default(false),
     lastSeenMessageId: int('lastSeenMessageId'),
     lastSeenMessageIndex: int('lastSeenMessageIndex').notNull().default(0),
+    // Tắt thông báo theo hội thoại: NULL = không tắt; đang tắt khi mutedUntil > NOW().
+    // Tắt vô thời hạn lưu mốc rất xa (9999-12-31).
+    mutedUntil: datetime('mutedUntil'),
     joinedAt: datetime('joinedAt')
       .notNull()
       .default(sql`CURRENT_TIMESTAMP`),

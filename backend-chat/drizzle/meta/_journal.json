@@ -64,6 +64,13 @@
       "when": 1781516092367,
       "tag": "0008_clever_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1781575256620,
+      "tag": "0009_classy_leader",
+      "breakpoints": true
     }
   ]
 }

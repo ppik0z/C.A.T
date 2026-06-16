@@ -32,6 +32,7 @@ interface ConversationRow {
     lastMessageType: string | null;
     unreadCount: number;
     lastSeenMessageIndex: number;
+    mutedUntil: Date | null;
     isAdmin: boolean;
     memberCount: number;
     friendId: number | null;
@@ -136,6 +137,7 @@ export class ConversationsService {
                 lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
+                mutedUntil: myMember.mutedUntil,
                 isAdmin: myMember.isAdmin,
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
@@ -173,6 +175,8 @@ export class ConversationsService {
                 unreadCount: conv.unreadCount,
                 lastMessageIndex: conv.lastMessageIndex,
                 lastSeenMessageIndex: conv.lastSeenMessageIndex,
+                mutedUntil: conv.mutedUntil,
+                isMuted: this.isConversationMuted(conv.mutedUntil),
                 memberCount: conv.memberCount,
                 myMember: {
                     userId: currentUserId,
@@ -283,6 +287,26 @@ export class ConversationsService {
             members,
             memberCount: summary.isGroup ? members.length : summary.memberCount,
         };
+    }
+
+    /**
+     * Tắt/bật thông báo theo hội thoại cho riêng người dùng.
+     * mutedUntil = null để bật lại; mốc thời gian (kể cả mốc xa = vô thời hạn) để tắt.
+     */
+    async setConversationMute(currentUserId: number, conversationId: number, mutedUntil: Date | null) {
+        await this.ensureMember(currentUserId, conversationId);
+
+        await this.drizzle.db
+            .update(conversationMembers)
+            .set({ mutedUntil })
+            .where(and(
+                eq(conversationMembers.conversationId, conversationId),
+                eq(conversationMembers.userId, currentUserId),
+            ));
+
+        // Đồng bộ trạng thái mute sang mọi tab/thiết bị khác của chính người dùng.
+        this.emitConversationUpsert([currentUserId], conversationId);
+        return this.buildConversationForUser(currentUserId, conversationId);
     }
 
     async updateGroup(
@@ -470,6 +494,8 @@ export class ConversationsService {
             unreadCount: summary.unreadCount,
             lastMessageIndex: summary.lastMessageIndex,
             lastSeenMessageIndex: summary.lastSeenMessageIndex,
+            mutedUntil: summary.mutedUntil,
+            isMuted: this.isConversationMuted(summary.mutedUntil),
             memberCount: summary.memberCount,
             myMember: {
                 userId: currentUserId,
@@ -513,6 +539,7 @@ export class ConversationsService {
                 lastMessageType: conversations.lastMessageType,
                 unreadCount: sql<number>`CAST(GREATEST(${conversations.lastMessageIndex} - COALESCE(${myMember.lastSeenMessageIndex}, 0), 0) AS UNSIGNED)`,
                 lastSeenMessageIndex: myMember.lastSeenMessageIndex,
+                mutedUntil: myMember.mutedUntil,
                 isAdmin: myMember.isAdmin,
                 memberCount: sql<number>`CAST((SELECT COUNT(*) FROM ${conversationMembers} WHERE ${conversationMembers.conversationId} = ${conversations.id}) AS UNSIGNED)`,
                 friendId: users.id,
@@ -562,6 +589,23 @@ export class ConversationsService {
             avatar: member.avatar,
             isOnline: await this.presenceService.isUserOnline(member.userId),
         })));
+    }
+
+    private async ensureMember(userId: number, conversationId: number) {
+        const [member] = await this.drizzle.db
+            .select({ id: conversationMembers.id })
+            .from(conversationMembers)
+            .where(and(
+                eq(conversationMembers.conversationId, conversationId),
+                eq(conversationMembers.userId, userId),
+            ))
+            .limit(1);
+
+        if (!member) throw new ForbiddenException('Bạn không có quyền trong phòng chat này.');
+    }
+
+    private isConversationMuted(mutedUntil: Date | null) {
+        return mutedUntil != null && mutedUntil.getTime() > Date.now();
     }
 
     private async ensureGroupMember(userId: number, conversationId: number): Promise<GroupMembership> {
