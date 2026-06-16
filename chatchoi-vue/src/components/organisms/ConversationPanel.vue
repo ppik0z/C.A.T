@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import TextInput from '../atoms/TextInput.vue';
+import NotificationBell from '../atoms/NotificationBell.vue';
 import ConversationItem from '../molecules/ConversationItem.vue';
 import GroupCreateModal from '../molecules/GroupCreateModal.vue';
 import LoadingListSkeleton from '../molecules/LoadingListSkeleton.vue';
@@ -72,14 +73,17 @@ const handleGroupCreated = (conversation: Conversation) => {
     <div class="p-4 sm:p-6">
       <div class="flex items-center justify-between gap-4 mb-4">
         <h2 class="text-2xl sm:text-[32px] sm:leading-10 font-bold text-primary">Messages</h2>
-        <button
-          class="h-10 w-10 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-sm"
-          title="Tạo nhóm chat"
-          type="button"
-          @click="isCreateGroupOpen = true"
-        >
-          <span class="material-symbols-outlined !text-[22px]">group_add</span>
-        </button>
+        <div class="flex items-center gap-1">
+          <NotificationBell class="md:hidden" />
+          <button
+            class="h-10 w-10 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-sm"
+            title="Tạo nhóm chat"
+            type="button"
+            @click="isCreateGroupOpen = true"
+          >
+            <span class="material-symbols-outlined !text-[22px]">group_add</span>
+          </button>
+        </div>
       </div>
 
       <TextInput v-model="searchTerm" class="mb-4 sm:mb-6" icon="search" placeholder="Search conversations..." />

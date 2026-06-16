@@ -26,6 +26,7 @@ import { useChatStore } from './chat';
 import { useFriendsStore } from './friends';
 import { useProfilesStore } from './profiles';
 import { usePushNotificationsStore } from './push-notifications';
+import { useNotificationsStore } from './notifications';
 
 export type AuthStatus = 'unknown' | 'refreshing' | 'authenticated' | 'guest' | 'unavailable';
 
@@ -60,6 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
       useFriendsStore().refreshAll(),
       useCallStore().loadActiveCalls(),
       usePushNotificationsStore().initializeAfterLogin(),
+      useNotificationsStore().load(),
     ]);
   };
 
@@ -183,6 +185,7 @@ export const useAuthStore = defineStore('auth', () => {
     useFriendsStore().$reset();
     useCallStore().resetSession();
     usePushNotificationsStore().resetSession();
+    useNotificationsStore().reset();
     clearSessionHint();
     status.value = 'guest';
   };

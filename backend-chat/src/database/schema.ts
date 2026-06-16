@@ -423,6 +423,38 @@ export const callParticipants = mysqlTable(
   ],
 );
 
+// ─── Notifications ────────────────────────────────────────────────────────────
+// Trung tâm thông báo bền vững (feed kiểu Messenger). Mô hình hybrid: vừa lưu
+// snapshot title/body để render nhanh, vừa giữ actorId/conversationId/entity để
+// lấy avatar–tên tươi và deep-link. metadata (JSON) cho phép mở rộng không migrate.
+export const notifications = mysqlTable(
+  'notifications',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    userId: int('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }), // người nhận
+    type: varchar('type', { length: 50 }).notNull(), // 'friend.request' | 'friend.accept' | 'group.added' | 'group.removed' | 'chat.mention' | 'call.missed'
+    actorId: int('actorId').references(() => users.id, { onDelete: 'set null' }), // người gây ra
+    conversationId: int('conversationId').references(() => conversations.id, {
+      onDelete: 'cascade',
+    }),
+    entityType: varchar('entityType', { length: 30 }), // 'message' | 'call' | 'friendship' | 'conversation'
+    entityId: int('entityId'),
+    title: varchar('title', { length: 255 }),
+    body: varchar('body', { length: 500 }),
+    metadata: text('metadata'), // JSON: { link, callKind, mentionType, groupName... }
+    readAt: datetime('readAt'),
+    createdAt: datetime('createdAt')
+      .notNull()
+      .default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [
+    index('idx_notifications_user_created').on(t.userId, t.createdAt),
+    index('idx_notifications_user_unread').on(t.userId, t.readAt),
+  ],
+);
+
 // ─── Relations ────────────────────────────────────────────────
 export const usersRelations = relations(users, ({ many, one }) => ({
   sentMessages: many(messages),
@@ -606,3 +638,18 @@ export const callParticipantsRelations = relations(
     }),
   }),
 );
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  actor: one(users, {
+    fields: [notifications.actorId],
+    references: [users.id],
+  }),
+  conversation: one(conversations, {
+    fields: [notifications.conversationId],
+    references: [conversations.id],
+  }),
+}));

@@ -5,7 +5,9 @@ import { useFriendsStore } from "../stores/friends";
 import { useProfilesStore } from "../stores/profiles";
 import { useAccountStore } from "../stores/account";
 import { useNotificationToastsStore } from "../stores/notification-toasts";
+import { useNotificationsStore } from "../stores/notifications";
 import type { PublicUserProfile } from "../types/account";
+import type { NotificationItem } from "../types/notification";
 import type { ActiveCallsPayload, CallErrorPayload, CallState } from "../types/call";
 import type {
     ChatMessage,
@@ -51,6 +53,7 @@ const registerSocketListeners = () => {
     const profilesStore = useProfilesStore();
     const accountStore = useAccountStore();
     const notificationToastsStore = useNotificationToastsStore();
+    const notificationsStore = useNotificationsStore();
     socket.on("connect", () => {
         chatStore.isConnected = true;
         console.log("Đã kết nối!");
@@ -197,6 +200,10 @@ const registerSocketListeners = () => {
 
     socket.on("call:error", (data: CallErrorPayload) => {
         callStore.setCallError(data.message);
+    });
+
+    socket.on("notification:new", (data: NotificationItem) => {
+        notificationsStore.prepend(data);
     });
 
     socket.on("conversation_upsert", (conversation: Conversation) => {
