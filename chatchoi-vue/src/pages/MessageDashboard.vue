@@ -47,6 +47,55 @@ watch(
   },
 );
 
+// --- Điều hướng "back" trên mobile (kiểu Messenger) ---
+// Mỗi khi người dùng đi sâu hơn (mở đoạn chat, panel chi tiết, thanh tìm kiếm)
+// ta đẩy thêm một entry vào history. Nhờ vậy nút back của thiết bị/trình duyệt
+// sẽ lùi về lớp trước thay vì thoát hẳn ứng dụng.
+let ownedHistoryEntries = 0;
+let isSyncingHistory = false;
+
+const targetHistoryDepth = () => {
+  if (activeSection.value !== 'messages' || mobileView.value !== 'chat') return 0;
+  return isDetailsOpen.value || isMessageSearchOpen.value ? 2 : 1;
+};
+
+const syncHistoryDepth = () => {
+  if (isSyncingHistory) return;
+  const target = targetHistoryDepth();
+
+  while (ownedHistoryEntries < target) {
+    ownedHistoryEntries += 1;
+    window.history.pushState({ chatDepth: ownedHistoryEntries }, '');
+  }
+
+  if (ownedHistoryEntries > target) {
+    const steps = ownedHistoryEntries - target;
+    ownedHistoryEntries = target;
+    isSyncingHistory = true;
+    window.history.go(-steps);
+  }
+};
+
+const handlePopState = () => {
+  // Đây là phản hồi cho lệnh history.go(...) do chính ta gọi -> bỏ qua.
+  if (isSyncingHistory) {
+    isSyncingHistory = false;
+    return;
+  }
+
+  if (ownedHistoryEntries === 0) return;
+  ownedHistoryEntries -= 1;
+
+  // Đóng lần lượt lớp trên cùng: tìm kiếm -> chi tiết -> đoạn chat.
+  if (isMessageSearchOpen.value) {
+    isMessageSearchOpen.value = false;
+  } else if (isDetailsOpen.value) {
+    isDetailsOpen.value = false;
+  } else if (mobileView.value === 'chat') {
+    mobileView.value = 'list';
+  }
+};
+
 const handleConversationSelected = () => {
   mobileView.value = 'chat';
 };
@@ -141,12 +190,18 @@ const handlePushCallAnswer = (event: Event) => {
 
 watch(() => chatStore.conversations.length, openPendingConversation);
 
+watch(
+  () => [activeSection.value, mobileView.value, isDetailsOpen.value, isMessageSearchOpen.value],
+  syncHistoryDepth,
+);
+
 onMounted(() => {
   const params = new URL(window.location.href).searchParams;
   setPendingConversation(params.get('conversationId'));
   setPendingConversation(takePendingPushConversationId());
   if (params.get('view') === 'friends') handleNavigate('friends');
 
+  window.addEventListener('popstate', handlePopState);
   window.addEventListener(pushOpenConversationEvent, handlePushOpenConversation);
   window.addEventListener(pushNavigateEvent, handlePushNavigate);
   window.addEventListener(pushCallDeclineEvent, handlePushCallDecline);
@@ -154,6 +209,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('popstate', handlePopState);
   window.removeEventListener(pushOpenConversationEvent, handlePushOpenConversation);
   window.removeEventListener(pushNavigateEvent, handlePushNavigate);
   window.removeEventListener(pushCallDeclineEvent, handlePushCallDecline);

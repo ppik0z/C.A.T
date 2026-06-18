@@ -4,10 +4,12 @@ import { Copy, MoreHorizontal, Reply, RotateCcw, Smile } from '@lucide/vue';
 import type { ChatMessage } from '../../types/chat';
 import type { CallKind } from '../../types/call';
 import { formatMessageTime } from '../../utils/chatPresentation';
-import { resolveDisplayName } from '../../utils/userPresentation';
+import { resolveDisplayName, formatUsername } from '../../utils/userPresentation';
 import MessageContentRenderer from './message/MessageContentRenderer.vue';
 import MediaLightbox from '../organisms/MediaLightbox.vue';
 import CallEventCard from './message/CallEventCard.vue';
+import Avatar from '../atoms/Avatar.vue';
+import ProfileHoverCard from './ProfileHoverCard.vue';
 
 interface Props {
   message: ChatMessage;
@@ -38,6 +40,10 @@ const getSenderName = (message: ChatMessage) => {
   const resolved = resolveDisplayName(message.sender);
   return resolved !== 'Unknown' ? resolved : message.senderName ?? 'Unknown';
 };
+
+const senderId = computed(() => props.message.sender?.id ?? props.message.senderId);
+const senderAvatar = computed(() => props.message.sender?.avatar ?? null);
+const senderUsername = computed(() => formatUsername(props.message.sender?.username));
 
 const getMessageType = (message: ChatMessage) => message.type ?? 'text';
 const usesStandaloneSurface = computed(() => {
@@ -167,12 +173,25 @@ watch(
       props.isOwn ? 'flex-row-reverse ml-auto' : 'mr-auto',
     ]"
   >
-    <div
+    <ProfileHoverCard
       v-if="!props.isOwn"
-      class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center text-xs font-bold self-end shadow-sm shrink-0"
+      :user-id="senderId"
+      :avatar-url="senderAvatar"
+      :name="getSenderName(props.message)"
+      :username="senderUsername"
+      eyebrow="Người gửi"
+      status-label="Offline"
+      placement="right"
+      z-index-class="z-[130]"
+      class="self-end"
     >
-      {{ getSenderName(props.message)[0]?.toUpperCase() ?? 'U' }}
-    </div>
+      <Avatar
+        :avatar-url="senderAvatar"
+        :name="getSenderName(props.message)"
+        class="cursor-pointer shadow-sm"
+        size="sm"
+      />
+    </ProfileHoverCard>
 
     <div :class="['flex flex-col gap-1 min-w-0', props.isOwn ? 'items-end' : 'items-start']">
       <div

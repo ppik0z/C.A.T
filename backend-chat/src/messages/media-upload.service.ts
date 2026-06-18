@@ -1,8 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { v2 as cloudinary, type UploadApiResponse } from 'cloudinary';
-import { config } from 'dotenv';
 import { Readable } from 'stream';
-import { resolve } from 'path';
 
 export type ChatMessageType = 'image' | 'video' | 'document';
 
@@ -42,7 +40,6 @@ const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 @Injectable()
 export class MediaUploadService {
     constructor() {
-        config({ path: resolve(process.cwd(), '..', '.env') });
         cloudinary.config({ secure: true });
     }
 
